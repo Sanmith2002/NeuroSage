@@ -1,4 +1,4 @@
-import { NeuroSageApp } from '@/components/neurosage-app';
+import { NeuroSageApp } from '@/components/platform/neurosage-app';
 
 export default async function AssessmentRoute({
   params,
