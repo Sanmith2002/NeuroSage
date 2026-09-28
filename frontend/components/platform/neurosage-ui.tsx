@@ -14,7 +14,6 @@ import {
   ClipboardPlus,
   FileText,
   LayoutDashboard,
-  LoaderCircle,
   Menu,
   OctagonX,
   ShieldCheck,
@@ -26,17 +25,14 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   assessmentStages,
   caseHref,
   type AssessmentStage,
-  type DemoCase,
-  type FeatureContribution,
-  type Prediction,
+  type CaseView,
   type SafetyStatus,
-} from '@/lib/research';
+} from '@/lib/assessment';
 
 export type MainView = 'dashboard' | 'new' | 'workflow' | 'assessment';
 
@@ -98,7 +94,7 @@ function SidebarContent({
   activeStage,
   onNavigate,
 }: {
-  currentCase?: DemoCase;
+  currentCase?: CaseView;
   activeView: MainView;
   activeStage?: AssessmentStage;
   onNavigate?: () => void;
@@ -156,7 +152,7 @@ export function AppShell({
   pageLabel,
 }: {
   children: ReactNode;
-  currentCase?: DemoCase;
+  currentCase?: CaseView;
   activeView: MainView;
   activeStage?: AssessmentStage;
   pageLabel: string;
@@ -227,7 +223,7 @@ export function AppShell({
                 </Badge>
               )}
               <Badge variant="outline" className="demo-ready-badge">
-                <CircleGauge aria-hidden="true" /> Viva demo
+                <CircleGauge aria-hidden="true" /> Local models
               </Badge>
             </div>
           </header>
@@ -262,7 +258,7 @@ export function PageHeader({
   );
 }
 
-export function AssessmentStepper({ currentCase, stage }: { currentCase: DemoCase; stage: AssessmentStage }) {
+export function AssessmentStepper({ currentCase, stage }: { currentCase: CaseView; stage: AssessmentStage }) {
   const currentIndex = assessmentStages.findIndex((item) => item.key === stage);
 
   return (
@@ -293,7 +289,7 @@ export function StageActions({
   stage,
   nextLabel,
 }: {
-  currentCase: DemoCase;
+  currentCase: CaseView;
   stage: AssessmentStage;
   nextLabel?: string;
 }) {
@@ -310,7 +306,7 @@ export function StageActions({
           </Button>
         ) : (
           <Button variant="outline" size="lg" render={<Link href="/assessment/new" />}>
-            <ArrowLeft aria-hidden="true" /> Change patient
+            <ArrowLeft aria-hidden="true" /> New patient
           </Button>
         )}
       </div>
@@ -330,122 +326,7 @@ export function StageActions({
   );
 }
 
-export function ScenarioCard({ item, compact = false }: { item: DemoCase; compact?: boolean }) {
-  const featured = item.id === 'CASE-C';
-  const probability = item.adPredictions[0].probability;
-
-  return (
-    <article className={`scenario-card tone-${statusTone(item.safety.overallStatus)} ${featured ? 'is-featured' : ''} ${compact ? 'is-compact' : ''}`}>
-      <div className="scenario-topline">
-        <span className="scenario-label">{item.shortLabel}{featured ? ' · Key viva scenario' : ''}</span>
-        <StatusBadge status={item.safety.overallStatus} />
-      </div>
-      <h3>{item.title}</h3>
-      <p>{item.description}</p>
-      {featured && !compact && (
-        <div className="confidence-contrast" aria-label="High probability but low reliability">
-          <span><strong>{Math.round(probability * 100)}%</strong> AD probability</span>
-          <ArrowRight aria-hidden="true" />
-          <span><strong>{item.safety.reliabilityScore.toFixed(2)}</strong> reliability</span>
-        </div>
-      )}
-      <Link href={caseHref(item.id, 'patient')} className="scenario-action">
-        Start demo <ArrowRight aria-hidden="true" />
-      </Link>
-    </article>
-  );
-}
-
-export function ProcessingBanner({
-  steps,
-  completeLabel,
-}: {
-  steps: string[];
-  completeLabel: string;
-}) {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [complete, setComplete] = useState(false);
-
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      const reducedMotionTimer = window.setTimeout(() => {
-        setActiveIndex(steps.length - 1);
-        setComplete(true);
-      }, 0);
-      return () => window.clearTimeout(reducedMotionTimer);
-    }
-
-    const timers = steps.slice(1).map((_, index) => (
-      window.setTimeout(() => setActiveIndex(index + 1), (index + 1) * 330)
-    ));
-    const completion = window.setTimeout(() => setComplete(true), steps.length * 330 + 140);
-    return () => {
-      timers.forEach(window.clearTimeout);
-      window.clearTimeout(completion);
-    };
-  }, [steps]);
-
-  const progress = complete ? 100 : Math.round(((activeIndex + 1) / (steps.length + 1)) * 100);
-
-  return (
-    <section className={`processing-banner ${complete ? 'is-complete' : ''}`} aria-live="polite">
-      <div className="processing-icon">
-        {complete ? <CheckCircle2 aria-hidden="true" /> : <LoaderCircle className="animate-spin" aria-hidden="true" />}
-      </div>
-      <div className="processing-copy">
-        <span>{complete ? completeLabel : steps[activeIndex]}</span>
-        <Progress value={progress} aria-label="Processing progress" />
-      </div>
-      {!complete && (
-        <button
-          type="button"
-          className="text-action"
-          onClick={() => {
-            setActiveIndex(steps.length - 1);
-            setComplete(true);
-          }}
-        >
-          Show results
-        </button>
-      )}
-    </section>
-  );
-}
-
-export function ProbabilityBars({ predictions }: { predictions: Prediction[] }) {
-  return (
-    <div className="probability-list">
-      {predictions.map((prediction) => (
-        <div className="probability-row" key={prediction.label}>
-          <div><span>{prediction.label}</span><strong>{Math.round(prediction.probability * 100)}%</strong></div>
-          <div className="metric-track" aria-label={`${prediction.label} ${Math.round(prediction.probability * 100)} percent`}>
-            <span style={{ width: `${prediction.probability * 100}%` }} />
-          </div>
-          <StatusBadge status={prediction.safetyStatus} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export function FeatureImportance({ features }: { features: FeatureContribution[] }) {
-  return (
-    <div className="feature-list">
-      <div className="feature-legend"><span><i className="supports" />Supports</span><span><i className="reduces" />Reduces</span></div>
-      {features.map((feature) => (
-        <div className="feature-row" key={feature.label}>
-          <span>{feature.label}</span>
-          <div className="feature-track">
-            <i className={feature.direction} style={{ width: `${Math.max(feature.value * 100, 3)}%` }} />
-          </div>
-          <strong>{feature.value.toFixed(2)}</strong>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export function DemoPrinciple({ children }: { children: ReactNode }) {
+export function Principle({ children }: { children: ReactNode }) {
   return (
     <aside className="principle-callout">
       <Sparkles aria-hidden="true" />
