@@ -1,68 +1,13 @@
-# NeuroSage
+# Safira
 
-Interactive frontend prototype for the NeuroSage clinical AI assessment workflow.
+Safira is a model-agnostic clinical AI reliability and safety framework.
 
-## Prerequisites
+Safira wraps existing clinical prediction models through standardized model adapters and evaluates prediction reliability using multiple safety signals.
 
-- [Node.js](https://nodejs.org/) 22.13.0 or newer
-- npm (included with Node.js)
+## Current Status
 
-## Run locally
+Initial framework development.
 
-Clone the repository and enter the project directory:
+## Core Concept
 
-```bash
-git clone https://github.com/Sanmith2002/NeuroSage.git
-cd NeuroSage
-```
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Start the development server:
-
-```bash
-npm run dev
-```
-
-Open the local URL printed in the terminal, normally [http://localhost:3000](http://localhost:3000).
-
-## Production build
-
-Create an optimized build:
-
-```bash
-npm run build
-```
-
-Preview the production build locally:
-
-```bash
-npm run start
-```
-
-## Quality checks
-
-Run the linter:
-
-```bash
-npm run lint
-```
-
-Format the source code:
-
-```bash
-npm run format
-```
-
-## Main routes
-
-- `/` - case dashboard
-- `/assessment/new` - create a new assessment
-- `/workflow` - workflow overview
-- `/assessment/:caseId/:stage` - patient, harmonization, predictions, safety, and report stages
-
-This repository is a frontend demonstration and uses static research data. It is not intended for clinical use.
+One patient → one or more predicted labels → safety signals → reliability score → TRUST / CAUTION / DEFER.
