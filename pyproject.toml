@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safira-clinical"
+version = "0.1.0"
+description = "Model-agnostic clinical AI reliability and safety framework."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+authors = [
+    { name = "Dinura Sanmith" }
+]
+
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
