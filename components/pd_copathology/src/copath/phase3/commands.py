@@ -268,6 +268,34 @@ def robustness_reports(ctx: Context, pairs: list[tuple[str, str]]) -> None:
 # 4. select --stage final
 # --------------------------------------------------------------------------
 
+def _why_provisional(ctx: Context, label: str, info: dict) -> list[str]:
+    """Report lines that explain, with numbers, why no candidate passed every gate for a label."""
+    gates, low, high = selection.GATES, ctx.cfg["selection"]["gates"]["slope_min"], ctx.cfg["selection"]["gates"]["slope_max"]
+    b0a, b0b = _cv(ctx, label, "b0a")["summary"]["pooled"], _cv(ctx, label, "b0b")["summary"]["pooled"]
+    lines = ["", f"**Why `{label}` is PROVISIONAL.** No candidate passed every gate (protocol section 4.4). The gate values "
+             "of every candidate (pooled out-of-fold predictions) are:", "",
+             f"| Model | Calibration slope (gate: {low:g} to {high:g}) | Brier (gate: below prevalence {b0a['brier']:.4f}) "
+             f"| AUPRC (gate: above age + sex {b0b['auprc']:.4f}) | Failed folds | Gates failed |", "|---|---|---|---|---|---|"]
+    reasons: dict[str, int] = {}
+    for model in ctx.cfg["candidates"]:
+        details = _cv(ctx, label, model, required=False)
+        if not details or not details.get("summary"):
+            lines.append(f"| {model} | every fold failed | | | {details.get('n_failed_folds', '') if details else ''} | all |")
+            continue
+        pooled, row = details["summary"]["pooled"], info["table"].get(model)
+        failed = [] if row is None else [g for g, ok in row["gates"].items() if not ok]
+        for g in failed:
+            reasons[g] = reasons.get(g, 0) + 1
+        slope = pooled["cal_slope"]
+        lines.append(f"| {model} | {slope:.3f} | {pooled['brier']:.4f} | {pooled['auprc']:.4f} | {details['n_failed_folds']} "
+                     f"| {', '.join(g.split()[0] for g in failed) or 'none'} |")
+    common = sorted(reasons.items(), key=lambda kv: -kv[1])
+    if common:
+        lines += ["", "Gates failed, by number of candidates: " + "; ".join(f"{g} ({n})" for g, n in common) + ".",
+                  f"`final --final` stays locked until `acknowledge_provisional` in `configs/frozen/final_approval.yaml` lists `{label}`."]
+    return lines + [""]
+
+
 def cmd_select_final(ctx: Context) -> dict:
     if ctx.paths.lock.is_file():
         raise Phase3Error("the final evaluation has already run; the selection can no longer be changed")
@@ -308,6 +336,7 @@ def cmd_select_final(ctx: Context) -> dict:
         lines += ["", "Reasoning:", ""] + [f"- {step}" for step in reasoning] + ["", f"**Selected: {chosen}** (primary tier)."]
         if not info["gates_passed"]:
             lines.append(f"**PROVISIONAL: failed gate(s): {'; '.join(failed)}. The reviewer must accept or reject this selection explicitly.**")
+            lines += _why_provisional(ctx, label, info)
         if info["leakage_flag"]:
             lines.append(f"**Leakage flag: the missingness-only model reaches AUROC {info['missingness_auroc']:.3f} for this label.**")
         e = evidence[(label, chosen)]
@@ -321,6 +350,7 @@ def cmd_select_final(ctx: Context) -> dict:
                   f"- Macro Brier Skill Score over the three labels: {float(np.mean(scores)):.4f}",
                   f"- Participants eligible for all three labels: {S(multi['n_all_eligible'])}",
                   f"- Hamming loss: {multi['hamming_loss']:.4f}; macro-F1: {multi['macro_f1_all_eligible']:.4f}", ""]
+    selected["provisional_labels"] = sorted(name for name, choice in selected["labels"].items() if not choice["gates_passed"])
     ctx.paths.frozen.mkdir(parents=True, exist_ok=True)
     ctx.paths.selected.write_text(yaml.safe_dump(selected, sort_keys=False, width=120), encoding="utf-8")
     digest = sha256(ctx.paths.selected)
@@ -328,6 +358,10 @@ def cmd_select_final(ctx: Context) -> dict:
               f"SHA-256 of that file (needed in `configs/frozen/final_approval.yaml`): {digest}", "",
               "Next: `python -m copath.phase3 extras`, `python -m copath.phase3 explain`, then human review. "
               "The final evaluation stays locked until the approval file exists.", ""]
+    if selected["provisional_labels"]:
+        lines += ["**Provisional labels: " + ", ".join(f"`{name}`" for name in selected["provisional_labels"]) + ".** The approval "
+                  "file must also contain `acknowledge_provisional: [" + ", ".join(selected["provisional_labels"]) + "]`, "
+                  "otherwise `final --final` refuses to run.", ""]
     write_text(ctx, "\n".join(lines) + "\n", ctx.paths.reports / "selection_final.md")
     ctx.log(f"selected_models_v1.yaml sha256: {digest}")
     privacy_check(ctx)

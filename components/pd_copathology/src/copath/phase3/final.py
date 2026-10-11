@@ -6,6 +6,9 @@
 * ``configs/frozen/final_approval.yaml`` exists, written by the reviewer, with
   ``approved: true``, ``reviewer``, ``date`` and ``selected_models_sha256``
   equal to the SHA-256 of ``configs/frozen/selected_models_v1.yaml``;
+* every PROVISIONAL label of the selection (a label whose selected model did
+  not pass every gate) is listed in ``acknowledge_provisional`` of the
+  approval file;
 * no lock file from an earlier final run exists (or the run is forced with a
   written reason, which is logged).
 
@@ -52,6 +55,19 @@ def check_unlocked(paths: Paths, final_flag: bool, force: bool = False, reason: 
         raise FinalLockError(f"final_approval.yaml lacks: {', '.join(missing)}")
     if str(approval["selected_models_sha256"]).strip().lower() != sha256(paths.selected):
         raise FinalLockError("final_approval.yaml approves a different selected_models_v1.yaml (the hash does not match)")
+    chosen = (yaml.safe_load(paths.selected.read_text(encoding="utf-8")) or {}).get("labels") or {}
+    provisional = sorted(label for label, choice in chosen.items() if not choice.get("gates_passed"))
+    acknowledged = approval.get("acknowledge_provisional") or []
+    if not isinstance(acknowledged, list):
+        raise FinalLockError("`acknowledge_provisional` in final_approval.yaml must be a list of label ids")
+    unknown = sorted(str(a) for a in acknowledged if str(a) not in chosen)
+    if unknown:
+        raise FinalLockError(f"`acknowledge_provisional` names labels that are not in the selection: {', '.join(unknown)}")
+    missing_ack = [label for label in provisional if label not in {str(a) for a in acknowledged}]
+    if missing_ack:
+        raise FinalLockError("the final evaluation stays locked: the selection is PROVISIONAL for "
+                             f"{', '.join(missing_ack)} (no model passed every gate). The reviewer must list every "
+                             "provisional label in `acknowledge_provisional: [...]` in final_approval.yaml.")
     if paths.lock.is_file() and not (force and reason.strip()):
         raise FinalLockError("the final evaluation has already run (lock file present). A second run needs "
                              "--force and --reason \"...\"; the reason is logged.")

@@ -18,7 +18,7 @@ from scipy.stats import kendalltau
 
 from ..evaluation.metrics import logit
 
-EXPLAINERS = {"lr": "LinearExplainer", "rf": "TreeExplainer", "xgb": "TreeExplainer", "hgb": "TreeExplainer"}
+EXPLAINERS = {"lr_l2": "LinearExplainer", "lr_enet": "LinearExplainer", "rf": "TreeExplainer", "xgb": "TreeExplainer", "hgb": "TreeExplainer"}
 
 
 def explain(model: str, pipeline, X_background: pd.DataFrame, X: pd.DataFrame) -> dict:
@@ -32,7 +32,7 @@ def explain(model: str, pipeline, X_background: pd.DataFrame, X: pd.DataFrame) -
     estimator = pipeline.named_steps["model"]
     prep = pipeline[:-1] if len(pipeline.steps) > 1 else None
     data = np.asarray(prep.transform(X) if prep is not None else X, dtype=float)
-    if model == "lr":
+    if model in ("lr_l2", "lr_enet"):
         background = np.asarray(prep.transform(X_background), dtype=float)
         explainer = shap.LinearExplainer(estimator, shap.maskers.Independent(background, max_samples=min(len(background), 1000)))
         values, base = explainer.shap_values(data), explainer.expected_value

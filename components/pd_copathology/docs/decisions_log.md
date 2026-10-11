@@ -165,6 +165,73 @@ Reason: The test set is used once, after selection, on a human decision.
 Impact: phase3/final.py; configs/frozen/final_evaluation_lock.json.
 ```
 
+### Phase 2.2 and Phase 3 final patch (11 October 2026)
+
+```
+Date: 2026-10-11
+Decision: Phase 2 traceability of the Lumipulse threshold. configs/frozen/lumipulse_gmm_v1.json is no longer
+  tracked in Git (it is derived from real participant data and stays local; ignored as lumipulse_gmm_v*.json).
+  The SHA-256 of the file is recorded in phase2_manifest.json (lumipulse_gmm_sha256). A normal Phase 2 run
+  requires the file to exist and to match that hash and never regenerates it; a missing file, a missing
+  manifest hash (a manifest written before this check) or a mismatch stops the run with the instruction to
+  use --refreeze. --refreeze refits, saves and records the new hash. The very first freeze (no split exists
+  yet) creates the file.
+Evidence: Review of the clean-up commit: the manifest never recorded the file's hash.
+Alternatives considered: Keeping the file tracked; silently refitting a missing file.
+Reason: The threshold decides the Lumipulse label; a changed or regenerated file must never go unnoticed.
+Impact: phase2._lumipulse, phase2.verify_frozen_gmm, phase2_manifest.json. The manifest of the existing real
+  run has no hash, so the next Phase 2 run must be `--refreeze` (the planned re-freeze).
+```
+
+```
+Date: 2026-10-11
+Decision: Five candidates: lr_l2 (standard L2 logistic regression, tunes C and class weighting, 15 trials),
+  lr_enet (the former `lr`; elastic net, 15 trials), rf, xgb, hgb. Same fold-safe median imputation and
+  standardisation pipeline and the same validation framework. Prevalence and age + sex logistic regression stay
+  baselines. Simplicity order for the last tie-breaker: lr_l2 > lr_enet > hgb > rf > xgb.
+Evidence: Phase 3 final patch request.
+Alternatives considered: Replacing lr_enet with lr_l2.
+Reason: A plain L2 model is the simplest defensible comparator; elastic net adds sparsity.
+Impact: models/candidates.py; configs/phase3.yaml; docs/selection_protocol.md. The model name `lr` was renamed
+  `lr_enet` before any real run, so no registry entry is affected.
+```
+
+```
+Date: 2026-10-11
+Decision: abeta_LLOD, abeta_ULOD, ptau_LLOD, tau_LLOD and ad_like_v1_censored are `never` for every label.
+  They may still build the AD-like label internally but never enter a feature set.
+Evidence: Assay limit flags describe the measurement of the label-defining analytes and behave like
+  availability indicators.
+Alternatives considered: Leaving them as ordinary features for the PD-type and vascular labels.
+Reason: They carry information about which participants had a CSF measurement and about the label itself.
+Impact: configs/leakage_matrix.csv; regenerated configs/feature_sets/ and docs/leakage_matrix.md.
+```
+
+```
+Date: 2026-10-11
+Decision: A PROVISIONAL selection (no candidate passed every gate) keeps `final --final` locked unless
+  configs/frozen/final_approval.yaml also contains `acknowledge_provisional: [<label ids>]` listing every
+  provisional label. selection_final.md explains for each provisional label which gates each candidate failed,
+  with the values.
+Evidence: Synthetic runs: a near-perfectly separable label fails the calibration-slope gate.
+Alternatives considered: Treating the approval hash as sufficient.
+Reason: Approving the file must not silently accept a model that failed its gates.
+Impact: phase3/final.check_unlocked; phase3/commands.cmd_select_final; selected_models_v1.yaml (provisional_labels).
+```
+
+```
+Date: 2026-10-11
+Decision: The following interpretations of the previous report are ACCEPTED: per-label selection with macro
+  BSS also reported; the missingness check flags the label but does not gate; the SHAP output space is
+  recorded per estimator (verified, not assumed); the PROVISIONAL fallback; tie-breaker tolerances 0.05
+  (calibration slope), 0.05 (SHAP Jaccard) and 0.01 (strict-tier drop in BSS); the threshold is chosen on the
+  calibration folds; sensitivity labels reuse the hyperparameters of their parent label.
+Evidence: Review of the Phase 3 report.
+Alternatives considered: See the entry "Details the specification left open" below.
+Reason: Accepted by the student before the first real run.
+Impact: docs/selection_protocol.md is the reference; no code change.
+```
+
 ### Phase 2 — implementation (11 October 2026)
 
 ```

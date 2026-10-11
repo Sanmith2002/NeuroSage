@@ -156,12 +156,12 @@ pm_wb_any,milestone,curated cut,never,never,never,never,never,never,progression 
 CSFSAA,biofluid,curated cut,near_proxy,defining,safe,safe,safe,safe,alpha-synuclein SAA / CSF alpha-synuclein
 CSFSAA_assay,biofluid,curated cut,never,never,never,never,never,never,which SAA assay was run (availability indicator)
 abeta,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
-abeta_LLOD,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
-abeta_ULOD,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+abeta_LLOD,biofluid,curated cut,never,never,never,never,never,never,assay limit flag / censoring indicator: may build the AD-like label internally but is never a predictor for any label
+abeta_ULOD,biofluid,curated cut,never,never,never,never,never,never,assay limit flag / censoring indicator: may build the AD-like label internally but is never a predictor for any label
 tau,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
-tau_LLOD,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+tau_LLOD,biofluid,curated cut,never,never,never,never,never,never,assay limit flag / censoring indicator: may build the AD-like label internally but is never a predictor for any label
 ptau,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
-ptau_LLOD,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+ptau_LLOD,biofluid,curated cut,never,never,never,never,never,never,assay limit flag / censoring indicator: may build the AD-like label internally but is never a predictor for any label
 asyn,biofluid,curated cut,near_proxy,defining,safe,safe,safe,safe,alpha-synuclein SAA / CSF alpha-synuclein
 hemohi,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
 urate,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
@@ -357,7 +357,7 @@ lumi_abeta40,biofluid,Current_Biospecimen_Analysis_Results project 283,safe,safe
 lumi_ptau181,biofluid,Current_Biospecimen_Analysis_Results project 283,safe,safe,defining,defining,safe,safe,Lumipulse CSF
 lumi_ratio_4240,biofluid,Current_Biospecimen_Analysis_Results project 283,safe,safe,defining,defining,safe,safe,Lumipulse CSF
 elecsys_ptau_abeta_ratio,biofluid,derived from the curated cut,safe,safe,defining,defining,safe,safe,the AD-like ratio itself
-ad_like_v1_censored,biofluid,derived from the curated cut,never,never,never,never,never,never,1 if abeta or ptau used for ad_like_v1 is a boundary substitution (reporting only)
+ad_like_v1_censored,biofluid,derived from the curated cut,never,never,never,never,never,never,assay limit flag / censoring indicator: may build the AD-like label internally but is never a predictor for any label
 sup_sbp,vascular evidence,Vital_Signs,safe,safe,safe,safe,defining,defining,supine blood pressure
 sup_dbp,vascular evidence,Vital_Signs,safe,safe,safe,safe,defining,defining,supine blood pressure
 htn_bp,vascular evidence,derived,safe,safe,safe,safe,defining,defining,vascular evidence or component

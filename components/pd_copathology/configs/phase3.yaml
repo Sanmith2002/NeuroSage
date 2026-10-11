@@ -7,7 +7,7 @@ seed: 20261011
 n_jobs: -1
 # Outer folds trained at the same time, in separate processes that share the cores. On the development
 # laptop this roughly halves the time of the boosting models and does not help the random forest.
-outer_jobs: {lr: 5, rf: 1, xgb: 5, hgb: 5}
+outer_jobs: {lr_l2: 5, lr_enet: 5, rf: 1, xgb: 5, hgb: 5}
 
 labels: [pd_type_v1, ad_like_v1, vascular_v1]
 main_tier: primary          # `cv` runs on this tier only
@@ -15,13 +15,14 @@ robustness_tier: strict
 
 baselines: [b0a, b0b]
 baseline_columns: [age, SEX]        # B0b: logistic regression on age + sex only
-candidates: [lr, rf, xgb, hgb]
+candidates: [lr_l2, lr_enet, rf, xgb, hgb]
 
 tuning:
   inner_folds: 3
-  trials: {lr: 15, rf: 25, xgb: 25, hgb: 25}
+  trials: {lr_l2: 15, lr_enet: 15, rf: 25, xgb: 25, hgb: 25}
 calibration: {method: sigmoid, cv: 3}
-lr: {max_iter: 2000, tol: 0.001}
+lr_l2: {max_iter: 2000}
+lr_enet: {max_iter: 2000, tol: 0.001}
 hgb: {max_iter: 300}
 min_eligible: 50            # a label or subset with fewer eligible development participants is skipped
 
@@ -31,7 +32,7 @@ leakage_checks:
 selection:                  # docs/selection_protocol.md
   gates: {slope_min: 0.7, slope_max: 1.3}
   tolerances: {slope: 0.05, jaccard: 0.05, strict_drop: 0.01}
-  simplicity: [lr, hgb, rf, xgb]
+  simplicity: [lr_l2, lr_enet, hgb, rf, xgb]
 
 robustness:
   n_seeds: 3

@@ -10,7 +10,7 @@ import yaml
 from copath.phase3.core import Paths
 
 SMALL = {
-    "tuning": {"inner_folds": 3, "trials": {"lr": 2, "rf": 2, "xgb": 2, "hgb": 2}},
+    "tuning": {"inner_folds": 3, "trials": {"lr_l2": 2, "lr_enet": 2, "rf": 2, "xgb": 2, "hgb": 2}},
     "hgb": {"max_iter": 30},
     "robustness": {"n_seeds": 3, "top_k": 10, "shap_rows_per_fold": 30},
     "explain": {"max_rows_per_fold": 40, "top_n": 20, "dependence_bins": 10},

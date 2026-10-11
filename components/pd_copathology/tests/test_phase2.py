@@ -408,7 +408,7 @@ NEVER_EVERYWHERE = ["COHORT", "subgroup", "analytic_subgroup", "enroll_phase", "
                     "Death_Status", "Death_Date", "age_death", "SITE", "visit_date", "YEAR", "EVENT_ID", "PATNO", "cohort",
                     "bl_year", "bl_month", "bp_source", "med_record_any", "fold"]
 DEFINING = {
-    "ad_like_v1": ["abeta", "tau", "ptau", "abeta_LLOD", "abeta_ULOD", "ptau_LLOD", "tau_LLOD", "IU_ABeta42_CSF",
+    "ad_like_v1": ["abeta", "tau", "ptau", "IU_ABeta42_CSF",
                    "IU_ABeta40_CSF", "IU_pTau181_CSF", "C2N_AB40", "C2N_AB42", "C2N_AB4240", "MTBR_TAU243",
                    "lumi_abeta42", "lumi_ratio_4240", "elecsys_ptau_abeta_ratio"],
     "ad_like_lumipulse_v1": ["abeta", "ptau", "IU_ABeta42_CSF", "lumi_abeta42", "lumi_abeta40", "lumi_ratio_4240"],
@@ -424,6 +424,29 @@ NEAR_PROXY = {
     "ad_like_v1": ["ptau217_plasma", "bd_tau_plasma", "Lilly_ptau217p"],
     "ad_like_lumipulse_v1": ["ptau217_plasma", "bd_tau_plasma"],
 }
+
+
+def test_assay_limit_flags_and_censoring_indicator_are_never_predictors_for_any_label():
+    flags = ["abeta_LLOD", "abeta_ULOD", "ptau_LLOD", "tau_LLOD", "ad_like_v1_censored"]
+    index = MATRIX.set_index("feature")
+    for label in leakage_guard.labels(MATRIX):
+        for feature in flags:
+            assert index.loc[feature, label] == "never", (label, feature)
+        for tier in leakage_guard.TIERS:
+            assert not set(flags) & set(leakage_guard.tier_features(MATRIX, label, tier)), (label, tier)
+    for label in leakage_guard.labels(MATRIX):  # the files the models read agree with the matrix
+        for tier in leakage_guard.TIERS:
+            listed = yaml.safe_load((leakage_guard.FEATURE_SETS_DIR / f"{label}_{tier}.yaml").read_text(encoding="utf-8"))["features"]
+            assert not set(flags) & set(listed), (label, tier)
+    assert leakage_guard.out_of_sync() == []
+    with pytest.raises(leakage_guard.LeakageError):
+        leakage_guard.assert_allowed(["age", "abeta_ULOD"], MATRIX, "pd_type_v1", "primary")
+
+
+def test_the_limit_flags_still_build_the_ad_like_label_internally(run):
+    frame = run["frame"]
+    assert {"abeta_LLOD", "abeta_ULOD", "ptau_LLOD"} <= set(frame.columns)  # kept in the analytic table for the label
+    assert row(run, 20)["abeta_ULOD"] == 1 and row(run, 20)[L("ad_like_v1")] == 0 and row(run, 20)["ad_like_v1_censored"] == 1
 
 
 def test_defining_and_never_features_are_in_no_tier():
@@ -701,3 +724,73 @@ def test_real_configuration_carries_the_frozen_universe():
     assert cfg["forbidden_tables"] == ["Pilot_*", "Deprecated_*"] and cfg["sources"]["lumipulse"]["project"] == "283"
     assert CARDS["vascular_v1"]["rule"]["min_components"] == 2 and CARDS["vascular_v2"]["rule"]["min_components"] == 1
     assert "complete list of current medications" in " ".join(CARDS["vascular_v1"]["preprocessing"]["assumption"].split())
+
+
+# ---------------------------------------------------- frozen GMM traceability
+
+def test_frozen_gmm_hash_is_recorded_verified_and_never_regenerated_silently(data_root, tmp_path):
+    from copath import phase2
+
+    paths = isolated_paths(tmp_path)
+    gmm, manifest_path = paths.frozen / phase2.GMM_FILE, paths.reports / phase2.MANIFEST_FILE
+
+    def manifest() -> dict:
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    def save(content: dict) -> None:
+        manifest_path.write_text(json.dumps(content, indent=2, sort_keys=True), encoding="utf-8")
+
+    run_phase2(data_root, paths)  # the very first freeze creates the file and records its hash
+    original = gmm.read_bytes()
+    assert manifest()[phase2.GMM_HASH_KEY] == phase2._sha256(gmm)
+    first = manifest()[phase2.GMM_HASH_KEY]
+    run_phase2(data_root, paths)  # successful verification of an existing, matching file
+    assert gmm.read_bytes() == original and manifest()[phase2.GMM_HASH_KEY] == first
+
+    gmm.write_bytes(original + b" \n")  # hash mismatch: the file was changed after the manifest recorded it
+    with pytest.raises(split.SplitError, match="does not match") as caught:
+        run_phase2(data_root, paths)
+    assert "--refreeze" in str(caught.value) and gmm.read_bytes() == original + b" \n"  # nothing overwritten
+    assert manifest()[phase2.GMM_HASH_KEY] == first
+    gmm.write_bytes(original)
+
+    gmm.unlink()  # missing file: not regenerated
+    with pytest.raises(split.SplitError, match="missing") as caught:
+        run_phase2(data_root, paths)
+    assert "--refreeze" in str(caught.value) and not gmm.exists() and manifest()[phase2.GMM_HASH_KEY] == first
+    gmm.write_bytes(original)
+    run_phase2(data_root, paths)
+
+    old = manifest()
+    del old[phase2.GMM_HASH_KEY]  # a manifest written before this check
+    save(old)
+    with pytest.raises(split.SplitError, match="no recorded hash") as caught:
+        run_phase2(data_root, paths)
+    assert "--refreeze" in str(caught.value) and gmm.read_bytes() == original
+
+    changed = json.loads(original)  # a different frozen file whose hash the manifest does record
+    changed["threshold_ratio"] *= 1.5
+    gmm.write_text(json.dumps(changed, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    save({**old, phase2.GMM_HASH_KEY: phase2._sha256(gmm)})
+    with pytest.raises(split.SplitError, match="differs from the frozen one"):
+        run_phase2(data_root, paths)  # verification passes; the refitted threshold does not agree
+    assert phase2._sha256(gmm) == manifest()[phase2.GMM_HASH_KEY] != first
+
+    run_phase2(data_root, paths, refreeze=True)  # --refreeze refits, saves and records the new hash
+    assert gmm.read_bytes() == original and manifest()[phase2.GMM_HASH_KEY] == first == phase2._sha256(gmm)
+    gmm.unlink()
+    save({k: v for k, v in manifest().items() if k != phase2.GMM_HASH_KEY})
+    run_phase2(data_root, paths, refreeze=True)  # --refreeze also repairs a missing file and a missing hash
+    assert gmm.is_file() and manifest()[phase2.GMM_HASH_KEY] == phase2._sha256(gmm)
+    run_phase2(data_root, paths)
+
+
+def test_cli_reports_a_missing_frozen_gmm_with_the_refreeze_instruction(data_root, tmp_path, monkeypatch, capsys):
+    from copath import phase2
+
+    paths = isolated_paths(tmp_path)
+    run_phase2(data_root, paths)
+    (paths.frozen / phase2.GMM_FILE).unlink()
+    monkeypatch.setattr("copath.phase2.Paths", lambda: paths)
+    assert main(["--data-root", str(data_root)]) == 1
+    assert "--refreeze" in capsys.readouterr().err

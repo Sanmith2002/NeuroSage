@@ -1,7 +1,7 @@
 # GENERATED from configs/leakage_matrix.csv by `python -m copath.features.leakage_guard`. Do not edit.
 label: pd_type_saa_v1
 tier: primary
-n_features: 303
+n_features: 299
 features:
 - age
 - age_at_visit
@@ -104,12 +104,8 @@ features:
 - updrs3_score
 - updrs_totscore
 - abeta
-- abeta_LLOD
-- abeta_ULOD
 - tau
-- tau_LLOD
 - ptau
-- ptau_LLOD
 - hemohi
 - urate
 - ptau217_plasma

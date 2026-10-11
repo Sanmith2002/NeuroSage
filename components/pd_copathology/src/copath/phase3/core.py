@@ -318,8 +318,8 @@ def privacy_check(ctx: Context, extra_ids: list[str] | None = None) -> int:
 # --------------------------------------------------------------------------
 
 # seconds per fit at about 3,000 eligible participants x 350 features, measured on random data on the development laptop
-_SECONDS_PER_FIT = {"lr": 0.7, "rf": 10.0, "xgb": 6.0, "hgb": 8.5, "b0a": 0.02, "b0b": 0.05, "missingness": 0.5}
-_PARALLEL_GAIN = {"lr": 3.0, "xgb": 1.5, "hgb": 2.0}  # measured gain from training the outer folds at the same time
+_SECONDS_PER_FIT = {"lr_l2": 0.3, "lr_enet": 0.7, "rf": 10.0, "xgb": 6.0, "hgb": 8.5, "b0a": 0.02, "b0b": 0.05, "missingness": 0.5}
+_PARALLEL_GAIN = {"lr_l2": 3.0, "lr_enet": 3.0, "xgb": 1.5, "hgb": 2.0}  # measured gain from training the outer folds at the same time
 
 
 def fits_per_fold(ctx: Context, model: str, tuned: bool) -> int:

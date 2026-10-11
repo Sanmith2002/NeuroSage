@@ -35,7 +35,7 @@ def tune(model: str, X: pd.DataFrame, y: np.ndarray, seed: int, cfg: dict) -> di
     spec = cfg.get("tuning") or {}
     n_trials = int((spec.get("trials") or {}).get(model, 25))
     splits = stratified_splits(y, int(spec.get("inner_folds", 3)), seed)
-    fold_jobs = len(splits) if model == "lr" else 1  # saga is single-threaded; the tree models use every core themselves
+    fold_jobs = len(splits) if model in candidates.LINEAR else 1  # the linear solvers are single-threaded; the tree models use every core themselves
 
     def objective(trial) -> float:
         params = candidates.suggest(trial, model)

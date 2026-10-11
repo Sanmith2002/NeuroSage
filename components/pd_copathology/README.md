@@ -184,5 +184,10 @@ python -m copath.phase3 final --final               # 7. single test-set evaluat
   selected_models_sha256: <printed by `select --stage final` and in reports/phase3/selection_final.md>
   ```
 
+  If the selection is PROVISIONAL for any label (no candidate passed every gate), the file must also contain
+  `acknowledge_provisional: [<label ids>]` listing every provisional label, otherwise `final` stays locked.
   After it has run once a lock file blocks any second run.
 - Once a Phase 3 run exists, `python -m copath.phase2 --refreeze` refuses to run.
+- `configs/frozen/lumipulse_gmm_v1.json` is derived from participant data and is not tracked in Git. Its SHA-256 is
+  recorded in `reports/phase2/phase2_manifest.json`; a normal Phase 2 run verifies it and never regenerates it
+  (a missing file or hash stops the run and asks for `--refreeze`).

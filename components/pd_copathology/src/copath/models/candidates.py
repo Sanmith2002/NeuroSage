@@ -4,8 +4,9 @@ All preprocessing lives inside the scikit-learn ``Pipeline`` returned by
 :func:`build`, so it is fitted on whatever training rows the pipeline is
 fitted on and on nothing else. No model uses missingness indicators.
 
-    lr   elastic-net logistic regression (saga); median imputation + standardisation
-    rf   random forest; median imputation
+    lr_l2    standard L2 logistic regression on all features (lbfgs); median imputation + standardisation
+    lr_enet  elastic-net logistic regression (saga); median imputation + standardisation
+    rf       random forest; median imputation
     xgb  XGBoost; native missing-value handling
     hgb  histogram gradient boosting; native missing-value handling
 """
@@ -19,14 +20,17 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-CANDIDATES = ("lr", "rf", "xgb", "hgb")
-SIMPLICITY = ("lr", "hgb", "rf", "xgb")  # simplest first; the last tie-breaker of the selection protocol
+CANDIDATES = ("lr_l2", "lr_enet", "rf", "xgb", "hgb")
+SIMPLICITY = ("lr_l2", "lr_enet", "hgb", "rf", "xgb")  # simplest first; the last tie-breaker of the selection protocol
+LINEAR = ("lr_l2", "lr_enet")
 
 
 def suggest(trial, model: str) -> dict:
     """One point of the model's search space (the spaces are fixed by the Phase 3 specification)."""
     weight = trial.suggest_categorical("class_weight", ["none", "balanced"])
-    if model == "lr":
+    if model == "lr_l2":
+        return {"C": trial.suggest_float("C", 1e-3, 1e2, log=True), "class_weight": weight}
+    if model == "lr_enet":
         return {"C": trial.suggest_float("C", 1e-3, 1e2, log=True), "l1_ratio": trial.suggest_float("l1_ratio", 0.0, 1.0),
                 "class_weight": weight}
     if model == "rf":
@@ -60,8 +64,13 @@ def build(model: str, params: dict, y_train: np.ndarray, seed: int, cfg: dict | 
     weight = "balanced" if balanced else None
     n_jobs = int(cfg.get("n_jobs", -1))
     impute = ("impute", SimpleImputer(strategy="median", keep_empty_features=True))
-    if model == "lr":
-        spec = cfg.get("lr") or {}
+    if model == "lr_l2":
+        spec = cfg.get("lr_l2") or {}
+        estimator = LogisticRegression(solver="lbfgs", C=params["C"], class_weight=weight,
+                                       max_iter=int(spec.get("max_iter", 2000)), random_state=seed)
+        return Pipeline([impute, ("scale", StandardScaler()), ("model", estimator)])
+    if model == "lr_enet":
+        spec = cfg.get("lr_enet") or {}
         estimator = LogisticRegression(solver="saga", C=params["C"], l1_ratio=params["l1_ratio"], class_weight=weight,
                                        max_iter=int(spec.get("max_iter", 2000)), tol=float(spec.get("tol", 1e-3)),
                                        random_state=seed)

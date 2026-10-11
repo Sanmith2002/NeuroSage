@@ -8,12 +8,12 @@ One row per column of the analytic dataset. `defining` and `never` features are 
 
 | Label | primary | strict | defining | never | near_proxy |
 |---|---|---|---|---|---|
-| pd_type_v1 | 306 | 288 | 0 | 82 | 18 |
-| pd_type_saa_v1 | 303 | 288 | 4 | 81 | 15 |
-| ad_like_v1 | 283 | 279 | 22 | 83 | 4 |
-| ad_like_lumipulse_v1 | 283 | 279 | 22 | 83 | 4 |
-| vascular_v1 | 293 | 293 | 14 | 81 | 0 |
-| vascular_v2 | 293 | 293 | 14 | 81 | 0 |
+| pd_type_v1 | 302 | 284 | 0 | 86 | 18 |
+| pd_type_saa_v1 | 299 | 284 | 4 | 85 | 15 |
+| ad_like_v1 | 283 | 279 | 18 | 87 | 4 |
+| ad_like_lumipulse_v1 | 283 | 279 | 18 | 87 | 4 |
+| vascular_v1 | 289 | 289 | 14 | 85 | 0 |
+| vascular_v2 | 289 | 289 | 14 | 85 | 0 |
 
 ## pd_type_v1
 
@@ -31,14 +31,14 @@ One row per column of the analytic dataset. `defining` and `never` features are 
 
 ## ad_like_v1
 
-**defining** (22): `abeta`, `abeta_LLOD`, `abeta_ULOD`, `tau`, `tau_LLOD`, `ptau`, `ptau_LLOD`, `IU_pTau181_CSF`, `IU_ABeta40_CSF`, `IU_ABeta42_CSF`, `C2N_AB40`, `C2N_AB42`, `C2N_AB4240`, `C2N_AB_Contaminant`, `MTBR_TAU243`, `MTBR_TAU243_LLOD`, `MTBR_TAU243_InstErr`, `lumi_abeta42`, `lumi_abeta40`, `lumi_ptau181`, `lumi_ratio_4240`, `elecsys_ptau_abeta_ratio`
+**defining** (18): `abeta`, `tau`, `ptau`, `IU_pTau181_CSF`, `IU_ABeta40_CSF`, `IU_ABeta42_CSF`, `C2N_AB40`, `C2N_AB42`, `C2N_AB4240`, `C2N_AB_Contaminant`, `MTBR_TAU243`, `MTBR_TAU243_LLOD`, `MTBR_TAU243_InstErr`, `lumi_abeta42`, `lumi_abeta40`, `lumi_ptau181`, `lumi_ratio_4240`, `elecsys_ptau_abeta_ratio`
 
 **near_proxy** (4): `ptau217_plasma`, `bd_tau_plasma`, `Lilly_ptau217p`, `Lilly_ptau217p_LLOD`
 
 
 ## ad_like_lumipulse_v1
 
-**defining** (22): `abeta`, `abeta_LLOD`, `abeta_ULOD`, `tau`, `tau_LLOD`, `ptau`, `ptau_LLOD`, `IU_pTau181_CSF`, `IU_ABeta40_CSF`, `IU_ABeta42_CSF`, `C2N_AB40`, `C2N_AB42`, `C2N_AB4240`, `C2N_AB_Contaminant`, `MTBR_TAU243`, `MTBR_TAU243_LLOD`, `MTBR_TAU243_InstErr`, `lumi_abeta42`, `lumi_abeta40`, `lumi_ptau181`, `lumi_ratio_4240`, `elecsys_ptau_abeta_ratio`
+**defining** (18): `abeta`, `tau`, `ptau`, `IU_pTau181_CSF`, `IU_ABeta40_CSF`, `IU_ABeta42_CSF`, `C2N_AB40`, `C2N_AB42`, `C2N_AB4240`, `C2N_AB_Contaminant`, `MTBR_TAU243`, `MTBR_TAU243_LLOD`, `MTBR_TAU243_InstErr`, `lumi_abeta42`, `lumi_abeta40`, `lumi_ptau181`, `lumi_ratio_4240`, `elecsys_ptau_abeta_ratio`
 
 **near_proxy** (4): `ptau217_plasma`, `bd_tau_plasma`, `Lilly_ptau217p`, `Lilly_ptau217p_LLOD`
 
@@ -61,7 +61,7 @@ One row per column of the analytic dataset. `defining` and `never` features are 
 
 **NSD-ISS** (10): `NSD_Status`, `NSD_STAGE`, `NSD_Adjudicated`, `Clinical_Stage`, `Stage_partial_UPDRS1`, `Stage_subpark`, `Stage_PDTreat`, `Stage_S`, `Stage_D`, `Stage_G`
 
-**biofluid** (2): `CSFSAA_assay`, `ad_like_v1_censored`
+**biofluid** (6): `CSFSAA_assay`, `abeta_LLOD`, `abeta_ULOD`, `tau_LLOD`, `ptau_LLOD`, `ad_like_v1_censored`
 
 **demographics** (3): `Death_Status`, `age_death`, `Death_Date`
 
@@ -240,12 +240,12 @@ One row per column of the analytic dataset. `defining` and `never` features are 
 | `CSFSAA` | biofluid | curated cut | near_proxy | defining | safe | safe | safe | safe | alpha-synuclein SAA / CSF alpha-synuclein |
 | `CSFSAA_assay` | biofluid | curated cut | never | never | never | never | never | never | which SAA assay was run (availability indicator) |
 | `abeta` | biofluid | curated cut | safe | safe | defining | defining | safe | safe | CSF/plasma amyloid or tau measure |
-| `abeta_LLOD` | biofluid | curated cut | safe | safe | defining | defining | safe | safe | CSF/plasma amyloid or tau measure |
-| `abeta_ULOD` | biofluid | curated cut | safe | safe | defining | defining | safe | safe | CSF/plasma amyloid or tau measure |
+| `abeta_LLOD` | biofluid | curated cut | never | never | never | never | never | never | assay limit flag / censoring indicator: may build the AD-like label internally but is never a predictor for any label |
+| `abeta_ULOD` | biofluid | curated cut | never | never | never | never | never | never | assay limit flag / censoring indicator: may build the AD-like label internally but is never a predictor for any label |
 | `tau` | biofluid | curated cut | safe | safe | defining | defining | safe | safe | CSF/plasma amyloid or tau measure |
-| `tau_LLOD` | biofluid | curated cut | safe | safe | defining | defining | safe | safe | CSF/plasma amyloid or tau measure |
+| `tau_LLOD` | biofluid | curated cut | never | never | never | never | never | never | assay limit flag / censoring indicator: may build the AD-like label internally but is never a predictor for any label |
 | `ptau` | biofluid | curated cut | safe | safe | defining | defining | safe | safe | CSF/plasma amyloid or tau measure |
-| `ptau_LLOD` | biofluid | curated cut | safe | safe | defining | defining | safe | safe | CSF/plasma amyloid or tau measure |
+| `ptau_LLOD` | biofluid | curated cut | never | never | never | never | never | never | assay limit flag / censoring indicator: may build the AD-like label internally but is never a predictor for any label |
 | `asyn` | biofluid | curated cut | near_proxy | defining | safe | safe | safe | safe | alpha-synuclein SAA / CSF alpha-synuclein |
 | `hemohi` | biofluid | curated cut | safe | safe | safe | safe | safe | safe |  |
 | `urate` | biofluid | curated cut | safe | safe | safe | safe | safe | safe |  |
@@ -441,7 +441,7 @@ One row per column of the analytic dataset. `defining` and `never` features are 
 | `lumi_ptau181` | biofluid | Current_Biospecimen_Analysis_Results project 283 | safe | safe | defining | defining | safe | safe | Lumipulse CSF |
 | `lumi_ratio_4240` | biofluid | Current_Biospecimen_Analysis_Results project 283 | safe | safe | defining | defining | safe | safe | Lumipulse CSF |
 | `elecsys_ptau_abeta_ratio` | biofluid | derived from the curated cut | safe | safe | defining | defining | safe | safe | the AD-like ratio itself |
-| `ad_like_v1_censored` | biofluid | derived from the curated cut | never | never | never | never | never | never | 1 if abeta or ptau used for ad_like_v1 is a boundary substitution (reporting only) |
+| `ad_like_v1_censored` | biofluid | derived from the curated cut | never | never | never | never | never | never | assay limit flag / censoring indicator: may build the AD-like label internally but is never a predictor for any label |
 | `sup_sbp` | vascular evidence | Vital_Signs | safe | safe | safe | safe | defining | defining | supine blood pressure |
 | `sup_dbp` | vascular evidence | Vital_Signs | safe | safe | safe | safe | defining | defining | supine blood pressure |
 | `htn_bp` | vascular evidence | derived | safe | safe | safe | safe | defining | defining | vascular evidence or component |

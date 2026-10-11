@@ -1,7 +1,7 @@
 # GENERATED from configs/leakage_matrix.csv by `python -m copath.features.leakage_guard`. Do not edit.
 label: vascular_v2
 tier: strict
-n_features: 293
+n_features: 289
 features:
 - age
 - age_at_visit
@@ -104,12 +104,8 @@ features:
 - updrs_totscore
 - CSFSAA
 - abeta
-- abeta_LLOD
-- abeta_ULOD
 - tau
-- tau_LLOD
 - ptau
-- ptau_LLOD
 - asyn
 - hemohi
 - urate

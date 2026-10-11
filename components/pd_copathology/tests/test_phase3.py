@@ -15,7 +15,7 @@ from copath.data import split
 from copath.evaluation import metrics, selection
 from copath.explain import shap_explainer
 from copath.features import leakage_guard
-from copath.models import candidates
+from copath.models import baselines, candidates
 from copath.phase2 import registry_has_runs, run_phase2
 from copath.phase3 import commands, final
 from copath.phase3.__main__ import main
@@ -27,13 +27,13 @@ from .conftest_phase2 import isolated_paths
 from .conftest_phase3 import phase3_paths
 from .fixtures import build_phase2_fixtures as fx
 
-FAST = {"candidates": ["lr", "hgb"], "hgb": {"max_iter": 20},
+FAST = {"candidates": ["lr_l2", "lr_enet", "hgb"], "hgb": {"max_iter": 20},
         "robustness": {"n_seeds": 2, "top_k": 10, "shap_rows_per_fold": 20},
         "ablation": {"modalities": ["DAT", "cognition", "vascular evidence"],
                      "clinical_demographics": ["cognition", "motor", "non-motor clinical", "demographics"]}}
 MATRIX = leakage_guard.load_matrix()
 SPEC = {"gates": {"slope_min": 0.7, "slope_max": 1.3}, "tolerances": {"slope": 0.05, "jaccard": 0.05, "strict_drop": 0.01},
-        "simplicity": ["lr", "hgb", "rf", "xgb"]}
+        "simplicity": ["lr_l2", "lr_enet", "hgb", "rf", "xgb"]}
 
 
 @pytest.fixture(scope="session")
@@ -85,12 +85,12 @@ def test_commands_1_to_6_write_the_expected_reports(pipe):
     assert "final_test_results.csv" not in names and not pipe.lock.exists() and not pipe.approval.exists()
     assert {p.suffix for p in (pipe.reports / "figures").iterdir()} == {".png"}
     results = _report(pipe, "candidate_results.csv")
-    assert set(results["model"]) == {"lr", "hgb"} and set(results["tier"]) == {"primary"}
-    one = results[(results["label"] == "ad_like_v1") & (results["model"] == "lr")]
+    assert set(results["model"]) == {"lr_l2", "lr_enet", "hgb"} and set(results["tier"]) == {"primary"}
+    one = results[(results["label"] == "ad_like_v1") & (results["model"] == "lr_enet")]
     assert {"pooled", "mean", "sd", "se", "fold 0", "fold 4"} <= set(one["scope"])
     assert 0.5 < float(one[one["scope"] == "pooled"]["auroc"].iloc[0]) <= 1
     system = results[results["label"] == "ALL (macro over labels)"]
-    assert len(system) == 2 and (system["hamming_loss"] != "").all() and (system["n_all_eligible"] != "").all()
+    assert len(system) == 3 and (system["hamming_loss"] != "").all() and (system["n_all_eligible"] != "").all()
     assert set(_report(pipe, "baseline_results.csv")["model"]) == {"b0a", "b0b"}
     prevalence = _report(pipe, "baseline_results.csv").query("model == 'b0a' and scope == 'pooled'")
     assert (prevalence["bss"].astype(float).abs() < 0.02).all()  # the prevalence baseline has no skill by construction
@@ -110,6 +110,14 @@ def test_commands_1_to_6_write_the_expected_reports(pipe):
     assert "Cognition does not strongly separate the biomarker groups at baseline" in notes
     summary = (pipe.reports / "shap_summary.md").read_text(encoding="utf-8")
     assert "uncalibrated" in summary and "monotonic" in summary and "SHAP / model-output space:" in summary
+
+
+def test_each_candidate_family_gets_cv_runs_for_every_label(pipe):
+    rows = [r for r in _rows(pipe) if r["stage"] == "cv"]
+    for label in builders.PRIMARY_LABELS:
+        assert {r["model"] for r in rows if r["label"] == label} == {"b0a", "b0b", "missingness", "lr_l2", "lr_enet", "hgb"}
+    details = registry.load_details(pipe.runs, "cv-ad_like_v1-primary-lr_l2-s20261011")
+    assert all(set(f["params"]) == {"C", "class_weight"} for f in details["folds"])
 
 
 def test_registry_has_one_row_per_run_with_hashes(pipe):
@@ -135,7 +143,7 @@ def test_cv_uses_the_primary_tier_only_and_tiers_are_respected(pipe):
         assert not any(f.startswith("label_") or f in ("PATNO", "fold", "cohort", "COHORT") for f in details.get("features", []))
     strict = registry.load_details(pipe.runs, [r["run_id"] for r in rows if r["tier"] == "strict" and r["label"] == "pd_type_v1"][0])
     assert not set(strict["features"]) & {"updrs3_score", "hy", "MIA_PUTAMEN_L", "CSFSAA", "asyn"}
-    primary = registry.load_details(pipe.runs, "cv-pd_type_v1-primary-lr-s20261011")
+    primary = registry.load_details(pipe.runs, "cv-pd_type_v1-primary-lr_enet-s20261011")
     assert {"updrs3_score", "CSFSAA"} <= set(primary["features"]) and "saa_status_bl" not in primary["features"]
     assert primary["nonnumeric_tier_features_not_used"] == ["saa_status_bl"]  # a text near-proxy: reported, not used
     with pytest.raises(leakage_guard.LeakageError):
@@ -181,22 +189,22 @@ def test_resume_skips_registered_runs_and_cv_is_deterministic(pipe, phase2, tmp_
     commands.cmd_cv(load_context(pipe))
     assert len(_rows(pipe)) == before  # nothing is run twice
     again = _paths(tmp_path / "again", phase2)
-    commands.cmd_cv(load_context(again), labels=["ad_like_v1"], models=["lr", "hgb", "b0b"])
-    assert {r["run_id"] for r in _rows(again)} == {f"cv-ad_like_v1-primary-{m}-s20261011" for m in ("lr", "hgb", "b0b")}
-    for model in ("lr", "hgb"):
+    commands.cmd_cv(load_context(again), labels=["ad_like_v1"], models=["lr_l2", "lr_enet", "hgb", "b0b"])
+    assert {r["run_id"] for r in _rows(again)} == {f"cv-ad_like_v1-primary-{m}-s20261011" for m in ("lr_l2", "lr_enet", "hgb", "b0b")}
+    for model in ("lr_l2", "lr_enet", "hgb"):
         name = f"cv-ad_like_v1-primary-{model}-s20261011.parquet"
         pd.testing.assert_frame_equal(pd.read_parquet(again.oof / name), pd.read_parquet(pipe.oof / name))
         assert registry.load_details(again.runs, name[:-8])["folds"][0]["params"] == registry.load_details(pipe.runs, name[:-8])["folds"][0]["params"]
     cfg = yaml.safe_load(again.config.read_text(encoding="utf-8"))
     cfg["seed"] += 1
     again.config.write_text(yaml.safe_dump(cfg), encoding="utf-8")
-    assert registry.find(again.registry, "cv-ad_like_v1-primary-lr-s20261011", load_context(again).hashes) is None  # other config: not reused
+    assert registry.find(again.registry, "cv-ad_like_v1-primary-lr_enet-s20261011", load_context(again).hashes) is None  # other config: not reused
 
 
 def test_select_final_refuses_without_robustness_results(pipe, phase2, tmp_path):
-    hidden = pipe.runs / "robustness-ad_like_v1-strict-lr-s20261011.json"
+    hidden = pipe.runs / "robustness-ad_like_v1-strict-lr_enet-s20261011.json"
     tie_set = json.loads((pipe.runs / "selection_preliminary.json").read_text(encoding="utf-8"))["labels"]["ad_like_v1"]["tie_set"]
-    if "lr" not in tie_set:
+    if "lr_enet" not in tie_set:
         hidden = pipe.runs / f"robustness-ad_like_v1-strict-{tie_set[0]}-s20261011.json"
     moved = tmp_path / hidden.name
     shutil.move(hidden, moved)
@@ -261,7 +269,13 @@ def test_final_is_locked_until_a_human_approves_then_runs_once(pipe, phase2, tmp
     assert not paths.lock.exists() and not (paths.reports / "final_test_results.csv").exists()
     locked["on"] = False
 
+    provisional = yaml.safe_load(paths.selected.read_text(encoding="utf-8"))["provisional_labels"]
+    assert provisional  # the synthetic selection is provisional for at least one label
     paths.approval.write_text(yaml.safe_dump({**approval, "approved": True}), encoding="utf-8")
+    with pytest.raises(final.FinalLockError, match="PROVISIONAL"):
+        final.cmd_final(paths, final_flag=True)  # a valid approval alone does not unlock a provisional selection
+    assert not paths.lock.exists()
+    paths.approval.write_text(yaml.safe_dump({**approval, "approved": True, "acknowledge_provisional": provisional}), encoding="utf-8")
     final.cmd_final(paths, final_flag=True)
     assert split.FINAL_EVALUATION_ENV not in __import__("os").environ  # the switch is not left on
     results = _report(paths, "final_test_results.csv")
@@ -292,6 +306,61 @@ def test_final_is_locked_until_a_human_approves_then_runs_once(pipe, phase2, tmp
         commands.cmd_select_final(load_context(paths))  # the selection cannot change after the final evaluation
 
 
+def _provisional_setup(pipe, tmp_path, phase2):
+    paths = phase3_paths(tmp_path / "prov", phase2, **FAST)
+    for source, target in ((pipe.processed, paths.processed), (pipe.runs, paths.runs), (pipe.frozen, paths.frozen)):
+        shutil.copytree(source, target)
+    shutil.copy(pipe.registry, paths.registry)
+    paths.config.write_text(pipe.config.read_text(encoding="utf-8"), encoding="utf-8")
+    return paths
+
+
+def test_provisional_labels_keep_final_locked_until_acknowledged(pipe, phase2, tmp_path, monkeypatch):
+    monkeypatch.delenv(split.FINAL_EVALUATION_ENV, raising=False)
+    paths = _provisional_setup(pipe, tmp_path, phase2)
+    selection_file = yaml.safe_load(paths.selected.read_text(encoding="utf-8"))
+    for choice in selection_file["labels"].values():
+        choice["gates_passed"], choice["failed_gates"] = True, []
+    selection_file["labels"]["ad_like_v1"].update(gates_passed=False, failed_gates=["G1 calibration slope"])
+    selection_file["labels"]["vascular_v1"].update(gates_passed=False, failed_gates=["G3 beats age + sex (AUPRC)"])
+    selection_file["provisional_labels"] = ["ad_like_v1", "vascular_v1"]
+    paths.selected.write_text(yaml.safe_dump(selection_file, sort_keys=False), encoding="utf-8")
+    base = {"approved": True, "reviewer": "Synthetic Reviewer", "date": "2031-01-01", "selected_models_sha256": sha256(paths.selected)}
+    for acknowledge, text in ((None, "ad_like_v1, vascular_v1"), ([], "ad_like_v1, vascular_v1"), (["ad_like_v1"], "vascular_v1"),
+                              (["vascular_v1"], "ad_like_v1")):
+        paths.approval.write_text(yaml.safe_dump({**base, **({} if acknowledge is None else {"acknowledge_provisional": acknowledge})}),
+                                  encoding="utf-8")
+        with pytest.raises(final.FinalLockError, match="PROVISIONAL") as caught:
+            final.check_unlocked(paths, True)
+        assert text in str(caught.value)
+    for bad, text in (("ad_like_v1", "must be a list"), (["ad_like_v1", "vascular_v1", "not_a_label"], "not in the selection")):
+        paths.approval.write_text(yaml.safe_dump({**base, "acknowledge_provisional": bad}), encoding="utf-8")
+        with pytest.raises(final.FinalLockError, match=text):
+            final.check_unlocked(paths, True)
+    paths.approval.write_text(yaml.safe_dump({**base, "acknowledge_provisional": ["vascular_v1", "ad_like_v1"]}), encoding="utf-8")
+    assert final.check_unlocked(paths, True)["approved"] is True  # every provisional label acknowledged
+    selection_file["labels"]["ad_like_v1"].update(gates_passed=True, failed_gates=[])
+    selection_file["labels"]["vascular_v1"].update(gates_passed=True, failed_gates=[])
+    selection_file["provisional_labels"] = []
+    paths.selected.write_text(yaml.safe_dump(selection_file, sort_keys=False), encoding="utf-8")
+    paths.approval.write_text(yaml.safe_dump({**base, "selected_models_sha256": sha256(paths.selected)}), encoding="utf-8")
+    assert final.check_unlocked(paths, True)["approved"] is True  # no provisional label: the acknowledgement is not required
+
+
+def test_selection_final_explains_why_a_label_is_provisional(pipe, phase2, tmp_path):
+    selected = yaml.safe_load(pipe.selected.read_text(encoding="utf-8"))
+    assert selected["provisional_labels"] == sorted(l for l, c in selected["labels"].items() if not c["gates_passed"])
+    assert selected["provisional_labels"], "the synthetic data are expected to leave at least one label provisional"
+    text = (pipe.reports / "selection_final.md").read_text(encoding="utf-8")
+    for label in selected["provisional_labels"]:
+        assert f"Why `{label}` is PROVISIONAL" in text and "acknowledge_provisional" in text
+    assert "Calibration slope (gate: 0.7 to 1.3)" in text and "Gates failed, by number of candidates" in text
+    assert "Provisional labels:" in text
+    for label, choice in selected["labels"].items():
+        if choice["gates_passed"]:
+            assert f"Why `{label}` is PROVISIONAL" not in text
+
+
 def test_cli_final_is_locked_without_loading_anything(monkeypatch, capsys, tmp_path):
     from copath.phase3.core import Paths
 
@@ -313,7 +382,7 @@ def _toy(n=240, seed=0):
     return X, y, np.arange(n) % 5
 
 
-CFG = {"tuning": {"inner_folds": 3, "trials": {"lr": 2, "rf": 2, "xgb": 2, "hgb": 2}}, "calibration": {"method": "sigmoid", "cv": 3},
+CFG = {"tuning": {"inner_folds": 3, "trials": {"lr_l2": 2, "lr_enet": 2, "rf": 2, "xgb": 2, "hgb": 2}}, "calibration": {"method": "sigmoid", "cv": 3},
        "hgb": {"max_iter": 20}, "n_jobs": 2}
 
 
@@ -327,7 +396,7 @@ def test_preprocessing_and_tuning_only_see_training_rows(monkeypatch):
         return real(model, X_train, y_train, seed, cfg)
 
     monkeypatch.setattr(tuning, "tune", spy)
-    out = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr", 1, CFG, keep_models=True)
+    out = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr_enet", 1, CFG, keep_models=True)
     assert len(seen) == 5
     for k in range(5):
         test_rows, train_rows = set(X.index[folds == k]), X[folds != k]
@@ -344,44 +413,60 @@ def test_preprocessing_and_tuning_only_see_training_rows(monkeypatch):
         assert part["threshold"].nunique() == 1  # chosen once inside the outer-training set, applied to the test fold
     fixed = {k: out["folds"][k]["params"] for k in range(5)}
     monkeypatch.setattr(tuning, "tune", lambda *a, **k: (_ for _ in ()).throw(AssertionError("re-tuned")))
-    again = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr", 1, CFG, fold_params=fixed)  # reuse: no re-tuning
+    again = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr_enet", 1, CFG, fold_params=fixed)  # reuse: no re-tuning
     pd.testing.assert_frame_equal(again["oof"], oof)
 
 
 def test_every_model_family_trains_and_shap_space_is_verified_not_assumed():
     X, y, folds = _toy(n=400)
     train_rows, test_rows = folds != 0, folds == 0
-    spaces, cfg = {}, {**CFG, "tuning": {"inner_folds": 3, "trials": {"lr": 6, "rf": 4, "xgb": 6, "hgb": 6}}}
-    for model in ("lr", "rf", "xgb", "hgb"):
+    spaces, cfg = {}, {**CFG, "tuning": {"inner_folds": 3, "trials": {"lr_l2": 6, "lr_enet": 6, "rf": 4, "xgb": 6, "hgb": 6}}}
+    for model in ("lr_l2", "lr_enet", "rf", "xgb", "hgb"):
         out = train.fit_predict(model, X[train_rows], y[train_rows], X[test_rows], 3, cfg)
         assert out["p_cal"].shape == (test_rows.sum(),) and 0 < out["threshold"] < 1 and "class_weight" in out["params"]
         assert metrics.label_metrics(y[test_rows], out["p_cal"], np.full(test_rows.sum(), out["prevalence"]),
                                      out["p_cal"] >= out["threshold"])["auroc"] > 0.7
         steps = [name for name, _ in out["model"].steps]
-        assert steps == {"lr": ["impute", "scale", "model"], "rf": ["impute", "model"]}.get(model, ["model"])
+        assert steps == {"lr_l2": ["impute", "scale", "model"], "lr_enet": ["impute", "scale", "model"],
+                         "rf": ["impute", "model"]}.get(model, ["model"])
         shap = shap_explainer.explain(model, out["model"], X[train_rows], X[test_rows])
         assert shap["values"].shape == (test_rows.sum(), X.shape[1]) and shap["additivity_error"] < 1e-2
         spaces[model] = shap["space"]
         top = shap_explainer.mean_abs(shap["values"], list(X.columns)).sort_values(ascending=False).index[:2]
         assert top[0] in ("a", "b") and set(top) & {"a", "b"}  # the informative features lead the ranking
     assert spaces["rf"].startswith("probability")  # a random forest is NOT explained in log-odds
-    assert all(spaces[m].startswith("log-odds") for m in ("lr", "xgb", "hgb"))
+    assert all(spaces[m].startswith("log-odds") for m in ("lr_l2", "lr_enet", "xgb", "hgb"))
     for name in ("b0a", "b0b", "missingness"):
         out = train.fit_predict(name, X[train_rows], y[train_rows], X[test_rows], 3, CFG)
         assert out["params"] == {} and np.allclose(out["p_cal"], out["p_uncal"])  # baselines: not tuned, not calibrated
     constant = train.fit_predict("b0a", X[train_rows], y[train_rows], X[test_rows], 3, CFG)
     assert np.allclose(constant["p_cal"], y[train_rows].mean())
     with pytest.raises(train.FoldError):
-        train.fit_predict("lr", X[train_rows].head(8), np.array([1, 0, 0, 0, 0, 0, 0, 0]), X[test_rows], 3, CFG)
+        train.fit_predict("lr_enet", X[train_rows].head(8), np.array([1, 0, 0, 0, 0, 0, 0, 0]), X[test_rows], 3, CFG)
     failed = train.outer_cv(X.head(40), np.r_[np.ones(3), np.zeros(37)].astype(int), folds[:40], X.index[:40].to_numpy(), "hgb", 1, CFG)
     assert all(r["failed"] and r["error"] == "FoldError" for r in failed["folds"]) and failed["oof"].empty
+
+
+def test_lr_l2_is_a_plain_l2_logistic_regression_tuned_on_c_and_class_weight_only():
+    X, y, folds = _toy(n=400)
+    pipeline = candidates.build("lr_l2", {"C": 0.5, "class_weight": "balanced"}, y, 1, CFG)
+    assert [name for name, _ in pipeline.steps] == ["impute", "scale", "model"]  # the same fold-safe pipeline as lr_enet
+    estimator = pipeline.named_steps["model"]
+    assert estimator.C == 0.5 and estimator.class_weight == "balanced" and getattr(estimator, "l1_ratio", None) in (None, 0, 0.0)
+    assert candidates.build("lr_l2", {"C": 1.0, "class_weight": "none"}, y, 1, CFG).named_steps["model"].class_weight is None
+    fitted = pipeline.fit(X[folds != 0], y[folds != 0])
+    assert (fitted.named_steps["model"].coef_ != 0).all()  # no sparsity: every feature keeps a coefficient (no L1 term)
+    assert candidates.build("lr_enet", {"C": 1.0, "l1_ratio": 0.5, "class_weight": "none"}, y, 1, CFG).named_steps["model"].solver == "saga"
+    assert "lr_l2" not in baselines.BASELINES and set(baselines.BASELINES) == {"b0a", "b0b"}  # baselines are not candidates
+    out = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr_l2", 1, CFG)
+    assert len(out["oof"]) == len(X) and all(set(r["params"]) == {"C", "class_weight"} for r in out["folds"])
 
 
 def test_search_spaces_match_the_specification():
     import optuna
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
-    for model, expected in (("lr", {"C", "l1_ratio"}), ("rf", {"n_estimators", "max_depth", "min_samples_leaf", "max_features"}),
+    for model, expected in (("lr_l2", {"C"}), ("lr_enet", {"C", "l1_ratio"}), ("rf", {"n_estimators", "max_depth", "min_samples_leaf", "max_features"}),
                             ("xgb", {"learning_rate", "max_depth", "min_child_weight", "subsample", "colsample_bytree",
                                      "reg_alpha", "reg_lambda", "n_estimators"}),
                             ("hgb", {"learning_rate", "max_depth", "max_leaf_nodes", "l2_regularization", "min_samples_leaf"})):
@@ -389,7 +474,10 @@ def test_search_spaces_match_the_specification():
         drawn = [candidates.suggest(study.ask(), model) for _ in range(40)]
         assert set(drawn[0]) == expected | {"class_weight"} and {d["class_weight"] for d in drawn} == {"none", "balanced"}
     cfg = yaml.safe_load(load_cfg().read_text(encoding="utf-8"))
-    assert cfg["tuning"] == {"inner_folds": 3, "trials": {"lr": 15, "rf": 25, "xgb": 25, "hgb": 25}}
+    assert cfg["tuning"] == {"inner_folds": 3, "trials": {"lr_l2": 15, "lr_enet": 15, "rf": 25, "xgb": 25, "hgb": 25}}
+    assert cfg["candidates"] == ["lr_l2", "lr_enet", "rf", "xgb", "hgb"] and cfg["selection"]["simplicity"] == [
+        "lr_l2", "lr_enet", "hgb", "rf", "xgb"]
+    assert candidates.CANDIDATES == tuple(cfg["candidates"]) and candidates.SIMPLICITY == tuple(cfg["selection"]["simplicity"])
     assert cfg["calibration"] == {"method": "sigmoid", "cv": 3} and cfg["main_tier"] == "primary"
     assert cfg["labels"] == builders.PRIMARY_LABELS and cfg["final"]["n_bootstrap"] == 1000 and cfg["robustness"]["n_seeds"] == 3
 
@@ -445,9 +533,9 @@ B0A, B0B = {"pooled": {"brier": 0.20}}, {"pooled": {"auprc": 0.40}}
 
 
 def test_gates_one_se_rule_and_reporting_of_failed_models():
-    results = {"lr": _result(0.300), "hgb": _result(0.305, se=0.02), "rf": _result(0.280), "xgb": _result(0.400, slope=1.5)}
+    results = {"lr_enet": _result(0.300), "hgb": _result(0.305, se=0.02), "rf": _result(0.280), "xgb": _result(0.400, slope=1.5)}
     out = selection.preliminary(results, B0A, B0B, SPEC)
-    assert out["best"] == "hgb" and out["tie_set"] == ["hgb", "lr"] and out["gates_passed"]  # rf is more than 1 SE below
+    assert out["best"] == "hgb" and out["tie_set"] == ["hgb", "lr_enet"] and out["gates_passed"]  # rf is more than 1 SE below
     assert "xgb" in out["table"] and out["table"]["xgb"]["gates"]["G1 calibration slope"] is False  # reported, not hidden
     for bad, gate in ((_result(0.5, slope=0.69), 0), (_result(0.5, brier=0.21), 1), (_result(0.5, auprc=0.40), 2),
                       (_result(0.5, failed=1), 3), (_result(0.5, slope=float("nan")), 0)):
@@ -456,10 +544,10 @@ def test_gates_one_se_rule_and_reporting_of_failed_models():
 
 
 def test_provisional_fallback_when_no_model_passes_every_gate():
-    results = {"lr": _result(0.30, slope=2.0), "hgb": _result(0.35, slope=2.0, auprc=0.3), "rf": _result(0.9, failed=2)}
+    results = {"lr_enet": _result(0.30, slope=2.0), "hgb": _result(0.35, slope=2.0, auprc=0.3), "rf": _result(0.9, failed=2)}
     out = selection.preliminary(results, B0A, B0B, SPEC)
-    assert out["provisional"] and not out["gates_passed"] and out["tie_set"] == ["lr"]  # fewest failed gates; never a failed fold
-    nothing = selection.preliminary({"lr": _result(0.3, failed=1)}, B0A, B0B, SPEC)
+    assert out["provisional"] and not out["gates_passed"] and out["tie_set"] == ["lr_enet"]  # fewest failed gates; never a failed fold
+    nothing = selection.preliminary({"lr_enet": _result(0.3, failed=1)}, B0A, B0B, SPEC)
     assert nothing["best"] is None and nothing["tie_set"] == []
 
 
@@ -468,16 +556,18 @@ def test_tie_breakers_are_applied_in_the_protocol_order():
         return {"slope_distance": slope, "jaccard": jaccard, "strict_drop": drop}
 
     assert selection.final_choice(["xgb"], {"xgb": evidence(0.9, 0.1, 0.9)}, SPEC)[0] == "xgb"
-    chosen, why = selection.final_choice(["xgb", "lr"], {"xgb": evidence(0.02, 0.2, 0.5), "lr": evidence(0.20, 0.9, 0.0)}, SPEC)
+    chosen, why = selection.final_choice(["xgb", "lr_enet"], {"xgb": evidence(0.02, 0.2, 0.5), "lr_enet": evidence(0.20, 0.9, 0.0)}, SPEC)
     assert chosen == "xgb" and len(why) == 1 and why[0].startswith("(a)")  # (a) decides alone
-    tied = {"xgb": evidence(0.02, 0.80, 0.5), "rf": evidence(0.05, 0.60, 0.0), "lr": evidence(0.30, 0.99, 0.0)}
-    chosen, why = selection.final_choice(["xgb", "rf", "lr"], tied, SPEC)
+    tied = {"xgb": evidence(0.02, 0.80, 0.5), "rf": evidence(0.05, 0.60, 0.0), "lr_enet": evidence(0.30, 0.99, 0.0)}
+    chosen, why = selection.final_choice(["xgb", "rf", "lr_enet"], tied, SPEC)
     assert chosen == "xgb" and [w[:3] for w in why] == ["(a)", "(b)"]  # lr leaves at (a); (b) separates xgb and rf
     tied = {"xgb": evidence(0.02, 0.80, 0.005), "rf": evidence(0.05, 0.78, 0.100), "hgb": evidence(0.04, 0.79, 0.006)}
     chosen, why = selection.final_choice(["xgb", "rf", "hgb"], tied, SPEC)
     assert chosen == "hgb" and [w[:3] for w in why] == ["(a)", "(b)", "(c)", "(d)"]  # rf leaves at (c); simplicity decides
-    same = {m: evidence(0.1, 0.5, 0.0) for m in ("xgb", "rf", "hgb", "lr")}
-    assert selection.final_choice(["xgb", "rf", "hgb", "lr"], same, SPEC)[0] == "lr"
+    same = {m: evidence(0.1, 0.5, 0.0) for m in ("xgb", "rf", "hgb", "lr_enet", "lr_l2")}
+    assert selection.final_choice(["xgb", "rf", "hgb", "lr_enet", "lr_l2"], same, SPEC)[0] == "lr_l2"  # simplest of all
+    assert selection.final_choice(["xgb", "rf", "hgb", "lr_enet"], same, SPEC)[0] == "lr_enet"
+    assert selection.final_choice(["xgb", "rf", "hgb"], same, SPEC)[0] == "hgb"
     assert selection.final_choice(["xgb", "rf"], same, SPEC)[0] == "rf"
 
 

@@ -281,31 +281,70 @@ def _write_text(text: str, path: Path, state: State) -> None:
     state.written.append(path)
 
 
-def _lumipulse(frame: pd.DataFrame, dev: pd.Series, cfg: dict, paths: Paths, refreeze: bool) -> tuple[pd.Series, str]:
-    """Fit the mixture on development participants only, freeze it, apply it to everyone."""
+GMM_FILE = "lumipulse_gmm_v1.json"
+MANIFEST_FILE = "phase2_manifest.json"
+GMM_HASH_KEY = "lumipulse_gmm_sha256"
+REFREEZE_HINT = "Run `python -m copath.phase2 --refreeze` to refit and record it (allowed only before any Phase 3 run)."
+
+
+def verify_frozen_gmm(target: Path, manifest_path: Path) -> None:
+    """A normal run needs the frozen GMM file and a manifest hash that matches it; nothing is regenerated.
+
+    Raises :class:`copath.data.split.SplitError` (never mentioning data) when the file is missing, when the
+    manifest has no recorded hash (written before this check existed) or when the two differ.
+    """
+    if not Path(target).is_file():
+        raise split_mod.SplitError(f"the frozen Lumipulse threshold file {GMM_FILE} is missing; it is not regenerated "
+                                   f"silently. {REFREEZE_HINT}")
+    recorded = None
+    if Path(manifest_path).is_file():
+        try:
+            recorded = json.loads(Path(manifest_path).read_text(encoding="utf-8")).get(GMM_HASH_KEY)
+        except ValueError:
+            recorded = None
+    if not recorded:
+        raise split_mod.SplitError(f"{MANIFEST_FILE} has no recorded hash of {GMM_FILE} (manifests written before this "
+                                   f"check do not). {REFREEZE_HINT}")
+    if recorded != _sha256(target):
+        raise split_mod.SplitError(f"{GMM_FILE} does not match the hash recorded in {MANIFEST_FILE}; the frozen "
+                                   f"threshold was changed or replaced. {REFREEZE_HINT}")
+
+
+def _lumipulse(frame: pd.DataFrame, dev: pd.Series, cfg: dict, paths: Paths, refreeze: bool,
+               initial: bool = False) -> tuple[pd.Series, str, str]:
+    """Fit the mixture on development participants only, freeze it, apply it to everyone.
+
+    Returns the label, a report note and the SHA-256 of the frozen file ("not fitted" if there is none).
+    ``refreeze`` refits and overwrites the file. ``initial`` is the very first freeze (no split exists yet): the
+    file is created. In every other case the file must already exist and match the manifest (see
+    :func:`verify_frozen_gmm`).
+    """
     column = builders.label_column("ad_like_lumipulse_v1")
     gmm = cfg.get("lumipulse_gmm") or {}
     eligible_dev = frame.loc[dev, "lumi_ratio_4240"].dropna()
     if len(eligible_dev) < int(gmm.get("min_development_n", 30)):
         return pd.Series(np.nan, index=frame.index, name=column), (
-            "Not fitted: too few eligible development-set participants. The Lumipulse label is masked for everyone.")
+            "Not fitted: too few eligible development-set participants. The Lumipulse label is masked for everyone."), "not fitted"
+    target = paths.frozen / GMM_FILE
+    create = refreeze or (initial and not target.is_file())
+    if not create:
+        verify_frozen_gmm(target, paths.reports / MANIFEST_FILE)
     fitted = builders.fit_lumipulse_threshold(eligible_dev, int(cfg["seed"]), int(gmm.get("n_init", 5)),
                                               int(gmm.get("min_development_n", 30)))
-    target = paths.frozen / "lumipulse_gmm_v1.json"
-    if target.is_file() and not refreeze:
+    if create:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(fitted, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        frozen = fitted
+    else:
         frozen = json.loads(target.read_text(encoding="utf-8"))
         if not np.isclose(frozen["threshold_ratio"], fitted["threshold_ratio"], rtol=1e-9):
             raise split_mod.SplitError("the Lumipulse threshold fitted now differs from the frozen one; nothing was "
                                        "overwritten (use --refreeze only if it must be replaced)")
-    else:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(fitted, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        frozen = fitted
     note = (f"2-component Gaussian mixture on log(ABeta42/ABeta40), fitted on {S(frozen['n_development_participants'])} "
             f"eligible development-set participants only; threshold ratio = {frozen['threshold_ratio']:.5f}; "
-            "positive = ratio below the threshold. Frozen in `configs/frozen/lumipulse_gmm_v1.json` and applied "
-            "unchanged to the test set.")
-    return builders.ad_like_lumipulse(frame["lumi_ratio_4240"], frozen).rename(column), note
+            f"positive = ratio below the threshold. Frozen in `configs/frozen/{GMM_FILE}` (kept local, hash recorded in "
+            "the Phase 2 manifest) and applied unchanged to the test set.")
+    return builders.ad_like_lumipulse(frame["lumi_ratio_4240"], frozen).rename(column), note, _sha256(target)
 
 
 def registry_has_runs(path: Path) -> bool:
@@ -374,6 +413,7 @@ def run_phase2(data_root: Path, paths: Paths | None = None, refreeze: bool = Fal
     primary = [builders.label_column(name) for name in builders.PRIMARY_LABELS]
     indicators = split_mod.stratification_indicators(frame, "cohort", cohorts, primary)
     spec = cfg.get("split") or {}
+    initial_freeze = not (paths.splits / f"{split_mod.SPLIT_NAME}.json").is_file()
     split = split_mod.make_split(frame[KEY], indicators, seed, float(spec.get("test_fraction", 0.2)),
                                  int(spec.get("n_folds", 5)), int(spec.get("min_stratum", 10)))
     metadata = split_mod.split_metadata(split, seed, float(spec.get("test_fraction", 0.2)), int(spec.get("n_folds", 5)))
@@ -383,7 +423,7 @@ def run_phase2(data_root: Path, paths: Paths | None = None, refreeze: bool = Fal
     _log(f"Split frozen: {metadata['n_development']} development, {metadata['n_test']} test.")
 
     state.step = "Lumipulse threshold (development set only)"
-    lumipulse, lumipulse_note = _lumipulse(frame, dev, cfg, paths, refreeze)
+    lumipulse, lumipulse_note, gmm_sha = _lumipulse(frame, dev, cfg, paths, refreeze, initial_freeze)
     frame[lumipulse.name] = lumipulse.to_numpy()
 
     state.step = "leakage check"
@@ -420,11 +460,11 @@ def run_phase2(data_root: Path, paths: Paths | None = None, refreeze: bool = Fal
         "phase1_audit_manifest_sha256": _sha256(paths.audit_manifest) if Path(paths.audit_manifest).is_file() else "not found",
         "phase2_config_sha256": hashlib.sha256("".join(_sha256(p) for p in config_files).encode()).hexdigest(),
         "config_files": {p.name: _sha256(p) for p in config_files},
-        "source_tables": loader.used, "universe": observed,
+        GMM_HASH_KEY: gmm_sha, "source_tables": loader.used, "universe": observed,
         "outputs": {"analytic_sha256": hashes, "n_participants": int(len(frame)), "n_columns": int(len(frame.columns)),
                     "split": metadata},
     }
-    _write_text(json.dumps(manifest, indent=2, sort_keys=True, default=str) + "\n", r / "phase2_manifest.json", state)
+    _write_text(json.dumps(manifest, indent=2, sort_keys=True, default=str) + "\n", r / MANIFEST_FILE, state)
 
     state.step = "report privacy self-check"
     findings = scan_reports_for_ids(r, loader.seen_ids)
