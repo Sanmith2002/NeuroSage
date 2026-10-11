@@ -2,13 +2,15 @@
 
 All preprocessing lives inside the scikit-learn ``Pipeline`` returned by
 :func:`build`, so it is fitted on whatever training rows the pipeline is
-fitted on and on nothing else. No model uses missingness indicators.
+fitted on and on nothing else. No model uses missingness indicators. Every
+pipeline starts with ``drop`` (:class:`DropDegenerateColumns`), which removes the
+columns that have fewer than two distinct non-missing values in the training rows.
 
     lr_l2    standard L2 logistic regression on all features (lbfgs); median imputation + standardisation
     lr_enet  elastic-net logistic regression (saga); median imputation + standardisation
     rf       random forest; median imputation
-    xgb  XGBoost; native missing-value handling
-    hgb  histogram gradient boosting; native missing-value handling
+    xgb      XGBoost; native missing-value handling
+    hgb      histogram gradient boosting; native missing-value handling
 """
 
 from __future__ import annotations
@@ -19,6 +21,8 @@ from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+
+from .preprocessing import DropDegenerateColumns
 
 CANDIDATES = ("lr_l2", "lr_enet", "rf", "xgb", "hgb")
 SIMPLICITY = ("lr_l2", "lr_enet", "hgb", "rf", "xgb")  # simplest first; the last tie-breaker of the selection protocol
@@ -63,29 +67,30 @@ def build(model: str, params: dict, y_train: np.ndarray, seed: int, cfg: dict | 
     balanced = params.pop("class_weight", "none") == "balanced"
     weight = "balanced" if balanced else None
     n_jobs = int(cfg.get("n_jobs", -1))
+    drop = ("drop", DropDegenerateColumns())
     impute = ("impute", SimpleImputer(strategy="median", keep_empty_features=True))
     if model == "lr_l2":
         spec = cfg.get("lr_l2") or {}
         estimator = LogisticRegression(solver="lbfgs", C=params["C"], class_weight=weight,
                                        max_iter=int(spec.get("max_iter", 2000)), random_state=seed)
-        return Pipeline([impute, ("scale", StandardScaler()), ("model", estimator)])
+        return Pipeline([drop, impute, ("scale", StandardScaler()), ("model", estimator)])
     if model == "lr_enet":
         spec = cfg.get("lr_enet") or {}
         estimator = LogisticRegression(solver="saga", C=params["C"], l1_ratio=params["l1_ratio"], class_weight=weight,
                                        max_iter=int(spec.get("max_iter", 2000)), tol=float(spec.get("tol", 1e-3)),
                                        random_state=seed)
-        return Pipeline([impute, ("scale", StandardScaler()), ("model", estimator)])
+        return Pipeline([drop, impute, ("scale", StandardScaler()), ("model", estimator)])
     if model == "rf":
-        return Pipeline([impute, ("model", RandomForestClassifier(**params, class_weight=weight, n_jobs=n_jobs, random_state=seed))])
+        return Pipeline([drop, impute, ("model", RandomForestClassifier(**params, class_weight=weight, n_jobs=n_jobs, random_state=seed))])
     if model == "xgb":
         from xgboost import XGBClassifier
 
         y = np.asarray(y_train)
         ratio = float((y == 0).sum() / max((y == 1).sum(), 1)) if balanced else 1.0
-        return Pipeline([("model", XGBClassifier(**params, scale_pos_weight=ratio, tree_method="hist", n_jobs=n_jobs,
+        return Pipeline([drop, ("model", XGBClassifier(**params, scale_pos_weight=ratio, tree_method="hist", n_jobs=n_jobs,
                                                  random_state=seed, eval_metric="logloss", verbosity=0))])
     if model == "hgb":
         spec = cfg.get("hgb") or {}
-        return Pipeline([("model", HistGradientBoostingClassifier(**params, class_weight=weight, early_stopping=False,
+        return Pipeline([drop, ("model", HistGradientBoostingClassifier(**params, class_weight=weight, early_stopping=False,
                                                                   max_iter=int(spec.get("max_iter", 300)), random_state=seed))])
     raise ValueError(f"unknown model: {model}")

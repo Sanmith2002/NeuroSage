@@ -1,6 +1,7 @@
 """Phase 3 command line::
 
     python -m copath.phase3 cv [--label L ...] [--model M ...]
+    python -m copath.phase3 reset-cv --confirm   (removes ONLY the cv outputs; refused once a final run or lock exists)
     python -m copath.phase3 select --stage preliminary
     python -m copath.phase3 robustness
     python -m copath.phase3 select --stage final
@@ -19,7 +20,7 @@ from ..data.provenance import error_record
 from ..data.split import SplitError, TestSetAccessError
 from ..features.leakage_guard import LeakageError
 from ..targets.builders import CardError
-from . import commands, final
+from . import commands, final, reset
 from .core import ALL_MODELS, Phase3Error, PrivacyCheckError, load_context
 
 
@@ -29,6 +30,8 @@ def main(argv: list[str] | None = None) -> int:
     cv = sub.add_parser("cv", help="baselines and candidates, primary tier, nested CV (long)")
     cv.add_argument("--label", action="append", help="only this label (repeatable)")
     cv.add_argument("--model", action="append", choices=ALL_MODELS, help="only this model (repeatable)")
+    wipe = sub.add_parser("reset-cv", help="remove ONLY the cv outputs (registry rows, oof files, cv reports) to restart cv")
+    wipe.add_argument("--confirm", action="store_true", help="really remove them (without it nothing is removed)")
     select = sub.add_parser("select", help="model selection")
     select.add_argument("--stage", required=True, choices=["preliminary", "final"])
     sub.add_parser("robustness", help="strict tier, seeds and SHAP stability for the tie-set models")
@@ -43,9 +46,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "final":
             final.cmd_final(final_flag=args.final, force=args.force, reason=args.reason)
             return 0
+        if args.command == "reset-cv":
+            reset.cmd_reset_cv(confirm=args.confirm, log=lambda m: print(m, file=sys.stderr))
+            return 0
         ctx = load_context()
         if args.command == "cv":
-            commands.cmd_cv(ctx, args.label, args.model)
+            failed = commands.cmd_cv(ctx, args.label, args.model)
+            if failed:
+                print(f"Phase 3 cv finished with {len(failed)} FAILED run(s) (no metrics were written for them; see the log above): "
+                      + ", ".join(failed), file=sys.stderr)
+                return 4
         elif args.command == "select":
             (commands.cmd_select_preliminary if args.stage == "preliminary" else commands.cmd_select_final)(ctx)
         elif args.command == "robustness":

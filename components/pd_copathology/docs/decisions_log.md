@@ -232,6 +232,44 @@ Reason: Accepted by the student before the first real run.
 Impact: docs/selection_protocol.md is the reference; no code change.
 ```
 
+### Phase 3 bug fix: degenerate columns and failed trials (11 October 2026)
+
+```
+Date: 2026-10-11
+Decision: Every candidate pipeline starts with DropDegenerateColumns (models/preprocessing.py), fitted on the
+  training rows of whatever it is fitted on (inner tuning folds, calibration members, outer folds, robustness,
+  extras, explain, final). It removes the columns with fewer than 2 distinct non-missing values (all missing or
+  constant) and keeps exactly those columns at transform time. The dropped column names (names only) are recorded
+  per outer fold in the run details and summarised in reports/phase3/dropped_features.csv. SHAP values are mapped
+  back to the original feature names; a dropped column has SHAP value 0 for that fold. Not applied to the
+  baselines: b0a uses no features, b0b selects age and sex by name, and the missingness-only check looks at which
+  values exist, so a column that is constant among its non-missing values but sometimes missing must stay in it.
+Evidence: The first real `cv` run: HistGradientBoostingClassifier raised "window shape cannot be larger than
+  input array shape" in every trial of ad_like_v1 because a training fold had a column without two distinct values.
+Alternatives considered: Dropping columns once on the whole development set (rejected: not fold-safe); handling
+  only HGB (rejected: every model must see the same rule).
+Reason: The decision must be made on training rows only and be identical for all models.
+Impact: models/candidates.py, models/preprocessing.py, explain/shap_explainer.py, training/train.py,
+  phase3/commands.py. configs/phase3.yaml gets pipeline_version: 2, which changes the configuration hash, so runs
+  made with the earlier pipelines are never reused.
+```
+
+```
+Date: 2026-10-11
+Decision: Tuning counts failed Optuna trials per exception type and skips them; if every trial fails it raises
+  TuningError, the outer fold fails, and a run in which every fold failed is registered with status `failed` and
+  no metrics or out-of-fold file. The log names label, tier and model; `cv` continues with the next run, retries
+  failed runs when started again, and the command line exits with code 4 when any run failed.
+  `python -m copath.phase3 reset-cv --confirm` removes only the cv outputs (registry rows of stage cv, the cv run
+  details, data/processed/oof/, the cv report files and cv curve figures). It refuses when a final run or the lock
+  file exists, and when results derived from cv exist (robustness or extras runs, a selection, SHAP files).
+Evidence: Same real run; the failure was recorded per fold but not explained.
+Alternatives considered: Failing the whole command at the first failed run.
+Reason: One broken model must not hide the results of the others, and nothing may be written for a run that
+  produced no predictions.
+Impact: training/tuning.py, phase3/core.py, phase3/reset.py, phase3/__main__.py.
+```
+
 ### Phase 2 — implementation (11 October 2026)
 
 ```

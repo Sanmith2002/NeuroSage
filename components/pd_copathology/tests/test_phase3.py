@@ -16,8 +16,9 @@ from copath.evaluation import metrics, selection
 from copath.explain import shap_explainer
 from copath.features import leakage_guard
 from copath.models import baselines, candidates
+from copath.models.preprocessing import DropDegenerateColumns
 from copath.phase2 import registry_has_runs, run_phase2
-from copath.phase3 import commands, final
+from copath.phase3 import commands, final, reset
 from copath.phase3.__main__ import main
 from copath.phase3.core import Phase3Error, PrivacyCheckError, load_context, prepare, privacy_check, sha256, write_csv
 from copath.targets import builders
@@ -427,8 +428,8 @@ def test_every_model_family_trains_and_shap_space_is_verified_not_assumed():
         assert metrics.label_metrics(y[test_rows], out["p_cal"], np.full(test_rows.sum(), out["prevalence"]),
                                      out["p_cal"] >= out["threshold"])["auroc"] > 0.7
         steps = [name for name, _ in out["model"].steps]
-        assert steps == {"lr_l2": ["impute", "scale", "model"], "lr_enet": ["impute", "scale", "model"],
-                         "rf": ["impute", "model"]}.get(model, ["model"])
+        assert steps == {"lr_l2": ["drop", "impute", "scale", "model"], "lr_enet": ["drop", "impute", "scale", "model"],
+                         "rf": ["drop", "impute", "model"]}.get(model, ["drop", "model"])
         shap = shap_explainer.explain(model, out["model"], X[train_rows], X[test_rows])
         assert shap["values"].shape == (test_rows.sum(), X.shape[1]) and shap["additivity_error"] < 1e-2
         spaces[model] = shap["space"]
@@ -450,7 +451,7 @@ def test_every_model_family_trains_and_shap_space_is_verified_not_assumed():
 def test_lr_l2_is_a_plain_l2_logistic_regression_tuned_on_c_and_class_weight_only():
     X, y, folds = _toy(n=400)
     pipeline = candidates.build("lr_l2", {"C": 0.5, "class_weight": "balanced"}, y, 1, CFG)
-    assert [name for name, _ in pipeline.steps] == ["impute", "scale", "model"]  # the same fold-safe pipeline as lr_enet
+    assert [name for name, _ in pipeline.steps] == ["drop", "impute", "scale", "model"]  # the same fold-safe pipeline as lr_enet
     estimator = pipeline.named_steps["model"]
     assert estimator.C == 0.5 and estimator.class_weight == "balanced" and getattr(estimator, "l1_ratio", None) in (None, 0, 0.0)
     assert candidates.build("lr_l2", {"C": 1.0, "class_weight": "none"}, y, 1, CFG).named_steps["model"].class_weight is None
@@ -596,3 +597,183 @@ def test_reports_are_aggregate_and_checked_for_identifiers(pipe, phase2, tmp_pat
     with pytest.raises(PrivacyCheckError) as caught:
         privacy_check(ctx)
     assert str(ctx.frame["PATNO"].iloc[0]) not in str(caught.value) and not leaked.exists() and not kept.exists()
+
+
+# ------------------------------------------- degenerate columns, failed trials, reset-cv
+
+def _degenerate_toy(n=300):
+    """The toy data plus an all-missing column, a constant column and one that is constant outside outer fold 0 only."""
+    X, y, folds = _toy(n=n)
+    X["allnan"] = np.nan
+    X["const"] = 1.0
+    X["late"] = np.where(folds == 0, np.arange(n) % 3, 0.0)  # constant in the training rows of folds 1-4, varying in fold 0
+    return X, y, folds
+
+
+@pytest.mark.parametrize("model", ["lr_l2", "lr_enet", "rf", "xgb", "hgb"])
+def test_every_family_trains_with_all_nan_and_constant_columns_and_logs_the_dropped_ones(model):
+    X, y, folds = _degenerate_toy()
+    out = train.outer_cv(X, y, folds, X.index.to_numpy(), model, 2, CFG, keep_models=True)
+    assert not any(r["failed"] for r in out["folds"]) and len(out["oof"]) == len(X)
+    for r in out["folds"]:
+        assert {"allnan", "const"} <= set(r["dropped_features"]) and r["n_dropped"] == len(r["dropped_features"])
+        # "late" varies only in fold 0: it is constant in the training rows of outer fold 0 (dropped) and varies in the other folds' (kept)
+        assert ("late" in r["dropped_features"]) == (r["fold"] == 0)
+        assert all(isinstance(name, str) for name in r["dropped_features"])  # names only, no values
+    assert out["models"][0].named_steps["drop"].dropped_ == out["folds"][0]["dropped_features"]
+
+
+def test_the_transformer_is_fitted_on_training_rows_only_and_keeps_the_same_columns_afterwards():
+    X, _, folds = _degenerate_toy()
+    train_rows, valid_rows = X[folds == 1], X[folds == 0]  # "late" varies in the validation rows, not in the training rows
+    assert valid_rows["late"].nunique() > 1 and train_rows["late"].nunique() == 1
+    step = DropDegenerateColumns().fit(train_rows)
+    assert set(step.dropped_) == {"allnan", "const", "late"}
+    out = step.transform(valid_rows)  # still dropped although it varies here
+    assert list(out.columns) == step.kept_ == [c for c in X.columns if c not in step.dropped_]
+    reordered = step.transform(valid_rows[list(reversed(valid_rows.columns))])
+    assert list(reordered.columns) == step.kept_  # by name
+    again = DropDegenerateColumns().fit(valid_rows)
+    assert "late" in again.kept_ and set(again.dropped_) == {"allnan", "const", "a"}  # ("a" is all missing in fold 0 of the toy data) another training set, another decision
+    assert step.transform(valid_rows.to_numpy()).shape[1] == len(step.kept_)  # arrays work too
+
+
+def test_shap_values_are_mapped_back_to_the_original_features_with_zero_for_dropped_columns():
+    X, y, folds = _degenerate_toy(n=400)
+    train_rows, test_rows = folds == 1, folds == 0
+    for model in ("lr_l2", "rf", "xgb", "hgb"):
+        out = train.fit_predict(model, X[train_rows], y[train_rows], X[test_rows], 3, CFG)
+        assert {"allnan", "const", "late"} <= set(out["dropped"])
+        shap = shap_explainer.explain(model, out["model"], X[train_rows], X[test_rows])
+        assert shap["values"].shape == (test_rows.sum(), X.shape[1]) and shap["additivity_error"] < 1e-2
+        importance = shap_explainer.mean_abs(shap["values"], list(X.columns))
+        assert (importance[["allnan", "const", "late"]] == 0).all()
+        assert importance.drop(["allnan", "const", "late"]).idxmax() in ("a", "b")
+
+
+def test_a_failing_trial_is_counted_and_the_study_goes_on(monkeypatch):
+    X, y, _ = _toy()
+    real = candidates.build
+
+    def build(model, params, y_train, seed, cfg=None):
+        if params["class_weight"] == "balanced":
+            raise ValueError("synthetic failure")
+        return real(model, params, y_train, seed, cfg)
+
+    monkeypatch.setattr(candidates, "build", build)
+    out = tuning.tune("lr_l2", X, y, 1, {"tuning": {"inner_folds": 3, "trials": {"lr_l2": 12}}})
+    assert 0 < out["n_failed_trials"] < 12 and out["trial_failures"] == {"ValueError": out["n_failed_trials"]}
+    assert out["params"]["class_weight"] == "none"
+
+
+def test_when_every_trial_fails_the_run_is_registered_as_failed_and_writes_no_metrics(phase2, tmp_path, monkeypatch, capsys):
+    paths = _paths(tmp_path, phase2)
+    ctx = load_context(paths)
+    real = candidates.build
+
+    def build(model, params, y_train, seed, cfg=None):
+        if model == "hgb":
+            raise ValueError("window shape cannot be larger than input array shape")
+        return real(model, params, y_train, seed, cfg)
+
+    monkeypatch.setattr(candidates, "build", build)
+    label = builders.PRIMARY_LABELS[0]
+    failed = commands.cmd_cv(ctx, [label], ["hgb", "lr_l2"])  # the other model is still run
+    assert failed == [f"cv-{label}-primary-hgb-s{ctx.seed}"]
+    log = capsys.readouterr().err
+    assert f"ERROR {failed[0]} FAILED: label {label}, tier primary, model hgb" in log
+    assert "all 2 Optuna trials failed for model hgb" in log and "ValueError x2" in log
+    assert "window shape" not in log  # exception text is never logged, only its type
+    rows = {r["run_id"]: r for r in _rows(paths)}
+    bad, good = rows[failed[0]], rows[f"cv-{label}-primary-lr_l2-s{ctx.seed}"]
+    assert bad["status"] == "failed" and bad["n_failed_folds"] == "5" and all(bad[m] == "" for m in registry.METRICS)
+    assert good["status"] == "ok" and good["auroc"] != ""
+    details = registry.load_details(paths.runs, failed[0])
+    assert "summary" not in details and not (paths.oof / f"{failed[0]}.parquet").exists()
+    assert (paths.oof / f"{good['run_id']}.parquet").is_file()
+    monkeypatch.setattr(candidates, "build", real)  # a failed run is retried (not skipped) the next time
+    assert commands.cmd_cv(load_context(paths), [label], ["hgb"]) == []
+    assert {r["run_id"]: r["status"] for r in _rows(paths)}[failed[0]] == "ok"
+
+
+def test_the_command_line_exits_with_4_when_a_cv_run_failed(phase2, tmp_path, monkeypatch):
+    from copath.phase3 import __main__ as cli
+
+    paths = _paths(tmp_path, phase2)
+    monkeypatch.setattr(cli, "load_context", lambda: load_context(paths))
+    monkeypatch.setattr(cli.commands, "cmd_cv", lambda ctx, labels, models: ["cv-x"])
+    assert main(["cv"]) == 4
+
+
+def test_dropped_features_are_reported_by_name_only(pipe):
+    table = _report(pipe, "dropped_features.csv")
+    assert list(table.columns) == ["label", "tier", "model", "fold", "n_dropped", "features"]
+    assert set(table["label"]) == set(builders.PRIMARY_LABELS) and set(table["model"]) == {"lr_l2", "lr_enet", "hgb"}
+    assert len(table) == 3 * 3 * 5
+    for _, row in table.iterrows():
+        listed = [f for f in row["features"].split("; ") if f]
+        assert len(listed) == int(row["n_dropped"]) and all(not f.replace(".", "").replace("-", "").isdigit() for f in listed)
+    details = registry.load_details(pipe.runs, f"cv-{builders.PRIMARY_LABELS[0]}-primary-lr_l2-s{load_context(pipe).seed}")
+    assert all("dropped_features" in r and "n_failed_trials" in r for r in details["folds"])
+    assert set(details["library_versions"]) >= {"scikit-learn", "numpy"}
+
+
+def _cv_only(phase2, work):
+    paths = _paths(work, phase2)
+    commands.cmd_cv(load_context(paths), [builders.PRIMARY_LABELS[0]], ["b0a", "lr_l2"])
+    return paths
+
+
+def _snapshot(*folders):
+    return {str(p): sha256(p) for folder in folders for p in sorted(folder.rglob("*")) if p.is_file()}
+
+
+def test_reset_cv_removes_only_cv_outputs_and_leaves_phase2_and_the_split_alone(phase2, tmp_path):
+    paths = _cv_only(phase2, tmp_path)
+    assert (paths.reports / "dropped_features.csv").is_file() and any(paths.oof.iterdir()) and any(paths.runs.glob("cv-*.json"))
+    untouched = _snapshot(paths.splits, paths.processed, phase2.reports)
+    untouched = {k: v for k, v in untouched.items() if "oof" not in k}  # the oof folder is what gets removed
+    with pytest.raises(Phase3Error, match="--confirm"):
+        reset.cmd_reset_cv(paths, confirm=False, log=lambda m: None)
+    assert registry.read(paths.registry) and any(paths.oof.iterdir())  # nothing is removed without --confirm
+    found = reset.cmd_reset_cv(paths, confirm=True, log=lambda m: None)
+    assert found["registry_rows"] == 2 and found["files"]
+    assert registry.read(paths.registry) == [] and paths.registry.read_text(encoding="utf-8").strip().split(",") == registry.COLUMNS
+    assert not list(paths.runs.glob("cv-*.json")) and not any(paths.oof.iterdir())
+    for name in ("baseline_results.csv", "candidate_results.csv", "leakage_checks.csv", "dropped_features.csv"):
+        assert not (paths.reports / name).exists()
+    assert not list((paths.reports / "figures").glob("cv_curves_*.png"))
+    now = {k: v for k, v in _snapshot(paths.splits, paths.processed, phase2.reports).items() if "oof" not in k}
+    assert now == untouched  # Phase 2 outputs, the split and the Lumipulse threshold are byte-for-byte the same
+    commands.cmd_cv(load_context(paths), [builders.PRIMARY_LABELS[0]], ["b0a"])  # and cv can be started again
+    assert [r["status"] for r in registry.read(paths.registry)] == ["ok"]
+
+
+def test_reset_cv_keeps_other_rows_but_refuses_when_derived_or_final_results_exist(phase2, tmp_path):
+    paths = _cv_only(phase2, tmp_path)
+    cv_rows = registry.read(paths.registry)
+    registry.append(paths.registry, {"run_id": "robustness-x", "stage": "robustness", "label": "x", "status": "ok"})
+    with pytest.raises(Phase3Error, match="derived from the cv runs"):
+        reset.cmd_reset_cv(paths, confirm=True, log=lambda m: None)
+    assert len(registry.read(paths.registry)) == len(cv_rows) + 1 and any(paths.oof.iterdir())  # nothing changed
+    paths.registry.write_text(",".join(registry.COLUMNS) + "\n", encoding="utf-8")  # back to the cv rows only
+    for row in cv_rows:
+        registry.append(paths.registry, row)
+    paths.frozen.mkdir(parents=True, exist_ok=True)
+    paths.lock.write_text("{}", encoding="utf-8")
+    with pytest.raises(Phase3Error, match="refused: the final evaluation has run"):
+        reset.cmd_reset_cv(paths, confirm=True, log=lambda m: None)
+    assert registry.read(paths.registry) == cv_rows and any(paths.oof.iterdir())
+    paths.lock.unlink()
+    registry.append(paths.registry, {"run_id": "final-x", "stage": "final", "label": "x", "status": "ok"})
+    with pytest.raises(Phase3Error, match="refused: the final evaluation has run"):
+        reset.cmd_reset_cv(paths, confirm=True, log=lambda m: None)
+    assert len(registry.read(paths.registry)) == len(cv_rows) + 1 and any(paths.oof.iterdir())
+
+
+def test_reset_cv_command_line_and_the_pipeline_version_in_the_configuration(phase2, tmp_path, monkeypatch):
+    paths = _cv_only(phase2, tmp_path)
+    monkeypatch.setattr(reset, "Paths", lambda: paths)
+    assert main(["reset-cv"]) == 1 and registry.read(paths.registry)  # no --confirm: nothing removed
+    assert main(["reset-cv", "--confirm"]) == 0 and registry.read(paths.registry) == []
+    assert yaml.safe_load(load_cfg().read_text(encoding="utf-8"))["pipeline_version"] == 2  # old-pipeline runs are never reused

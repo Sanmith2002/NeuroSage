@@ -25,6 +25,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_predict
 
 from ..evaluation.metrics import best_f1_threshold
 from ..models import baselines, candidates
+from ..models.preprocessing import dropped_columns
 from . import tuning
 
 KEY = "PATNO"
@@ -69,7 +70,8 @@ def fit_predict(model: str, X_train: pd.DataFrame, y_train: np.ndarray, X_test: 
             inner_oof[held] = member.predict_proba(X_train.iloc[held])[:, 1]
     return {"p_uncal": p_uncal, "p_cal": p_cal, "threshold": best_f1_threshold(y_train, inner_oof), "params": params,
             "inner_log_loss": tuned.get("inner_log_loss"), "model": fitted, "calibrated": final,
-            "prevalence": float(y_train.mean())}
+            "prevalence": float(y_train.mean()), "dropped": dropped_columns(fitted),
+            "n_failed_trials": tuned.get("n_failed_trials", 0), "trial_failures": tuned.get("trial_failures", {})}
 
 
 def _one_fold(k: int, X: pd.DataFrame, y: np.ndarray, folds: np.ndarray, ids: np.ndarray, model: str, seed: int,
@@ -85,9 +87,12 @@ def _one_fold(k: int, X: pd.DataFrame, y: np.ndarray, folds: np.ndarray, ids: np
         out = fit_predict(model, X[train], y[train], X[test], seed, cfg, params=given, calibration=calibration)
     except Exception as exc:  # noqa: BLE001 - never log a message that could quote data
         record.update(failed=True, error=type(exc).__name__)
+        if isinstance(exc, (tuning.TuningError, FoldError)):
+            record["error_detail"] = str(exc)  # written by this package: model name, counts and exception types only
         return record, None, None
     record.update(params=out["params"], threshold=out["threshold"], inner_log_loss=out["inner_log_loss"],
-                  seconds=round(time.time() - started, 1))
+                  seconds=round(time.time() - started, 1), n_dropped=len(out["dropped"]), dropped_features=out["dropped"],
+                  n_failed_trials=out["n_failed_trials"], trial_failures=out["trial_failures"])
     part = pd.DataFrame({KEY: ids[test], "fold": int(k), "y": y[test], "p_prev": out["prevalence"],
                          "p_uncal": out["p_uncal"], "p_cal": out["p_cal"], "threshold": out["threshold"],
                          "pred": (out["p_cal"] >= out["threshold"]).astype(int)})

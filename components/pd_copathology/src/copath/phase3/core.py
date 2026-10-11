@@ -14,9 +14,11 @@ Data access rules enforced here:
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import sys
 import time
 import warnings
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -108,6 +110,11 @@ def sha256(path: Path) -> str:
         while block := fh.read(1024 * 1024):
             sha.update(block)
     return sha.hexdigest()
+
+
+def library_versions() -> dict[str, str]:
+    """Installed versions of the libraries that decide how a model is fitted (recorded with every run)."""
+    return {name: importlib.metadata.version(name) for name in ("scikit-learn", "numpy", "xgboost", "optuna", "shap")}
 
 
 def now() -> str:
@@ -214,7 +221,7 @@ def run(ctx: Context, stage: str, label: str, tier: str, model: str, seed: int, 
     data = prepare(ctx, label, tier, features=features, restrict=restrict)
     details = {"run_id": rid, "stage": stage, "label": label, "tier": tier, "model": model, "seed": seed, "variant": variant,
                "n_eligible": int(len(data["y"])), "n_features": len(data["features"]), "features": data["features"],
-               "nonnumeric_tier_features_not_used": data["nonnumeric"], **ctx.hashes}
+               "nonnumeric_tier_features_not_used": data["nonnumeric"], "library_versions": library_versions(), **ctx.hashes}
     y = data["y"]
     minimum = int(ctx.cfg.get("min_eligible", 50))
     if len(y) < minimum or min((y == 0).sum(), (y == 1).sum()) < 10 or not data["features"]:
@@ -225,7 +232,14 @@ def run(ctx: Context, stage: str, label: str, tier: str, model: str, seed: int, 
         out = train.outer_cv(data["X"], y, data["folds"], data["ids"], model, seed, ctx.cfg, fold_params=params,
                              calibration=calibration, keep_models=shap_rows > 0, log=lambda m: ctx.log(f"  {rid}: {m}"))
         failed = sum(r["failed"] for r in out["folds"])
-        details.update(folds=out["folds"], n_failed_folds=failed, status="ok" if len(out["oof"]) else "failed")
+        details.update(folds=out["folds"], n_failed_folds=failed, status="ok" if len(out["oof"]) else "failed",
+                       n_failed_trials=int(sum(r.get("n_failed_trials", 0) for r in out["folds"])))
+        if not len(out["oof"]):  # nothing to score: no metrics, no out-of-fold file; the run is registered as failed
+            reasons = Counter(r.get("error_detail") or r.get("error", "unknown") for r in out["folds"] if r["failed"])
+            details["failure_reasons"] = dict(reasons)
+            ctx.log(f"ERROR {rid} FAILED: label {label}, tier {tier}, model {model}: every outer fold failed "
+                    f"({'; '.join(f'{k} [{v} folds]' for k, v in reasons.items())}). No metrics are written; the run continues "
+                    "with the next one and is retried when the command is run again.")
         if len(out["oof"]):
             ctx.paths.oof.mkdir(parents=True, exist_ok=True)
             out["oof"].to_parquet(ctx.paths.oof / f"{rid}.parquet", index=False)

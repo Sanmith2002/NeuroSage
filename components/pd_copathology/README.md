@@ -160,6 +160,7 @@ python -m copath.phase3 extras                      # 5. ablation, sensitivity l
 python -m copath.phase3 explain                     # 6. SHAP reports for the selected models
 # ---- human review of reports/phase3 ----
 python -m copath.phase3 final --final               # 7. single test-set evaluation (locked, see below)
+python -m copath.phase3 reset-cv --confirm          # restart cv from scratch (removes ONLY the cv outputs; see below)
 ```
 
 - Protocol: `docs/selection_protocol.md` (written before any real run); expected
@@ -170,6 +171,12 @@ python -m copath.phase3 final --final               # 7. single test-set evaluat
 - Runs are recorded in `experiments/registry.csv` (one row per run) with details
   in `experiments/phase3/`. A restarted command skips finished runs. `cv` accepts
   `--label` and `--model`.
+- Every model pipeline starts with a fold-safe step that drops columns with fewer than two distinct non-missing
+  values in the training rows; the dropped names are in `reports/phase3/dropped_features.csv`. A run in which every
+  outer fold fails is registered as `failed` without metrics, and `cv` exits with code 4 after finishing the others.
+- `reset-cv --confirm` removes the cv registry rows, the cv run details, `data/processed/oof/` and the cv report files;
+  it leaves Phase 2 outputs, the split and the Lumipulse threshold alone and refuses once a final run or lock file
+  exists or when robustness, extras, selection or SHAP results derived from the cv runs exist.
 - Participant-level outputs (git-ignored): `data/processed/oof/` (out-of-fold
   predictions), `data/processed/shap/`, `data/processed/final/`, `models/final/`.
 - Aggregate reports and figures: `reports/phase3/`, scanned for identifiers

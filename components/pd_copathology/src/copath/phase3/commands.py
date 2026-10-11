@@ -48,18 +48,28 @@ def _slug(text: str) -> str:
 # 1. cv
 # --------------------------------------------------------------------------
 
-def cmd_cv(ctx: Context, labels: list[str] | None = None, models: list[str] | None = None) -> None:
-    """Baselines, the missingness-only check and every candidate on the primary tier, nested CV."""
+def cmd_cv(ctx: Context, labels: list[str] | None = None, models: list[str] | None = None) -> list[str]:
+    """Baselines, the missingness-only check and every candidate on the primary tier, nested CV.
+
+    Returns the ids of the runs that failed (every outer fold failed); they are registered as failed and
+    retried the next time the command is run.
+    """
     wanted_models = [m for m in (*ctx.cfg["baselines"], baselines.LEAKAGE_CHECK, *ctx.cfg["candidates"])
                      if not models or m in models]
     wanted_labels = [name for name in _labels(ctx) if not labels or name in labels]
     todo = [(name, m) for name in wanted_labels for m in wanted_models if find_run(ctx, _cv_id(ctx, name, m)) is None]
     announce(ctx, "cv", estimate(ctx, [(name, m, True) for name, m in todo]))
+    failed: list[str] = []
     for i, (label, model) in enumerate(todo, start=1):
         ctx.log(f"cv run {i}/{len(todo)}: {label} / {model}")
-        run(ctx, "cv", label, _tier(ctx), model, ctx.seed)
+        details = run(ctx, "cv", label, _tier(ctx), model, ctx.seed)
+        if details.get("status") == "failed":
+            failed.append(details["run_id"])
     cv_reports(ctx)
     privacy_check(ctx)
+    if failed:
+        ctx.log(f"ERROR {len(failed)} cv run(s) FAILED (no metrics written for them): " + ", ".join(failed))
+    return failed
 
 
 def cv_reports(ctx: Context) -> None:
@@ -103,6 +113,9 @@ def cv_reports(ctx: Context) -> None:
                           **{m: _round(np.mean([p[m] for p in pooled])) for m in ("auroc", "auprc", "bss", "f1")},
                           "n_all_eligible": S(multi["n_all_eligible"]),
                           **{k: _round(v) for k, v in multi.items() if k not in ("n_all_eligible", "folds")}})
+    dropped = dropped_feature_rows(ctx)
+    if dropped:
+        write_csv(ctx, dropped, "dropped_features.csv")
     if base_rows:
         write_csv(ctx, base_rows, "baseline_results.csv")
     if cand_rows:
@@ -111,6 +124,20 @@ def cv_reports(ctx: Context) -> None:
         write_csv(ctx, leak_rows, "leakage_checks.csv")
     for label, by_model in curves.items():
         figures.curves(by_model, label, ctx.paths.reports / "figures")
+
+
+def dropped_feature_rows(ctx: Context) -> list[dict]:
+    """Columns the fold-safe preprocessing removed from the training rows (< 2 distinct non-missing values): names only."""
+    rows = []
+    for label in _labels(ctx):
+        for model in ctx.cfg["candidates"]:
+            details = _cv(ctx, label, model, required=False)
+            for record in (details or {}).get("folds", []):
+                if record.get("failed") or "n_dropped" not in record:
+                    continue
+                rows.append({"label": label, "tier": details["tier"], "model": model, "fold": record["fold"],
+                             "n_dropped": record["n_dropped"], "features": "; ".join(record["dropped_features"])})
+    return rows
 
 
 # --------------------------------------------------------------------------

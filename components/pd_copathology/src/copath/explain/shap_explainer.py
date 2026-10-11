@@ -25,7 +25,9 @@ def explain(model: str, pipeline, X_background: pd.DataFrame, X: pd.DataFrame) -
     """SHAP values (rows x features) of a fitted candidate pipeline for the rows of ``X``.
 
     Returns ``values``, ``explainer``, ``space`` (verified against the model's
-    own output) and ``additivity_error``.
+    own output) and ``additivity_error``. ``values`` has one column per column
+    of ``X`` (the original feature names): a column the pipeline dropped as
+    degenerate in the training rows has SHAP value 0 (zero importance).
     """
     import shap
 
@@ -44,6 +46,7 @@ def explain(model: str, pipeline, X_background: pd.DataFrame, X: pd.DataFrame) -
     values, base = np.asarray(values), np.atleast_1d(np.asarray(base, dtype=float))
     if values.ndim == 3:  # (rows, features, classes): keep the positive class
         values = values[:, :, -1]
+    kept = pipeline.named_steps["drop"].keep_ if "drop" in pipeline.named_steps else None
     total = values.sum(axis=1) + base[-1]
     probability = estimator.predict_proba(data)[:, 1]
     if hasattr(estimator, "decision_function"):
@@ -57,6 +60,10 @@ def explain(model: str, pipeline, X_background: pd.DataFrame, X: pd.DataFrame) -
     space, error = min(errors.items(), key=lambda kv: kv[1])
     if error > 1e-2:
         space = "not verified (SHAP values do not add up to the margin or to the probability)"
+    if kept is not None and not kept.all():  # map back to the original feature names; dropped columns contribute nothing
+        full = np.zeros((values.shape[0], len(kept)))
+        full[:, kept] = values
+        values = full
     return {"values": values, "explainer": EXPLAINERS[model], "space": space, "additivity_error": error}
 
 
