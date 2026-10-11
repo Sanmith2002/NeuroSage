@@ -1,0 +1,5 @@
+# pd_copathology: strip notebook outputs before they reach Git, so
+# participant-level PPMI rows shown in a notebook are never committed.
+# Each clone must enable the filter once: pip install nbstripout && nbstripout --install
+components/pd_copathology/**/*.ipynb filter=nbstripout
+components/pd_copathology/**/*.ipynb diff=ipynb
