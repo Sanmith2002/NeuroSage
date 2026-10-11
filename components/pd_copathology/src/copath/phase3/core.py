@@ -210,7 +210,7 @@ def fold_params(details: dict) -> dict[int, dict]:
 
 def run(ctx: Context, stage: str, label: str, tier: str, model: str, seed: int, variant: str = "",
         params: dict | None = None, calibration: str | None = None, shap_rows: int = 0, features: list[str] | None = None,
-        restrict: pd.Series | None = None) -> dict:
+        restrict: pd.Series | None = None, select=None) -> dict:
     """One outer-CV run, registered. Skipped (and its stored details returned) when it already exists."""
     rid = registry.run_id(stage, label, tier, model, seed, variant)
     done = find_run(ctx, rid)
@@ -222,6 +222,8 @@ def run(ctx: Context, stage: str, label: str, tier: str, model: str, seed: int, 
     details = {"run_id": rid, "stage": stage, "label": label, "tier": tier, "model": model, "seed": seed, "variant": variant,
                "n_eligible": int(len(data["y"])), "n_features": len(data["features"]), "features": data["features"],
                "nonnumeric_tier_features_not_used": data["nonnumeric"], "library_versions": library_versions(), **ctx.hashes}
+    if select is not None:
+        details["column_rule"] = str(select)
     y = data["y"]
     minimum = int(ctx.cfg.get("min_eligible", 50))
     if len(y) < minimum or min((y == 0).sum(), (y == 1).sum()) < 10 or not data["features"]:
@@ -230,7 +232,8 @@ def run(ctx: Context, stage: str, label: str, tier: str, model: str, seed: int, 
     else:
         ctx.log(f"{rid}: {S(len(y))} eligible, {len(data['features'])} features")
         out = train.outer_cv(data["X"], y, data["folds"], data["ids"], model, seed, ctx.cfg, fold_params=params,
-                             calibration=calibration, keep_models=shap_rows > 0, log=lambda m: ctx.log(f"  {rid}: {m}"))
+                             calibration=calibration, keep_models=shap_rows > 0, log=lambda m: ctx.log(f"  {rid}: {m}"),
+                             select=select)
         failed = sum(r["failed"] for r in out["folds"])
         details.update(folds=out["folds"], n_failed_folds=failed, status="ok" if len(out["oof"]) else "failed",
                        n_failed_trials=int(sum(r.get("n_failed_trials", 0) for r in out["folds"])))

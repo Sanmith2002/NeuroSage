@@ -270,6 +270,23 @@ Reason: One broken model must not hide the results of the others, and nothing ma
 Impact: training/tuning.py, phase3/core.py, phase3/reset.py, phase3/__main__.py.
 ```
 
+### Phase 3 addition: PD-type missingness audit (11 October 2026)
+
+```
+Date: 2026-10-11
+Decision: `python -m copath.phase3 missingness-audit` (pd_type_v1 only) writes reports/phase3/pd_missingness_audit.csv
+  (% of PD and of HC development participants with each primary-tier feature available, absolute difference in
+  percentage points, largest first) and runs one extra nested-CV run on the strict tier with the selected PD-type
+  model family and its per-fold hyperparameters, restricted in each outer fold to the features whose availability
+  differs by less than 10 points between PD and HC in that fold's training rows (pd_low_missingness_run.csv, with the
+  primary-tier cv and the strict-tier robustness run as references). The run is an `extras` run in the registry.
+Evidence: PD versus HC is separated almost perfectly; which measurements exist may carry part of that signal.
+Alternatives considered: Choosing the features once on the whole development set (rejected: not fold-safe).
+Reason: Shows how much of the PD-type result survives when only features that are about equally available in both
+  groups are used. Exploratory; it does not change the selection.
+Impact: phase3/missingness.py, training/train.py (optional per-fold column rule), phase3/core.run (optional `select`).
+```
+
 ### Phase 2 — implementation (11 October 2026)
 
 ```

@@ -75,7 +75,8 @@ def fit_predict(model: str, X_train: pd.DataFrame, y_train: np.ndarray, X_test: 
 
 
 def _one_fold(k: int, X: pd.DataFrame, y: np.ndarray, folds: np.ndarray, ids: np.ndarray, model: str, seed: int,
-              cfg: dict, given: dict | None, calibration: str | None, keep_model: bool) -> tuple[dict, pd.DataFrame | None, object]:
+              cfg: dict, given: dict | None, calibration: str | None, keep_model: bool,
+              select=None) -> tuple[dict, pd.DataFrame | None, object]:
     """One outer fold: train on the other folds, predict this one. Never raises; a failure is recorded."""
     import warnings
 
@@ -84,6 +85,12 @@ def _one_fold(k: int, X: pd.DataFrame, y: np.ndarray, folds: np.ndarray, ids: np
     test, train = folds == k, folds != k
     record = {"fold": int(k), "n_train": int(train.sum()), "n_test": int(test.sum()), "failed": False}
     try:
+        if select is not None:  # a column rule decided on this fold's training rows only
+            kept = list(select(X[train], y[train]))
+            record.update(n_selected=len(kept), excluded_features=[c for c in X.columns if c not in set(kept)])
+            if not kept:
+                raise FoldError("the column rule left no feature")
+            X = X[kept]
         out = fit_predict(model, X[train], y[train], X[test], seed, cfg, params=given, calibration=calibration)
     except Exception as exc:  # noqa: BLE001 - never log a message that could quote data
         record.update(failed=True, error=type(exc).__name__)
@@ -107,12 +114,13 @@ def outer_jobs(cfg: dict, model: str, n_folds: int) -> int:
 
 def outer_cv(X: pd.DataFrame, y: np.ndarray, folds: np.ndarray, ids: np.ndarray, model: str, seed: int, cfg: dict,
              fold_params: dict | None = None, calibration: str | None = None, keep_models: bool = False,
-             log=None) -> dict:
+             log=None, select=None) -> dict:
     """Run every outer fold. Returns the out-of-fold table, one record per fold and (optionally) the fold models.
 
     ``fold_params`` maps a fold to the hyperparameters to reuse; without it
     each fold is tuned. A fold that fails is recorded (exception type only)
-    and left out of the out-of-fold table. With ``outer_jobs`` > 1 the folds
+    and left out of the out-of-fold table. ``select`` (optional) is a picklable callable ``(X_train, y_train) -> columns``
+    that picks each fold's columns from its training rows. With ``outer_jobs`` > 1 the folds
     run in separate processes, each with its share of the cores.
     """
     y, folds, ids = np.asarray(y, dtype=int), np.asarray(folds, dtype=int), np.asarray(ids)
@@ -120,6 +128,8 @@ def outer_cv(X: pd.DataFrame, y: np.ndarray, folds: np.ndarray, ids: np.ndarray,
     jobs = outer_jobs(cfg, model, len(order))
     args = [(k, X, y, folds, ids, model, seed, cfg, None if fold_params is None else fold_params[k], calibration, keep_models)
             for k in order]
+    if select is not None:
+        args = [a + (select,) for a in args]
     if jobs == 1:
         results = []
         for a in args:

@@ -18,9 +18,9 @@ from copath.features import leakage_guard
 from copath.models import baselines, candidates
 from copath.models.preprocessing import DropDegenerateColumns
 from copath.phase2 import registry_has_runs, run_phase2
-from copath.phase3 import commands, final, reset
+from copath.phase3 import commands, final, missingness, reset
 from copath.phase3.__main__ import main
-from copath.phase3.core import Phase3Error, PrivacyCheckError, load_context, prepare, privacy_check, sha256, write_csv
+from copath.phase3.core import Paths, Phase3Error, PrivacyCheckError, load_context, prepare, privacy_check, sha256, write_csv
 from copath.targets import builders
 from copath.training import registry, train, tuning
 
@@ -777,3 +777,88 @@ def test_reset_cv_command_line_and_the_pipeline_version_in_the_configuration(pha
     assert main(["reset-cv"]) == 1 and registry.read(paths.registry)  # no --confirm: nothing removed
     assert main(["reset-cv", "--confirm"]) == 0 and registry.read(paths.registry) == []
     assert yaml.safe_load(load_cfg().read_text(encoding="utf-8"))["pipeline_version"] == 2  # old-pipeline runs are never reused
+
+
+# ------------------------------------------------------- pd_type_v1 missingness audit
+
+def _copy_of(pipe, work):
+    """A private copy of the finished synthetic pipeline outputs, so that a test never changes the shared fixture."""
+    shutil.copytree(pipe.config.parent, work)
+    return Paths(config=work / "phase3.yaml", frozen=work / "frozen", processed=work / "processed", splits=pipe.splits,
+                 reports=work / "reports" / "phase3", phase2_reports=pipe.phase2_reports,
+                 registry=work / "experiments" / "registry.csv", runs=work / "experiments" / "phase3", models=work / "models" / "final")
+
+
+def _gap_toy(n=400, seed=3):
+    rng = np.random.default_rng(seed)
+    X = pd.DataFrame(rng.normal(size=(n, 5)), columns=["a", "b", "equal", "pd_only", "fold0_pd_missing"],
+                     index=[f"row{i}" for i in range(n)])
+    y = (X["a"] + 0.8 * X["b"] + rng.normal(scale=0.3, size=n) > 0).astype(int).to_numpy()
+    folds = np.arange(n) % 5
+    X.loc[(y == 1) & (rng.random(n) < 0.04), "equal"] = np.nan
+    X.loc[(y == 0) & (rng.random(n) < 0.04), "equal"] = np.nan
+    X.loc[(y == 1) & (rng.random(n) < 0.35), "pd_only"] = np.nan  # a large availability gap in every fold
+    X.loc[(y == 1) & (folds == 0), "fold0_pd_missing"] = np.nan  # a gap in the training rows of folds 1-4 only
+    return X, y, folds
+
+
+def test_the_availability_rule_is_decided_on_each_folds_training_rows_only_and_the_models_see_only_those_columns():
+    X, y, folds = _gap_toy()
+    rule = missingness.AvailabilityGap(10.0)
+    out = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr_l2", 1, CFG, keep_models=True, select=rule)
+    assert not any(r["failed"] for r in out["folds"]) and len(out["oof"]) == len(X)
+    for r in out["folds"]:
+        k = r["fold"]
+        kept = rule(X[folds != k], y[folds != k])
+        assert r["n_selected"] == len(kept) and set(r["excluded_features"]) == set(X.columns) - set(kept)
+        assert out["models"][k].named_steps["drop"].columns_in_ == kept  # the pipeline was fitted on exactly these columns
+        assert {"a", "b", "equal"} <= set(kept) and "pd_only" in r["excluded_features"]
+        assert ("fold0_pd_missing" in kept) == (k == 0)  # no gap in fold 0's training rows, a ~25 point gap in the others
+    parallel = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr_l2", 1, {**CFG, "outer_jobs": 2}, select=rule)  # picklable
+    assert [r.get("n_selected") for r in parallel["folds"]] == [r["n_selected"] for r in out["folds"]]
+    none_left = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr_l2", 1, CFG, select=missingness.AvailabilityGap(-1.0))
+    assert all(r["failed"] and r["error"] == "FoldError" for r in none_left["folds"])
+
+
+def test_missingness_audit_writes_sorted_aggregate_percentages_and_the_low_gap_run(pipe, tmp_path):
+    paths = _copy_of(pipe, tmp_path / "copy")
+    ctx = load_context(paths)
+    missingness.cmd_missingness_audit(ctx)
+    audit = pd.read_csv(paths.reports / "pd_missingness_audit.csv")
+    assert list(audit.columns) == ["feature", "modality", "pct_available_pd", "pct_available_hc", "abs_diff_pp", "in_strict_tier",
+                                   "gap_below_threshold"]
+    assert audit["abs_diff_pp"].is_monotonic_decreasing and audit["feature"].is_unique and "PATNO" not in set(audit["feature"])
+    assert audit[["pct_available_pd", "pct_available_hc"]].apply(lambda c: c.between(0, 100)).all().all()
+    label = builders.label_column("pd_type_v1")
+    dev = ctx.frame[ctx.frame[label].notna()]
+    for _, row in audit.head(5).iterrows():  # independent check against the development frame
+        pd_pct = 100 * dev.loc[dev[label] == 1, row["feature"]].notna().mean()
+        hc_pct = 100 * dev.loc[dev[label] == 0, row["feature"]].notna().mean()
+        assert row["pct_available_pd"] == pytest.approx(pd_pct, abs=0.01) and row["pct_available_hc"] == pytest.approx(hc_pct, abs=0.01)
+        assert row["abs_diff_pp"] == pytest.approx(abs(pd_pct - hc_pct), abs=0.02)
+    assert (audit["gap_below_threshold"] == (audit["abs_diff_pp"] < 10)).all()
+    model = commands.load_selected(ctx)["pd_type_v1"]["model"]
+    details = registry.load_details(paths.runs, f"extras-pd_type_v1-strict-{model}-s{ctx.seed}-{missingness.VARIANT}")
+    assert details["tier"] == "strict" and "10 percentage points" in details["column_rule"]
+    strict = set(yaml.safe_load((leakage_guard.FEATURE_SETS_DIR / "pd_type_v1_strict.yaml").read_text(encoding="utf-8"))["features"])
+    data = prepare(ctx, "pd_type_v1", "strict", features=details["features"])
+    assert set(details["features"]) <= strict
+    for record in details["folds"]:  # recompute each fold's rule from its own training rows
+        train_rows = data["folds"] != record["fold"]
+        expected = missingness.AvailabilityGap()(data["X"][train_rows], data["y"][train_rows])
+        assert record["n_selected"] == len(expected) and set(record["excluded_features"]) == set(details["features"]) - set(expected)
+    result = _report(paths, "pd_low_missingness_run.csv")
+    assert result["analysis"].str.contains("this run").any() and result["analysis"].str.contains("reference").any()
+    assert set(result.loc[result["analysis"].str.contains("this run"), "scope"]) >= {"pooled", "mean", "sd", "fold 0", "fold 4"}
+    assert not result.astype(str).apply(lambda c: c.str.contains(r"^\d{5,}$")).any().any()  # no identifiers
+    rows = len(_rows(paths))
+    missingness.cmd_missingness_audit(load_context(paths))  # a restart reuses the registered run
+    assert len(_rows(paths)) == rows
+
+
+def test_missingness_audit_without_a_frozen_selection_writes_the_audit_and_explains_why_the_run_is_missing(pipe, tmp_path):
+    paths = _copy_of(pipe, tmp_path / "copy")
+    paths.selected.unlink()
+    with pytest.raises(Phase3Error, match="select --stage final"):
+        missingness.cmd_missingness_audit(load_context(paths))
+    assert (paths.reports / "pd_missingness_audit.csv").is_file() and not (paths.reports / "pd_low_missingness_run.csv").exists()

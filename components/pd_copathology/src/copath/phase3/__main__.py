@@ -1,6 +1,7 @@
 """Phase 3 command line::
 
     python -m copath.phase3 cv [--label L ...] [--model M ...]
+    python -m copath.phase3 missingness-audit   (pd_type_v1 only; needs `select --stage final` for the extra run)
     python -m copath.phase3 reset-cv --confirm   (removes ONLY the cv outputs; refused once a final run or lock exists)
     python -m copath.phase3 select --stage preliminary
     python -m copath.phase3 robustness
@@ -20,7 +21,7 @@ from ..data.provenance import error_record
 from ..data.split import SplitError, TestSetAccessError
 from ..features.leakage_guard import LeakageError
 from ..targets.builders import CardError
-from . import commands, final, reset
+from . import commands, final, missingness, reset
 from .core import ALL_MODELS, Phase3Error, PrivacyCheckError, load_context
 
 
@@ -32,6 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     cv.add_argument("--model", action="append", choices=ALL_MODELS, help="only this model (repeatable)")
     wipe = sub.add_parser("reset-cv", help="remove ONLY the cv outputs (registry rows, oof files, cv reports) to restart cv")
     wipe.add_argument("--confirm", action="store_true", help="really remove them (without it nothing is removed)")
+    sub.add_parser("missingness-audit", help="pd_type_v1: availability of each feature in PD vs HC, and a low-gap-features run")
     select = sub.add_parser("select", help="model selection")
     select.add_argument("--stage", required=True, choices=["preliminary", "final"])
     sub.add_parser("robustness", help="strict tier, seeds and SHAP stability for the tie-set models")
@@ -58,6 +60,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 4
         elif args.command == "select":
             (commands.cmd_select_preliminary if args.stage == "preliminary" else commands.cmd_select_final)(ctx)
+        elif args.command == "missingness-audit":
+            missingness.cmd_missingness_audit(ctx)
         elif args.command == "robustness":
             commands.cmd_robustness(ctx)
         elif args.command == "extras":
