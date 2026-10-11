@@ -1,0 +1,345 @@
+# Research decisions log
+
+One entry per decision, newest first. Copy the template for each new entry.
+
+## Template
+
+```
+Date:
+Decision:
+Evidence:
+Alternatives considered:
+Reason:
+Impact:
+```
+
+## Entries
+
+Scientific decisions are frozen in `docs/phase1_final_decisions_v1.md`. The
+entries below record how Phase 2 implements them, including every
+interpretation that had to be made where the frozen documents were silent.
+Interpretations are marked **[interpretation]** and need confirmation.
+
+### Phase 2.1 corrections and Phase 3 harness (11 October 2026)
+
+These entries supersede the following Phase 2 entries further down: the `htn_bp` one-reading rule, the
+vascular masking rule, the removal of eplerenone / methyldopa / aliskiren, the AD-like formula
+`max(ptau, 8) / min(abeta, 1700)` and the three-tier definition.
+
+```
+Date: 2026-10-11
+Decision: RE-FREEZE of the split (once). `python -m copath.phase2 --refreeze`, seed unchanged (20261011),
+  rebuilds the development/test split and the five folds and refits the Lumipulse mixture on the new
+  development set. From the first Phase 3 run onwards `--refreeze` refuses to run (it checks
+  experiments/registry.csv).
+Evidence: Phase 2 review. The 2.1 corrections change ad_like_v1 and vascular_v1, which are stratification inputs.
+Alternatives considered: Keeping the old split (rejected: it was stratified on labels that are now different).
+Reason: No model had been trained, so nothing had seen the old test set. Re-freezing is allowed now and never again.
+Impact: data/splits/, configs/frozen/lumipulse_gmm_v1.json, every Phase 2 report; phase2.registry_has_runs.
+```
+
+```
+Date: 2026-10-11
+Decision: AD-like limit handling follows targets/ad_like_v1.yaml v1.1. The curated cut discards Elecsys
+  values outside the assay range and keeps only flags, so: abeta_used = min(max(abeta, 200), 1475.4) when
+  numeric, 1475.4 when abeta_ULOD = 1, 200 when abeta_LLOD = 1, else missing; ptau_used = max(ptau, 8) when
+  numeric, 8 when ptau_LLOD = 1, else missing; ratio = ptau_used / abeta_used. The same rules apply to every
+  Elecsys sensitivity variant. Limits and flag names are read from the card.
+Evidence: Curated data dictionary (derivation notes of abeta and ptau); Phase 2 masked high-ABeta42 participants.
+Alternatives considered: Leaving flagged participants masked (rejected: removes clearly amyloid-negative
+  participants, a selection bias).
+Reason: As frozen in the v1.1 card. The substituted values are BOUNDARY SUBSTITUTIONS for censored assay
+  measurements, not the participants' true values. `ad_like_v1_censored` (participant level, never a feature)
+  marks them; the sensitivity label `ad_like_v1_uncensored` masks them.
+Impact: targets.builders.ad_like_parameters / ad_like_values / ad_like; cohort.add_labels; cohort_flow.md.
+```
+
+```
+Date: 2026-10-11
+Decision: [interpretation] (a) The card is version v1.1 but still defines the label `ad_like_v1`: a label id is
+  the target id plus the MAJOR card version. (b) A numeric value <= 0 is not a measurement and is masked rather
+  than raised to the floor. (c) `ad_like_v1_censored` is also 1 for a numeric value at or beyond a limit
+  (which the curated cut should never contain); such values are counted separately in the report.
+Evidence: The card's invalid_values line; the card says "came from a flag" for the indicator.
+Alternatives considered: Renaming the label to v1.1 everywhere; raising 0 to 200.
+Reason: Keeps every label id, feature-set file and report stable; never invents a measurement.
+Impact: targets.builders.card_label, ad_like_values.
+```
+
+```
+Date: 2026-10-11
+Decision: Vascular masking: a participant is masked only when HTN is not evaluable AND the unknown HTN
+  component could change the result. vascular_v1 (>= 2): masked if DM + DYSLIP = 1, negative if 0, positive
+  if 2. vascular_v2 (>= 1): masked if DM + DYSLIP = 0, positive otherwise.
+Evidence: Phase 2 review.
+Alternatives considered: The earlier rule (masked whenever below the threshold and HTN unknown).
+Reason: With DM + DYSLIP = 0, hypertension alone cannot reach two components, so the label is known.
+Impact: targets.builders.vascular; targets/vascular_v1.yaml and vascular_v2.yaml (rule text).
+```
+
+```
+Date: 2026-10-11
+Decision: htn_bp = 0 whenever blood pressure was measured (either supine reading, BL or SC fallback) and is
+  below the thresholds; it is missing only when no reading exists. Eplerenone, methyldopa and aliskiren are
+  definite antihypertensives; diltiazem and verapamil stay as calcium-channel blockers.
+Evidence: Phase 2 review.
+Alternatives considered: The earlier one-reading rule; the narrower drug list.
+Reason: A measured normal pressure is evidence of absence for this proxy; the three drugs have no other use.
+Impact: medications.vascular_components; configs/drug_classes.yaml.
+```
+
+```
+Date: 2026-10-11
+Decision: CSFSAA, asyn and saa_status_bl are near-proxies for pd_type_v1. Only two tiers exist: primary
+  (everything except defining and never) and strict (primary minus near-proxies). The full tier is dropped.
+Evidence: About 88% of PD and 7% of HC are SAA-positive.
+Alternatives considered: Keeping SAA as an ordinary feature; keeping a third tier equal to primary.
+Reason: Decisions document section 9.
+Impact: configs/leakage_matrix.csv; leakage_guard.TIERS; configs/feature_sets/ (12 files); docs/leakage_matrix.md.
+```
+
+```
+Date: 2026-10-11
+Decision: [interpretation] saa_status_bl is a text column. It is a near-proxy in the matrix as decided, but the
+  numeric models cannot use text, so the harness leaves non-numeric tier features out and records them in each
+  run (nonnumeric_tier_features_not_used). The curated numeric CSFSAA carries the same information.
+Evidence: The analytic table stores the status as Positive / Negative / Inconclusive / Conflicting.
+Alternatives considered: Encoding the text as categories (adds a hand-made encoding of a label-defining field).
+Reason: Lean and transparent; nothing is silently used or silently dropped.
+Impact: phase3.core.tier_features.
+```
+
+```
+Date: 2026-10-11
+Decision: Phase 3 selection follows docs/selection_protocol.md (written before any real run): per-label
+  gates, score = mean outer-fold Brier Skill Score, 1-SE tie set, then tie-breakers (calibration slope,
+  SHAP top-10 stability, primary-to-strict drop, simplicity).
+Evidence: Decisions document sections 5.6 and 9; the Phase 3 specification.
+Alternatives considered: The older section 5.6 wording (macro BSS ranking; worst-label tie-breaker).
+Reason: Selection is per label (binary relevance), so the section 9 workflow is followed; macro BSS is reported.
+Impact: evaluation/selection.py; configs/phase3.yaml (selection).
+```
+
+```
+Date: 2026-10-11
+Decision: [interpretation] Details the specification left open, all written into the protocol before any run:
+  (1) tie-breaker tolerances: slope distance 0.05, Jaccard 0.05, strict-tier drop 0.01 BSS; without a
+      tolerance tie-breaker (a) would always decide alone;
+  (2) if no candidate passes every gate, the label is PROVISIONAL: the tie set is formed from the candidates
+      with the fewest failed gates and no failed fold, and the reviewer must accept or reject it explicitly;
+  (3) the missingness-only check (AUROC > 0.70) flags the LABEL in every report; it is not a per-candidate gate;
+  (4) robustness seeds change the model's random state and the calibration / threshold splits; the outer
+      folds stay the frozen ones, so the reused per-fold hyperparameters never saw their test fold;
+  (5) baselines and the missingness model are neither tuned nor calibrated;
+  (6) the Brier Skill Score reference is the training-fold prevalence (the B0a prediction);
+  (7) sensitivity labels reuse the model family and per-fold hyperparameters of their primary label;
+  (8) "clinical + demographics" = cognition, motor, non-motor clinical and demographics features;
+  (9) a feature that no eligible participant has is not used; a run with fewer than 50 eligible participants
+      or fewer than 10 of one class is skipped and reported.
+Evidence: None in the frozen documents.
+Alternatives considered: Listed in docs/selection_protocol.md where relevant.
+Reason: Each had to be fixed before results exist. To be confirmed before the first real run.
+Impact: docs/selection_protocol.md; configs/phase3.yaml; phase3/commands.py.
+```
+
+```
+Date: 2026-10-11
+Decision: SHAP explains the uncalibrated model, and the output space is verified per estimator instead of
+  assumed: the harness checks whether the values add up to the model's margin (log-odds) or to its
+  probability and records the result. A random forest is explained in probability, not log-odds.
+Evidence: Decisions document section 5.7 says "log-odds"; TreeExplainer on a scikit-learn random forest
+  attributes the predicted probability.
+Alternatives considered: Converting forest output to log-odds (not additive).
+Reason: Never claim a space the explainer does not produce. Sigmoid calibration is monotonic, so rankings hold.
+Impact: explain/shap_explainer.py; shap_stability_tieset.csv and shap_summary.md state the space.
+```
+
+```
+Date: 2026-10-11
+Decision: The final test evaluation is locked. `final` needs --final AND configs/frozen/final_approval.yaml
+  (approved: true, reviewer, date, selected_models_sha256) written by the student after reviewing
+  reports/phase3. It runs once; a lock file blocks a second run unless forced with a logged reason.
+Evidence: Decisions document sections 5.5 and 9.
+Alternatives considered: An environment variable alone (too easy to leave switched on).
+Reason: The test set is used once, after selection, on a human decision.
+Impact: phase3/final.py; configs/frozen/final_evaluation_lock.json.
+```
+
+### Phase 2 — implementation (11 October 2026)
+
+```
+Date: 2026-10-11
+Decision: The analytic universe is the Curated Data Cut at EVENT_ID = BL, one row per participant
+  (expected 5,019: PD 1,684, HC 336, Prodromal 2,935, SWEDD 64). Phase 2 stops and writes
+  reports/phase2/drift_report.md if these counts differ.
+Evidence: Audit v1.1/v1.2 (analytic_universe.csv).
+Alternatives considered: Building whatever population the download contains.
+Reason: A silent change of population would invalidate the frozen split and every reported number.
+Impact: configs/phase2.yaml (expected_counts); src/copath/data/cohort.py (check_drift).
+```
+
+```
+Date: 2026-10-11
+Decision: Only the approved sources are joined, each brought to participant level first, with
+  one-row-per-participant and key-uniqueness assertions before and after every join. The newest
+  copy of a table is used when a download contains several. Pilot and Deprecated biospecimen
+  tables are refused by name.
+Evidence: Audit v1 (duplicate downloads have identical content; table granularity inventory).
+Alternatives considered: Outer joins of raw tables (rejected: row multiplication in the old merge).
+Reason: Section 5.1 of the frozen decisions.
+Impact: src/copath/data/sources.py, merge.py, cohort.py.
+```
+
+```
+Date: 2026-10-11
+Decision: The Concomitant Medication Log is treated as a complete list of current medications:
+  no record of a drug class means the participant is not taking it.
+Evidence: Audit v1.2 medication audit; no other source of treatment information exists.
+Alternatives considered: Masking participants without any medication record.
+Reason: Frozen implementation rule of 11 Oct 2026. The number of participants without any
+  record is reported by cohort and label value; the >=1-record restriction is a Phase 3 sensitivity analysis.
+Impact: targets/vascular_v1.yaml (assumption); reports/phase2/vascular_component_prevalence.csv.
+```
+
+```
+Date: 2026-10-11
+Decision: "Ongoing at baseline" = start month <= BL month and (no stop date or stop month >= BL
+  month), at month precision against the curated BL visit month. Year-only start before the BL
+  year counts; year-only start in the BL year is ambiguous and not counted; missing or
+  unparseable start is not counted; year-only stop in the BL year counts as ongoing.
+Evidence: Audit v1.2 (99.9% of start dates usable).
+Alternatives considered: Counting ambiguous year-only starts.
+Reason: Frozen rule. Counts of every excluded category are reported in cohort_flow.md.
+Impact: src/copath/data/medications.py.
+```
+
+```
+Date: 2026-10-11
+Decision: [interpretation] A medication record whose stop date is present but unparseable is not counted.
+Evidence: None in the frozen documents (they cover missing and year-only stop dates only).
+Alternatives considered: Treating an unparseable stop as "no stop date" (would count it as ongoing).
+Reason: The drug was stopped at an unknown time; counting it as ongoing would over-ascertain.
+Impact: medications.ongoing_at_baseline; the count is reported.
+```
+
+```
+Date: 2026-10-11
+Decision: [interpretation] Drug lists: diltiazem and verapamil are kept as calcium-channel
+  blockers (definite). Eplerenone, methyldopa and aliskiren, which were in the audit's list,
+  are not in the frozen definite list and were removed. A hypertension indication is CMINDC = 14
+  or indication text matching hypertension / high blood pressure / HTN, excluding pulmonary,
+  ocular, intraocular and portal hypertension.
+Evidence: Section 5.2 lists the definite classes; CMINDC 14 = Hypertension in the Code List.
+Alternatives considered: Keeping the wider audit list.
+Reason: The frozen list is explicit; anything not on it is not counted.
+Impact: configs/drug_classes.yaml (include / conditional / exclude).
+```
+
+```
+Date: 2026-10-11
+Decision: [interpretation] htn_bp is 1 when supine SBP >= 140 or DBP >= 90, 0 when both readings are
+  present and below, and missing when only one reading is present and below its threshold.
+  Several readings at a visit are averaged; screening is used only when baseline has no reading.
+Evidence: Frozen rule gives the thresholds, the mean and the SC fallback, not the one-reading case.
+Alternatives considered: Treating a single normal reading as "not hypertensive".
+Reason: One normal value says nothing about the other; unknown must not become absent.
+Impact: medications.vascular_components.
+```
+
+```
+Date: 2026-10-11
+Decision: Vascular labels are masked only when the component count is below the positive
+  threshold AND hypertension is not evaluable (no supine BP and no qualifying antihypertensive).
+  A participant at or above the threshold is positive without BP.
+Evidence: Frozen implementation rule of 11 Oct 2026.
+Alternatives considered: None (the rule is given as concrete).
+Reason: As frozen. Note: with the v1 threshold of 2, a participant with no DM and no DYSLIP
+  evidence and unknown HTN is masked, although one more component could not make them positive.
+Impact: targets.builders.vascular; targets/vascular_v1.yaml, vascular_v2.yaml.
+```
+
+```
+Date: 2026-10-11
+Decision: AD-like v1 is built from the card: ratio = max(ptau, 8) / min(abeta, 1700), positive
+  above the card's cut-off (0.025). The build stops if the card lacks derived_value, abeta_used,
+  ptau_used or cutoff, or if they disagree with each other. Non-numeric or <= 0 values are masked.
+Evidence: targets/ad_like_v1.yaml.
+Alternatives considered: Hard-coding the numbers.
+Reason: The card is authoritative; a changed card must change the label, visibly.
+Impact: targets.builders.ad_like_parameters / ad_like; sensitivity variants are read from the card.
+```
+
+```
+Date: 2026-10-11
+Decision: The Lumipulse label is built after the split. A 2-component Gaussian mixture is
+  fitted to log(ABeta42/ABeta40) of eligible development-set participants only; the threshold
+  is the equal-posterior point between the component means; positive = ratio below it. The
+  parameters are frozen in configs/frozen/lumipulse_gmm_v1.json. Several BL results of one
+  test are averaged.
+Evidence: Frozen implementation rule of 11 Oct 2026.
+Alternatives considered: Fitting on all participants (rejected: uses the test set).
+Reason: As frozen.
+Impact: targets.builders.fit_lumipulse_threshold; phase2._lumipulse.
+```
+
+```
+Date: 2026-10-11
+Decision: configs/leakage_matrix.csv is the single authoritative leakage file (one row per
+  analytic column, one status per label). docs/leakage_matrix.md and configs/feature_sets/ are
+  generated from it. Phase 2 fails if a column of the analytic dataset is not in the matrix or
+  if the generated files are out of date.
+Evidence: Section 5.3.
+Alternatives considered: Rule patterns applied at run time (rejected: not reviewable).
+Reason: One reviewable source; no handwritten parallel lists.
+Impact: src/copath/features/leakage_guard.py.
+```
+
+```
+Date: 2026-10-11
+Decision: [interpretation] Additional columns marked "never" beyond the explicit list in section 5.3:
+  HIQ_RBD (enrolment-route indicator), DOMSIDE (PD history), age_datscan / age_LP / age_upsit
+  (procedure timing), ON-medication scores (updrs3_score_on, hy_on, NHY_ON, pigd_on,
+  updrs_totscore_on), updrs4_score, CSFSAA_assay, the text APOE genotype (APOE_e4 is the
+  feature), and the derived meta columns (bp_source, med_record_any, htn_evaluable for
+  non-vascular labels). Near-proxy for PD-type beyond DAT, UPDRS III and H&Y: updrs_totscore
+  (contains Part III) and pigd (derived from Part II/III items).
+Evidence: Curated-cut data dictionary (reference export); Cramér's V of availability with cohort.
+Alternatives considered: Leaving them as ordinary features.
+Reason: Each either exists only for (treated) PD, encodes enrolment route, or is an availability
+  indicator. Conservative; each row carries a note and can be changed in the CSV.
+Impact: configs/leakage_matrix.csv.
+```
+
+```
+Date: 2026-10-11
+Decision: Tiers are implemented exactly as written: primary = all minus defining and never;
+  strict = primary minus near-proxies; full = primary plus near-proxies.
+Evidence: Section 5.3 and the Phase 2 specification.
+Alternatives considered: primary = safe features only (then primary would equal strict).
+Reason: The written rules are followed literally. Consequence: full and primary are the same
+  set, because primary already contains the near-proxies. To be confirmed.
+Impact: leakage_guard.tier_features; configs/feature_sets/.
+```
+
+```
+Date: 2026-10-11
+Decision: The development/test split (80/20) and 5 development folds use iterative
+  stratification on cohort and on the availability and positive indicators of pd_type_v1,
+  ad_like_v1 and vascular_v1 only. Indicators with fewer than 10 participants are merged
+  (cohorts) or dropped. The split is frozen: a later run must reproduce it or fails. Test
+  identifiers and rows load only with final_evaluation=True and COPATH_FINAL_EVALUATION=1.
+Evidence: Section 5.5 and the 11 Oct 2026 rules.
+Alternatives considered: Stratifying on sensitivity labels (forbidden).
+Reason: As frozen.
+Impact: src/copath/data/split.py; data/splits/ (git-ignored).
+```
+
+```
+Date: 2026-10-11
+Decision: [interpretation] Construct checks (MoCA, APOE e4, age, WM hypointensities by label status)
+  are computed on the development set only.
+Evidence: The specification asks for the checks but not on which participants.
+Alternatives considered: All participants.
+Reason: Keeps the test set untouched until the single final evaluation.
+Impact: reports/phase2/construct_check.csv.
+```

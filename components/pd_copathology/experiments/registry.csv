@@ -1,0 +1,1 @@
+run_id,stage,label,tier,model,seed,variant,fold_scheme_sha256,dataset_sha256,config_sha256,status,n_failed_folds,auroc,auprc,brier,bss,se_bss,cal_slope,cal_intercept,ece,f1,started_at,finished_at,seconds

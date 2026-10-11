@@ -1,0 +1,109 @@
+# Target card: AD-like CSF biomarker signal (primary)  — version 1
+# Place at: components/pd_copathology/targets/ad_like_v1.yaml
+
+target_id: ad_like
+version: v1.1
+status: frozen_pending_supervisor_signoff
+construct: >
+  Research proxy for Alzheimer's-type (amyloid + tau) co-pathology, defined from
+  baseline CSF Elecsys p-tau181 / Aβ42 ratio. Not a clinical diagnosis of AD.
+
+source:
+  table: PPMI_Curated_Data_Cut_Public_20260810   # sheet "20260810"
+  visit: BL
+  columns:
+    abeta: abeta          # Elecsys Aβ1-42, pg/mL (projects 125 + 159 harmonised by PPMI)
+    ptau: ptau            # Elecsys p-tau181, pg/mL
+    abeta_ulod_flag: abeta_ULOD
+    ptau_llod_flag: ptau_LLOD
+  assay:
+    platform: Roche Elecsys (cobas e601), UPenn Biomarker Research Laboratory
+    projects: [125, 159]
+    harmonisation: >
+      Project 159 Aβ42 was re-scaled by the lab to the 2017 (project 125) scale
+      (Passing-Bablok); the curated cut averages the two projects when both exist.
+    methods_documents:
+      - PPMI_Methods_Shaw_Project125_20180417.pdf
+      - PPMI_Project_159_Methods_20210713.pdf
+    never_pool_with: "Project 283 (Fujirebio Lumipulse) — separate card ad_like_lumipulse_v1"
+
+preprocessing:
+  # v1.1 correction (11 Oct 2026): the curated cut DISCARDS out-of-range values and
+  # keeps only flags (curated data dictionary, derivation notes for abeta / ptau):
+  #   abeta set to NULL if < 200 (abeta_LLOD = 1) or >= 1475.4 (abeta_ULOD = 1)
+  #   ptau  set to NULL if <= 8   (ptau_LLOD = 1)
+  # 1475.4 is the 1700 pg/mL assay limit expressed on the re-scaled 2017 scale.
+  # Without imputing the limits, high-Aβ42 (clearly amyloid-negative) participants
+  # would be wrongly masked. So:
+  abeta_cap: 1475.4
+  abeta_floor: 200
+  ptau_floor: 8
+  abeta_used: >
+    if abeta is numeric: min(max(abeta, 200), 1475.4);
+    elif abeta_ULOD == 1: 1475.4;
+    elif abeta_LLOD == 1: 200;
+    else: missing
+  ptau_used: >
+    if ptau is numeric: max(ptau, 8);
+    elif ptau_LLOD == 1: 8;
+    else: missing
+  derived_value: "ratio = ptau_used / abeta_used"
+  invalid_values: "abeta_used or ptau_used missing, <= 0 or non-numeric -> masked"
+  report: "aggregate counts of participants whose abeta or ptau came from a limit flag"
+  wording: >
+    Flag-based values are BOUNDARY SUBSTITUTIONS for censored assay measurements,
+    not true values (a flagged Aβ42 >= 1475.4 could truly be 1,500 or 1,700).
+  censored_indicator: "ad_like_v1_censored = 1 if abeta_used or ptau_used came from a flag (reporting only; never a feature)"
+  limit_flags_never_features: [abeta_LLOD, abeta_ULOD, ptau_LLOD, tau_LLOD]
+
+rule:
+  positive: "ratio > 0.025"
+  negative: "ratio <= 0.025"
+  masked: "abeta or ptau missing at BL; technical-problem records"
+  cutoff: 0.025
+  cutoff_source: >
+    Hansson et al. 2018, Alzheimer's & Dementia 14(11):1470-81, section 4.3:
+    ADNI-derived Elecsys pTau/Aβ(1-42) cut-off = 0.025 (Aβ42 = 977 pg/mL,
+    tTau/Aβ42 = 0.27), concordant with amyloid-β PET visual read.
+  cutoff_rationale: >
+    Hansson showed Elecsys Aβ42 values shift by ~24% with the CSF handling
+    protocol, so cut-offs must match the handling. ADNI CSF was measured at the
+    UPenn Biomarker Research Laboratory on a cobas e601 with the research-use
+    Elecsys kits — the same lab, platform and assay generation as PPMI
+    projects 125/159. The ADNI cut-off is therefore the closest match for PPMI.
+    The BioFINDER value (0.022) belongs to a different handling protocol and is
+    used only as a sensitivity bound. Assumption to state in the dissertation:
+    PPMI pre-analytical handling is closer to ADNI than to BioFINDER.
+
+eligible_population: "All BL-universe cohorts (PD, HC, Prodromal, SWEDD) with Elecsys values"
+expected_n_eligible: "~1,250-1,300 at BL"
+
+sensitivity_variants:   # apply the same abeta_used / ptau_used rules
+  - id: ad_like_v1_cut028
+    rule: "ratio > 0.028"           # Hansson 2018 prespecified cut-off transferred to ADNI (validated, stricter)
+  - id: ad_like_v1_cut022
+    rule: "ratio > 0.022"           # Hansson 2018 BioFINDER (different handling protocol; lenient bound)
+  - id: ad_like_v1_greyzone
+    rule: "ratio > 0.025, with ratio in [0.02375, 0.02625] (±5%) masked"
+  - id: ad_like_v1_uncensored
+    rule: "ratio > 0.025, with every participant whose abeta or ptau is a boundary substitution masked"
+  - id: ad_like_v1_amyloid_only
+    rule: "abeta_used <= 977 pg/mL"  # Hansson 2018 ADNI Aβ42 cut-off; amyloid-only (A+); exploratory only — Phase 2 showed ~69% positive, i.e. not specific in PPMI
+  - id: ad_like_lumipulse_v1
+    rule: "Project 283 Aβ42/Aβ40 ratio; 2-component Gaussian mixture cut-off; separate card"
+
+rejected_alternatives:
+  - "Aβ42 alone: Irwin et al. 2020 report ~30% 'pathologically low' Aβ42 in both PD and HC — not AD-specific."
+  - "Pooling Elecsys with Lumipulse: different platform and calibration."
+
+leakage:
+  never_features: [abeta, abeta_LLOD, abeta_ULOD, ptau, ptau_LLOD, tau, tau_LLOD,
+                   IU_ABeta42_CSF, IU_ABeta40_CSF, IU_pTau181_CSF,
+                   C2N_AB40, C2N_AB42, C2N_AB4240, MTBR_TAU243]
+  strict_tier_also_exclude: [Lilly_ptau217p, Lilly_ptau217p_LLOD, ptau217_plasma, bd_tau_plasma]
+
+construct_validity_checks:
+  - "MoCA and cognitive composite lower in positives (report, do not use in label)"
+  - "APOE e4 carriage higher in positives"
+  - "Positives older on average"
+  - "Agreement with Lumipulse label in participants measured on both platforms"

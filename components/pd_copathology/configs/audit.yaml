@@ -1,0 +1,32 @@
+# Phase 1 dataset-audit configuration.
+# The raw-data location is NOT set here: it comes from PPMI_DATA_ROOT (.env).
+
+# Counts greater than 0 and below this value are written as "<N".
+suppress_threshold: 5
+
+# Value counts are reported only for columns with at most this many distinct values.
+max_category_values: 20
+
+# Rows read per chunk. Lower it if memory is tight.
+chunk_rows: 100000
+
+# Read at most this many rows per table (null = whole table). When set, counts
+# are lower bounds and affected tables are flagged in table_inventory.csv.
+max_rows_per_table: null
+
+# Glob patterns (file name or path relative to the data root) of archives or
+# loose files to skip entirely, e.g. ["Imaging*.zip"]. Skipped sources are
+# still listed in archive_inventory.csv, without hash or member list.
+skip_archives: []
+
+# Glob patterns of tabular members to skip inside archives.
+skip_members: []
+
+# Earlier exploratory merges. Audited as reference-only, never as source tables.
+reference_patterns:
+  - "final_multimodal_dataset*.csv"
+
+# SHA-256 every source file. Turn off only if hashing very large archives is too slow.
+hash_archives: true
+
+make_figures: true

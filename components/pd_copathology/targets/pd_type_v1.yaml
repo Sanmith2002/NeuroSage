@@ -1,0 +1,41 @@
+# Target card: PD-type signal (primary) — version 1
+target_id: pd_type
+version: v1
+status: frozen_pending_supervisor_signoff
+construct: >
+  Research proxy for a Parkinson's-disease-type profile, defined by enrolment
+  cohort: clinically diagnosed PD versus healthy control. Not a diagnosis.
+
+source:
+  table: PPMI_Curated_Data_Cut_Public_20260810
+  visit: BL
+  columns:
+    cohort: COHORT          # 1 = PD, 2 = HC, 3 = SWEDD, 4 = Prodromal
+
+preprocessing:
+  technical_value_handling: "None. COHORT is complete in the baseline universe."
+
+rule:
+  positive: "COHORT = PD"
+  negative: "COHORT = HC"
+  masked: "COHORT = Prodromal or SWEDD (scored later as an exploratory application, never as negatives)"
+  positive_cohorts: [PD]
+  negative_cohorts: [HC]
+  citation: >
+    PPMI enrolment cohort definitions (PPMI Data User Guide; Groups and
+    Subgroups Guidance Document). docs/phase1_final_decisions_v1.md section 5.2.
+
+eligible_population: "Baseline-universe participants enrolled as PD or HC (expected 2,020)"
+
+sensitivity_variants:
+  - id: pd_type_saa_v1
+    rule: "CSF alpha-synuclein SAA Positive vs Negative at BL, all cohorts; separate card"
+
+leakage:
+  defining_features: [COHORT]
+  never_features: "see configs/leakage_matrix.csv (enrolment, diagnosis, treatment and disease-history variables)"
+  strict_tier_also_exclude: "DAT SBRs, MDS-UPDRS Part III, Hoehn & Yahr"
+
+limitations:
+  - "PD versus HC is easy to separate; the strict tier and the SAA variant are the informative results."
+  - "Only 336 healthy controls."

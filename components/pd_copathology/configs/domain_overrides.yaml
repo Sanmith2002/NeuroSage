@@ -1,0 +1,168 @@
+# Domain overrides for the Phase 1 dataset audit (audit v1.1).
+#
+# Everything here is a reviewed decision about PPMI table names, taken from the
+# aggregate audit reports. Patterns are case-insensitive globs matched against
+# the table name with and without its date suffix (and "#sheet" for workbooks).
+version: 1
+
+# ---------------------------------------------------------------- universes
+universe:
+  # Participants are restricted to this table; the newest matching copy is used.
+  participant_status_table: ["Participant_Status*"]
+  cohort_column: COHORT_DEFINITION
+  cohort_short_labels:
+    "Parkinson's Disease": PD
+    "Healthy Control": HC
+    "Prodromal": Prodromal
+    "SWEDD": SWEDD
+  # In-clinic baseline universe: participants with a baseline row in this table.
+  curated_table: ["PPMI_Curated_Data_Cut_Public*"]
+  baseline_events: [BL]
+  screening_events: [SC]
+  baseline_date_column: visit_date
+
+# Tables that never count towards a modality, an overlap or a candidate concept.
+exclude_from_modalities:
+  - {pattern: "ST-Direct*", reason: "remote-only (ST-Direct)"}
+  - {pattern: "*myPPMI*", reason: "remote-only (myPPMI)"}
+
+# First matching entry wins. `exclude: true` also removes the table from
+# modality counts; `leakage: true` marks every field as never-a-feature.
+modality_overrides:
+  - {pattern: "FS7_*", modality: "MRI/imaging-derived"}
+  - {pattern: "Grey_Matter_Volume*", modality: "MRI/imaging-derived"}
+  - {pattern: "Primary_Research_Diagnosis*", modality: "diagnosis", leakage: true}
+  - {pattern: "PD_Diagnosis_History*", modality: "diagnosis", leakage: true}
+  - {pattern: "Clinical_Diagnosis*", modality: "diagnosis", leakage: true}
+  - {pattern: "*Adverse_Event*", modality: "other", exclude: true, reason: "adverse-event table"}
+  - {pattern: "*_AE_*", modality: "other", exclude: true, reason: "sub-study adverse-event table"}
+  - {pattern: "*Pregnancy*", modality: "other", exclude: true, reason: "pregnancy table"}
+
+# Overlap groups defined by an explicit table list instead of by modality.
+overlap_group_tables:
+  "vascular/medical history":
+    - "Medical_Conditions_Log*"
+    - "Vital_Signs*"
+    - "Concomitant_Medication_Log*"
+
+# Name matches that are known to be wrong. `field` is a regular expression on
+# the column or test name; `table`, `target` and `concept` are optional filters.
+candidate_exclusions:
+  - {table: "FS7_*", concept: "DAT-SPECT", reason: "FreeSurfer volume, not DAT-SPECT"}
+  - {concept: "WMH / vascular MRI", field: "(?i)cerebell|cerebral_?white_?matter", reason: "normal white-matter volume, not a lesion measure"}
+  - {target: "Vascular-risk", field: "(?i)CACNA1C", reason: "gene-expression analyte, not HbA1c"}
+
+# Documentation tables printed in full to reports/audit/reference/ once they
+# are verified to contain no participant identifiers.
+reference_tables:
+  - "Current_Biospecimen_Analysis_Results_Summary_Table*"
+  - "PPMI_Curated_Data_Cut_Public*#Information"
+  - "PPMI_Curated_Data_Cut_Public*#Data dictionary"
+
+# ----------------------------------------------------- vascular concept audit
+medical_conditions:
+  table: ["Medical_Conditions_Log*"]
+  category_column: MHCAT
+  date_columns: [MHDIAGDT]
+  year_columns: [MHDIAGYR]
+  # The public table carries a category code but no condition term, so these
+  # are the closest available groupings (codes from column_value_inventory.csv).
+  category_concepts:
+    "106": "cardiovascular category (hypertension and cardiac disease not separable)"
+    "112": "metabolic/endocrine category (diabetes and hyperlipidaemia not separable)"
+    "114": "neurologic category (stroke/TIA not separable)"
+
+medications:
+  table: ["Concomitant_Medication_Log*"]
+  start_date_column: STARTDT
+  stop_date_column: STOPDT
+  ongoing_column: ONGOING
+  indication_code_column: CMINDC
+  indication_text_column: CMINDC_TEXT
+  name_columns: [CMTRT, WHODRUG]          # searched for drug names
+  text_columns: [CMTRT, WHODRUG, CMINDC_TEXT]
+  drug_classes_file: drug_classes.yaml    # relative to this file
+
+vital_signs:
+  table: ["Vital_Signs*"]
+  supine_sbp_column: SYSSUP
+  supine_dbp_column: DIASUP
+  # Reporting thresholds requested for the audit; not a label definition.
+  elevated_sbp: 140
+  elevated_dbp: 90
+
+# ------------------------------------------------- baseline label feasibility
+baseline_feasibility:
+  biospecimen_table: ["Current_Biospecimen_Analysis_Results*"]
+  # Every table searched for the CSF projects (current, pilot and deprecated).
+  biospecimen_tables_all: ["*Biospecimen_Analysis_Results*"]
+  biospecimen_summary_table: ["Current_Biospecimen_Analysis_Results_Summary_Table*"]
+  # Reported separately, never pooled.
+  csf_projects: ["125", "159", "283"]
+  plasma_ptau217_test: "(?i)p[-_ ]*tau[-_ ]*217|p217\\+?tau"
+  saa_table: ["SAA_Biospecimen_Analysis_Results*"]
+  saa_status_column: SAA_Status
+  dat_table: ["Xing_Core_Lab*", "DaTScan_Analysis*"]
+  dat_value_field: "(?i)caudate|putamen|striatum|sbr"
+  curated_dat_field: "(?i)^MIA_(CAUDATE|PUTAMEN|STRIATUM)"
+  curated_ptau217_field: "(?i)ptau_?217"
+  curated_apoe_field: "(?i)^APOE$"
+  curated_moca_field: "(?i)^moca$"
+  vital_signs_table: ["Vital_Signs*"]
+  wmh_table: ["FS7_ASEG_VOL*"]
+  # Curated-cut CSF columns (and biospecimen test names) whose source project
+  # is looked up in the curated-cut data dictionary.
+  curated_csf_columns:
+    - ABeta                    # matched without regard to case, so this is also `abeta`
+    - ABeta raw
+    - ABETA_DILUTION_FACTOR
+    - tau
+    - ptau
+    - IU_ABeta42_CSF
+    - IU_ABeta40_CSF
+    - IU_pTau181_CSF
+
+# Derived tables: used for the universe and for explicitly named checks, never
+# counted as a source modality.
+derived_tables: ["PPMI_Curated_Data_Cut_Public*"]
+
+# ------------------------------------------------- baseline modality overlap
+# Each group lists table patterns and/or modalities (a table must satisfy both
+# when both are given); `matrix` restricts a long-format table to tests whose
+# sample matrix matches.
+bl_overlap_groups:
+  clinical/motor: {modalities: ["clinical/motor"]}
+  cognitive: {modalities: ["cognitive"]}
+  DAT: {tables: ["Xing_Core_Lab*", "DaTScan_Analysis*"]}
+  MRI (FS7): {tables: ["FS7_*"]}
+  CSF: {tables: ["Current_Biospecimen_Analysis_Results*"], matrix: "(?i)csf|cerebrospinal"}
+  plasma: {tables: ["Current_Biospecimen_Analysis_Results*"], matrix: "(?i)plasma"}
+  genetics: {modalities: ["genetics"]}
+  SAA: {tables: ["SAA_Biospecimen_Analysis_Results*"]}
+  vascular evidence (vitals/medications): {tables: ["Vital_Signs*", "Concomitant_Medication_Log*"]}
+bl_overlap_requested:
+  - ["clinical/motor", "cognitive"]
+  - ["clinical/motor", "DAT"]
+  - ["clinical/motor", "CSF"]
+  - ["clinical/motor", "SAA"]
+  - ["clinical/motor", "genetics"]
+  - ["clinical/motor", "MRI (FS7)"]
+  - ["clinical/motor", "cognitive", "DAT"]
+  - ["clinical/motor", "cognitive", "CSF"]
+  - ["clinical/motor", "cognitive", "DAT", "SAA"]
+  - ["clinical/motor", "DAT", "CSF", "genetics"]
+  - ["clinical/motor", "cognitive", "DAT", "CSF", "SAA", "genetics"]
+  - ["clinical/motor", "cognitive", "vascular evidence (vitals/medications)"]
+
+# ------------------------------------------------------------ FS7 WM check
+fs7_wm_check:
+  tables: ["FS7_ASEG_VOL*", "FS7_APARC_CTH*"]
+  capture_field: "(?i)hypointens|white_?matter|(^|_)wmh(_|$)"
+  wm_hypointensity_field: "(?i)(?<!non_)(?<!non-)wm[_-]?hypointens|white[_-]?matter[_-]?hypointens|(^|_)wmh(_|$)"
+  non_wm_hypointensity_field: "(?i)non[_-]?wm[_-]?hypointens"
+
+# Rows of the annotated data dictionary exported for the curated cut and the
+# biospecimen results tables.
+annotated_dictionary:
+  table: ["Data_Dictionary_-__Annotated_*"]
+  module_regex: "(?i)curat|biospec|bioanaly|biosamp"

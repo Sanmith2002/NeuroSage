@@ -1,0 +1,35 @@
+# Target card: vascular-risk signal, lenient sensitivity definition — version 2
+target_id: vascular
+version: v2
+status: frozen_pending_supervisor_signoff
+construct: >
+  Sensitivity definition of vascular_v1: any treated or measured vascular risk
+  factor at baseline. Same sources, components and evaluability rule; only the
+  number of components required differs.
+
+source:
+  tables: [Concomitant_Medication_Log, Vital_Signs, PPMI_Curated_Data_Cut_Public_20260810]
+  visit: BL
+  columns: "identical to targets/vascular_v1.yaml"
+  drug_lists: configs/drug_classes.yaml
+
+preprocessing:
+  technical_value_handling: "identical to targets/vascular_v1.yaml"
+  assumption: "identical to targets/vascular_v1.yaml (the medication log is a complete list of current medications)"
+
+rule:
+  positive: "at least 1 of {HTN, DM, DYSLIP}"
+  negative: "no component AND HTN is evaluable"
+  masked: "HTN is not evaluable (no supine BP and no qualifying antihypertensive) AND DM + DYSLIP = 0"
+  min_components: 1
+  bp_thresholds: {sbp: 140, dbp: 90}
+  citation: "docs/phase1_final_decisions_v1.md section 5.2."
+
+eligible_population: "All baseline-universe cohorts in whom the label can be decided"
+
+sensitivity_variants: []
+
+leakage:
+  defining_features: "identical to targets/vascular_v1.yaml"
+  never_features: "see configs/leakage_matrix.csv"
+  strict_tier_also_exclude: "Medical_Conditions_Log categories, if they are ever added as features"

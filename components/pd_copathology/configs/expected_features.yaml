@@ -1,0 +1,21 @@
+# Expected features per label, written on 11 October 2026 BEFORE any model result
+# (see docs/expected_features.md). Used only by `python -m copath.phase3 explain`
+# to report where each expected item ranks. An item matches features by a regular
+# expression on the column name (`pattern`) or by leakage-matrix modality (`modality`).
+ad_like_v1:
+  - {item: "APOE e4", pattern: "^APOE_e4$"}
+  - {item: "age", pattern: "^age(_at_visit)?$"}
+  - {item: "memory / cognition", modality: cognition}
+  - {item: "plasma pTau217 (primary tier only)", pattern: "(?i)ptau217"}
+  - {item: "NfL / GFAP", pattern: "(?i)nfl|gfap"}
+vascular_v1:
+  - {item: "age", pattern: "^age(_at_visit)?$"}
+  - {item: "BMI", pattern: "^BMI$"}
+  - {item: "WM hypointensities", pattern: "^aseg_(Left_|Right_)?WM_hypointensities$"}
+  - {item: "sex", pattern: "^SEX$"}
+pd_type_v1:
+  - {item: "UPSIT (smell)", pattern: "^upsit"}
+  - {item: "RBD questionnaire", pattern: "^rem$"}
+  - {item: "DAT / UPDRS (primary tier only)", pattern: "^MIA_|^updrs|^hy$|^NHY$"}
+  - {item: "autonomic (SCOPA-AUT)", pattern: "^scopa"}
+  - {item: "non-motor clinical scales", modality: non-motor clinical}

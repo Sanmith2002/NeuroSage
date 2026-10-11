@@ -1,0 +1,389 @@
+feature,modality,source,pd_type_v1,pd_type_saa_v1,ad_like_v1,ad_like_lumipulse_v1,vascular_v1,vascular_v2,note
+SITE,identifier/meta,curated cut,never,never,never,never,never,never,"identifier, site or enrolment variable"
+PATNO,identifier/meta,curated cut,never,never,never,never,never,never,"identifier, site or enrolment variable"
+COHORT,identifier/meta,curated cut,never,never,never,never,never,never,"identifier, site or enrolment variable"
+subgroup,identifier/meta,curated cut,never,never,never,never,never,never,"identifier, site or enrolment variable"
+enroll_phase,identifier/meta,curated cut,never,never,never,never,never,never,"identifier, site or enrolment variable"
+enroll_source,identifier/meta,curated cut,never,never,never,never,never,never,"identifier, site or enrolment variable"
+analytic_subgroup,identifier/meta,curated cut,never,never,never,never,never,never,"identifier, site or enrolment variable"
+HIQ_RBD,identifier/meta,curated cut,never,never,never,never,never,never,enrolment-route indicator in the ID block (interpretation: treated like enroll_*)
+study_status,identifier/meta,curated cut,never,never,never,never,never,never,"identifier, site or enrolment variable"
+Death_Status,demographics,curated cut,never,never,never,never,never,never,death field
+age_death,demographics,curated cut,never,never,never,never,never,never,death field
+Death_Date,demographics,curated cut,never,never,never,never,never,never,death field
+NSD_Status,NSD-ISS,curated cut,never,never,never,never,never,never,NSD-ISS field
+NSD_STAGE,NSD-ISS,curated cut,never,never,never,never,never,never,NSD-ISS field
+NSD_Adjudicated,NSD-ISS,curated cut,never,never,never,never,never,never,NSD-ISS field
+Clinical_Stage,NSD-ISS,curated cut,never,never,never,never,never,never,NSD-ISS field
+PRIMDIAG,non-motor clinical,curated cut,never,never,never,never,never,never,diagnosis
+OTHNEURO,non-motor clinical,curated cut,never,never,never,never,never,never,diagnosis
+EVENT_ID,identifier/meta,curated cut,never,never,never,never,never,never,date or visit/event code
+YEAR,identifier/meta,curated cut,never,never,never,never,never,never,date or visit/event code
+visit_date,identifier/meta,curated cut,never,never,never,never,never,never,date or visit/event code
+age,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+age_at_visit,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+SEX,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+EDUCYRS,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+race,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+HISPLAT,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+ASHKJEW,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+AFICBERB,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+BASQUE,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+fampd,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+fampd_bin,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+handed,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+howlive,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+sex_orient,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+BMI,demographics,curated cut,safe,safe,safe,safe,safe,safe,
+agediag,non-motor clinical,curated cut,never,never,never,never,never,never,PD disease history
+ageonset,non-motor clinical,curated cut,never,never,never,never,never,never,PD disease history
+duration,non-motor clinical,curated cut,never,never,never,never,never,never,PD disease history
+duration_yrs,non-motor clinical,curated cut,never,never,never,never,never,never,PD disease history
+DOMSIDE,non-motor clinical,curated cut,never,never,never,never,never,never,"PD disease history (interpretation: side of onset exists only for PD, like sym_*)"
+sym_tremor,non-motor clinical,curated cut,never,never,never,never,never,never,PD initial symptom
+sym_rigid,non-motor clinical,curated cut,never,never,never,never,never,never,PD initial symptom
+sym_brady,non-motor clinical,curated cut,never,never,never,never,never,never,PD initial symptom
+sym_posins,non-motor clinical,curated cut,never,never,never,never,never,never,PD initial symptom
+sym_other,non-motor clinical,curated cut,never,never,never,never,never,never,PD initial symptom
+sym_unknown,non-motor clinical,curated cut,never,never,never,never,never,never,PD initial symptom
+PDTRTMNT,non-motor clinical,curated cut,never,never,never,never,never,never,PD treatment
+LEDD,non-motor clinical,curated cut,never,never,never,never,never,never,PD treatment
+age_datscan,non-motor clinical,curated cut,never,never,never,never,never,never,age at a procedure (interpretation: procedure timing/availability; age itself is kept)
+age_LP,non-motor clinical,curated cut,never,never,never,never,never,never,age at a procedure (interpretation: procedure timing/availability; age itself is kept)
+age_upsit,non-motor clinical,curated cut,never,never,never,never,never,never,age at a procedure (interpretation: procedure timing/availability; age itself is kept)
+upsit,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+upsit_pctl,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+upsit_pctl15,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+moca,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+bjlot,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVS_JLO_MSSA,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVS_JLO_MSSAE,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+clockdraw,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVT_CLCKDRAW,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVZ_CLCKDRAW,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+hvlt_discrimination,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+hvlt_immediaterecall,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+hvlt_retention,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+HVLTFPRL,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+HVLTRDLY,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+HVLTREC,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVT_TOTAL_RECALL,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVT_DELAYED_RECALL,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVT_RETENTION,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVT_RECOG_DISC_INDEX,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+lexical,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVT_FAS,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVS_FAS,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+lns,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVS_LNS,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+MODBNT,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVS_BNT,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+PCTL_BNT,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+SDMTOTAL,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVT_SDM,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVSD_SDM,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+TMT_A,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+TMT_B,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVZ_TMTA,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVZ_TMTB,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+VLTANIM,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVT_SFTANIM,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+DVS_SFTANIM,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+MCI_testscores,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+cogstate,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+COG_COMPOSITE_INT,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+COG_COMPOSITE_EXT,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+CGI,non-motor clinical,curated cut,never,never,never,never,never,never,global impression
+PGI,non-motor clinical,curated cut,never,never,never,never,never,never,global impression
+PDAQ27,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+nqol_cogns,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+nqol_comms,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+nqol_lefs,motor,curated cut,safe,safe,safe,safe,safe,safe,
+nqol_uefs,motor,curated cut,safe,safe,safe,safe,safe,safe,
+MSEADLG,motor,curated cut,safe,safe,safe,safe,safe,safe,
+quip,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+quip_any,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+quip_gamble,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+quip_sex,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+quip_buy,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+quip_eat,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+quip_hobby,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+quip_pund,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+quip_walk,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+ess,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+rem,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+gds,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+stai,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+stai_state,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+stai_trait,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+scopa,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+scopa_gi,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+scopa_ur,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+scopa_cv,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+scopa_therm,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+scopa_pm,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+scopa_sex,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+orthostasis,non-motor clinical,curated cut,safe,safe,safe,safe,defining,defining,blood-pressure field
+hy,motor,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,MDS-UPDRS Part III / Hoehn & Yahr
+hy_on,motor,curated cut,never,never,never,never,never,never,"ON-medication score (interpretation: exists only for treated PD, like PDTRTMNT)"
+NHY,motor,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,MDS-UPDRS Part III / Hoehn & Yahr
+NHY_ON,motor,curated cut,never,never,never,never,never,never,"ON-medication score (interpretation: exists only for treated PD, like PDTRTMNT)"
+pigd,motor,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,derived from MDS-UPDRS Part II/III items
+pigd_on,motor,curated cut,never,never,never,never,never,never,"ON-medication score (interpretation: exists only for treated PD, like PDTRTMNT)"
+td_pigd,non-motor clinical,curated cut,never,never,never,never,never,never,PD disease history
+td_pigd_on,non-motor clinical,curated cut,never,never,never,never,never,never,PD disease history
+NP1COG,cognition,curated cut,safe,safe,safe,safe,safe,safe,
+NP1HALL,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+NP1DPRS,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+NP1ANXS,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+NP1APAT,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+NP1DDS,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+NP1FATG,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+updrs1_score,non-motor clinical,curated cut,safe,safe,safe,safe,safe,safe,
+updrs2_score,motor,curated cut,safe,safe,safe,safe,safe,safe,
+updrs3_score,motor,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,MDS-UPDRS Part III / Hoehn & Yahr
+updrs3_score_on,motor,curated cut,never,never,never,never,never,never,"ON-medication score (interpretation: exists only for treated PD, like PDTRTMNT)"
+updrs4_score,motor,curated cut,never,never,never,never,never,never,MDS-UPDRS Part IV (interpretation: motor complications of treatment; not in the 5.4 feature list)
+updrs_totscore,motor,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,contains MDS-UPDRS Part III
+updrs_totscore_on,motor,curated cut,never,never,never,never,never,never,"ON-medication score (interpretation: exists only for treated PD, like PDTRTMNT)"
+pm_any,milestone,curated cut,never,never,never,never,never,never,progression milestone
+pm_adl_any,milestone,curated cut,never,never,never,never,never,never,progression milestone
+pm_fd_any,milestone,curated cut,never,never,never,never,never,never,progression milestone
+pm_auto_any,milestone,curated cut,never,never,never,never,never,never,progression milestone
+pm_cog_any,milestone,curated cut,never,never,never,never,never,never,progression milestone
+pm_mc_any,milestone,curated cut,never,never,never,never,never,never,progression milestone
+pm_wb_any,milestone,curated cut,never,never,never,never,never,never,progression milestone
+CSFSAA,biofluid,curated cut,near_proxy,defining,safe,safe,safe,safe,alpha-synuclein SAA / CSF alpha-synuclein
+CSFSAA_assay,biofluid,curated cut,never,never,never,never,never,never,which SAA assay was run (availability indicator)
+abeta,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+abeta_LLOD,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+abeta_ULOD,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+tau,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+tau_LLOD,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+ptau,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+ptau_LLOD,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+asyn,biofluid,curated cut,near_proxy,defining,safe,safe,safe,safe,alpha-synuclein SAA / CSF alpha-synuclein
+hemohi,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+urate,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+ptau217_plasma,biofluid,curated cut,safe,safe,near_proxy,near_proxy,safe,safe,plasma tau near-proxy
+bd_tau_plasma,biofluid,curated cut,safe,safe,near_proxy,near_proxy,safe,safe,plasma tau near-proxy
+Lilly_ptau217p,biofluid,curated cut,safe,safe,near_proxy,near_proxy,safe,safe,plasma tau near-proxy
+Lilly_ptau217p_LLOD,biofluid,curated cut,safe,safe,near_proxy,near_proxy,safe,safe,plasma tau near-proxy
+IU_pTau181_CSF,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+IU_ABeta40_CSF,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+IU_ABeta42_CSF,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+IU_GFAP_plasma_mean,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+IU_GFAP_plasma_std,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+IU_NFL_plasma_mean,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+IU_NFL_plasma_std,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+C2N_AB40,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+C2N_AB42,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+C2N_AB4240,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+C2N_AB_Contaminant,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+MTBR_TAU243,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+MTBR_TAU243_LLOD,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+MTBR_TAU243_InstErr,biofluid,curated cut,safe,safe,defining,defining,safe,safe,CSF/plasma amyloid or tau measure
+Roche_IL_1b_CSF,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+Roche_IL_6_CSF,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+Roche_IL_6_CSF_LLOD,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+Roche_YKL40_CSF,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+Roche_YKL40_CSF_LLOD,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+NFL_CSF,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+NFL_CSF_ULOD,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+nfl_serum,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+total_di_18_1_BMP,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+total_di_22_6_BMP,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+_2_2__di_22_6_BMP,biofluid,curated cut,safe,safe,safe,safe,safe,safe,
+APOE,genetics,curated cut,never,never,never,never,never,never,text genotype; APOE_e4 is the feature
+APOE_e4,genetics,curated cut,safe,safe,safe,safe,safe,safe,
+GP2_proxy_PGS,genetics,curated cut,safe,safe,safe,safe,safe,safe,
+META5_proxy_PGS,genetics,curated cut,safe,safe,safe,safe,safe,safe,
+MIA_LOWPUT_EXPECTED,DAT,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,DAT SBR
+MIA_CAUDATE_L,DAT,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,DAT SBR
+MIA_CAUDATE_R,DAT,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,DAT SBR
+MIA_CAUDATE_BILAT,DAT,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,DAT SBR
+MIA_PUTAMEN_L,DAT,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,DAT SBR
+MIA_PUTAMEN_R,DAT,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,DAT SBR
+MIA_PUTAMEN_BILAT,DAT,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,DAT SBR
+MIA_STRIATUM_L,DAT,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,DAT SBR
+MIA_STRIATUM_R,DAT,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,DAT SBR
+MIA_STRIATUM_BILAT,DAT,curated cut,near_proxy,near_proxy,safe,safe,safe,safe,DAT SBR
+Stage_partial_UPDRS1,NSD-ISS,curated cut,never,never,never,never,never,never,NSD-ISS field
+Stage_subpark,NSD-ISS,curated cut,never,never,never,never,never,never,NSD-ISS field
+Stage_PDTreat,NSD-ISS,curated cut,never,never,never,never,never,never,NSD-ISS field
+Stage_S,NSD-ISS,curated cut,never,never,never,never,never,never,NSD-ISS field
+Stage_D,NSD-ISS,curated cut,never,never,never,never,never,never,NSD-ISS field
+Stage_G,NSD-ISS,curated cut,never,never,never,never,never,never,NSD-ISS field
+aseg_Left_WM_hypointensities,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Brain_Stem,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_non_WM_hypointensities,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Optic_Chiasm,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_WM_hypointensities,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_BrainSegVol,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_Lateral_Ventricle,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_CC_Central,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_5th_Ventricle,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_choroid_plexus,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_Cerebellum_White_Matter,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_vessel,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_Cerebellum_Cortex,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_MaskVol_to_eTIV,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_MaskVol,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_TotalGrayVol,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_choroid_plexus,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_Inf_Lat_Vent,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_Pallidum,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_Thalamus,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_VentralDC,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_rhCortexVol,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_non_WM_hypointensities,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_BrainSegVol_to_eTIV,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_Amygdala,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_Amygdala,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_EstimatedTotalIntraCranialVol,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_4th_Ventricle,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_Inf_Lat_Vent,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_CortexVol,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_Pallidum,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_lhCortexVol,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_CC_Anterior,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_CC_Posterior,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_Accumbens_area,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_vessel,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_Cerebellum_Cortex,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_Putamen,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_3rd_Ventricle,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_non_WM_hypointensities,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_Caudate,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_CC_Mid_Posterior,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_lhSurfaceHoles,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_Hippocampus,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_Hippocampus,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_Caudate,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_rhCerebralWhiteMatterVol,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_Putamen,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_WM_hypointensities,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_Accumbens_area,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_rhSurfaceHoles,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_lhCerebralWhiteMatterVol,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_BrainSegVolNotVent,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_Cerebellum_White_Matter,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_VentralDC,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_SupraTentorialVolNotVent,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_CC_Mid_Anterior,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_SupraTentorialVol,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_SubCortGrayVol,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Right_Thalamus,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_Left_Lateral_Ventricle,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_CSF,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_SurfaceHoles,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aseg_CerebralWhiteMatterVol,MRI,FS7_ASEG_VOL,safe,safe,safe,safe,safe,safe,FreeSurfer volume
+aparc_lh_bankssts,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_caudalanteriorcingulate,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_caudalmiddlefrontal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_cuneus,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_entorhinal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_fusiform,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_inferiorparietal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_inferiortemporal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_isthmuscingulate,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_lateraloccipital,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_lateralorbitofrontal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_lingual,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_medialorbitofrontal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_middletemporal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_parahippocampal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_paracentral,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_parsopercularis,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_parsorbitalis,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_parstriangularis,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_pericalcarine,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_postcentral,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_posteriorcingulate,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_precentral,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_precuneus,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_rostralanteriorcingulate,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_rostralmiddlefrontal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_superiorfrontal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_superiorparietal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_superiortemporal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_supramarginal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_frontalpole,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_temporalpole,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_transversetemporal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_insula,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_lh_MeanThickness,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_bankssts,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_caudalanteriorcingulate,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_caudalmiddlefrontal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_cuneus,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_entorhinal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_fusiform,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_inferiorparietal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_inferiortemporal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_isthmuscingulate,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_lateraloccipital,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_lateralorbitofrontal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_lingual,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_medialorbitofrontal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_middletemporal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_parahippocampal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_paracentral,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_parsopercularis,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_parsorbitalis,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_parstriangularis,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_pericalcarine,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_postcentral,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_posteriorcingulate,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_precentral,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_precuneus,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_rostralanteriorcingulate,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_rostralmiddlefrontal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_superiorfrontal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_superiorparietal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_superiortemporal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_supramarginal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_frontalpole,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_temporalpole,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_transversetemporal,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_insula,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+aparc_rh_MeanThickness,MRI,FS7_APARC_CTH,safe,safe,safe,safe,safe,safe,FreeSurfer cortical thickness
+gba_carrier,genetics,iu_genetic_consensus,safe,safe,safe,safe,safe,safe,derived carrier flag
+lrrk2_carrier,genetics,iu_genetic_consensus,safe,safe,safe,safe,safe,safe,derived carrier flag
+saa_status_bl,biofluid,SAA_Biospecimen_Analysis_Results,near_proxy,defining,never,never,never,never,"text status; defines pd_type_saa_v1; near-proxy for pd_type_v1 (text, so not usable by the numeric models)"
+saa_n_results_bl,biofluid,SAA_Biospecimen_Analysis_Results,never,defining,never,never,never,never,availability count
+lumi_abeta42,biofluid,Current_Biospecimen_Analysis_Results project 283,safe,safe,defining,defining,safe,safe,Lumipulse CSF
+lumi_abeta40,biofluid,Current_Biospecimen_Analysis_Results project 283,safe,safe,defining,defining,safe,safe,Lumipulse CSF
+lumi_ptau181,biofluid,Current_Biospecimen_Analysis_Results project 283,safe,safe,defining,defining,safe,safe,Lumipulse CSF
+lumi_ratio_4240,biofluid,Current_Biospecimen_Analysis_Results project 283,safe,safe,defining,defining,safe,safe,Lumipulse CSF
+elecsys_ptau_abeta_ratio,biofluid,derived from the curated cut,safe,safe,defining,defining,safe,safe,the AD-like ratio itself
+ad_like_v1_censored,biofluid,derived from the curated cut,never,never,never,never,never,never,1 if abeta or ptau used for ad_like_v1 is a boundary substitution (reporting only)
+sup_sbp,vascular evidence,Vital_Signs,safe,safe,safe,safe,defining,defining,supine blood pressure
+sup_dbp,vascular evidence,Vital_Signs,safe,safe,safe,safe,defining,defining,supine blood pressure
+htn_bp,vascular evidence,derived,safe,safe,safe,safe,defining,defining,vascular evidence or component
+htn_med_definite,vascular evidence,derived,safe,safe,safe,safe,defining,defining,vascular evidence or component
+htn_med_conditional,vascular evidence,derived,safe,safe,safe,safe,defining,defining,vascular evidence or component
+dm_med,vascular evidence,derived,safe,safe,safe,safe,defining,defining,vascular evidence or component
+dyslipid_med,vascular evidence,derived,safe,safe,safe,safe,defining,defining,vascular evidence or component
+comp_htn,vascular evidence,derived,safe,safe,safe,safe,defining,defining,vascular evidence or component
+comp_dm,vascular evidence,derived,safe,safe,safe,safe,defining,defining,vascular evidence or component
+comp_dyslip,vascular evidence,derived,safe,safe,safe,safe,defining,defining,vascular evidence or component
+vascular_component_count,vascular evidence,derived,safe,safe,safe,safe,defining,defining,vascular evidence or component
+htn_evaluable,vascular evidence,derived,never,never,never,never,defining,defining,evaluability flag (availability indicator)
+bp_source,vascular evidence,derived,never,never,never,never,defining,defining,which visit the blood pressure came from
+med_record_any,vascular evidence,derived,never,never,never,never,never,never,whether any medication record exists (availability indicator)
+cohort,identifier/meta,derived,never,never,never,never,never,never,cohort label text
+fold,identifier/meta,derived,never,never,never,never,never,never,development-set fold assignment (development file only)
+bl_year,identifier/meta,derived,never,never,never,never,never,never,baseline visit date part
+bl_month,identifier/meta,derived,never,never,never,never,never,never,baseline visit date part
+label_pd_type_v1,label,derived,never,never,never,never,never,never,target label
+label_pd_type_saa_v1,label,derived,never,never,never,never,never,never,target label
+label_ad_like_v1,label,derived,never,never,never,never,never,never,target label
+label_ad_like_v1_cut028,label,derived,never,never,never,never,never,never,target label
+label_ad_like_v1_cut022,label,derived,never,never,never,never,never,never,target label
+label_ad_like_v1_greyzone,label,derived,never,never,never,never,never,never,target label
+label_ad_like_v1_uncensored,label,derived,never,never,never,never,never,never,target label
+label_ad_like_v1_amyloid_only,label,derived,never,never,never,never,never,never,target label
+label_ad_like_lumipulse_v1,label,derived,never,never,never,never,never,never,target label
+label_vascular_v1,label,derived,never,never,never,never,never,never,target label
+label_vascular_v2,label,derived,never,never,never,never,never,never,target label

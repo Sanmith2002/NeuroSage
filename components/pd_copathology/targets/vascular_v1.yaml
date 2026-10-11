@@ -1,0 +1,68 @@
+# Target card: vascular-risk signal (primary) — version 1
+target_id: vascular
+version: v1
+status: frozen_pending_supervisor_signoff
+construct: >
+  Research proxy for treated or measured vascular risk-factor burden at
+  baseline: hypertension, diabetes and dyslipidaemia identified from
+  medications ongoing at baseline and supine blood pressure. Not a diagnosis
+  of vascular disease.
+
+source:
+  tables: [Concomitant_Medication_Log, Vital_Signs, PPMI_Curated_Data_Cut_Public_20260810]
+  visit: BL
+  columns:
+    medication_names: [CMTRT, WHODRUG]
+    start_date: STARTDT
+    stop_date: STOPDT
+    indication_code: CMINDC
+    indication_text: CMINDC_TEXT
+    supine_sbp: SYSSUP
+    supine_dbp: DIASUP
+    baseline_visit_month: visit_date
+  drug_lists: configs/drug_classes.yaml
+
+preprocessing:
+  technical_value_handling: >
+    Dates are compared at month precision with the curated BL visit month. A
+    year-only start date in the BL year is ambiguous and not counted; missing
+    or unparseable start dates are not counted; a year-only stop date in the
+    BL year counts as ongoing. Supine BP is the BL reading (mean if several),
+    with the SC reading used only when BL has none.
+  ongoing_at_baseline: "STARTDT month <= BL month AND (STOPDT missing OR STOPDT month >= BL month)"
+  components:
+    HTN: "ongoing definite antihypertensive OR ongoing conditional antihypertensive with a hypertension indication OR supine SBP >= 140 OR DBP >= 90"
+    DM: "ongoing antidiabetic drug"
+    DYSLIP: "ongoing lipid-lowering drug"
+  assumption: >
+    The Concomitant Medication Log is treated as a complete list of current
+    medications: no record of a drug class means the participant is not
+    taking it.
+
+rule:
+  positive: "at least 2 of {HTN, DM, DYSLIP}"
+  negative: "fewer than 2 components AND (HTN is evaluable OR DM + DYSLIP = 0, so that HTN could not make it 2)"
+  masked: "HTN is not evaluable (no supine BP and no qualifying antihypertensive) AND DM + DYSLIP = 1"
+  min_components: 2
+  bp_thresholds: {sbp: 140, dbp: 90}
+  citation: >
+    docs/phase1_final_decisions_v1.md section 5.2 and the 11 Oct 2026
+    implementation rules; blood-pressure thresholds follow the conventional
+    140/90 mmHg definition of hypertension.
+
+eligible_population: "All baseline-universe cohorts in whom the label can be decided (expected about 5,000)"
+
+sensitivity_variants:
+  - id: vascular_v2
+    rule: "at least 1 of {HTN, DM, DYSLIP}; separate card"
+
+leakage:
+  defining_features: [sup_sbp, sup_dbp, htn_bp, htn_med_definite, htn_med_conditional, dm_med,
+                      dyslipid_med, htn_evaluable, comp_htn, comp_dm, comp_dyslip,
+                      vascular_component_count, orthostasis]
+  never_features: "see configs/leakage_matrix.csv"
+  strict_tier_also_exclude: "Medical_Conditions_Log categories, if they are ever added as features"
+
+limitations:
+  - "Captures treated or measured risk factors; under-captures untreated disease."
+  - "Affected by PD-related low blood pressure and by medication recording quality."

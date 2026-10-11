@@ -1,0 +1,53 @@
+# Target card: AD-like CSF biomarker signal, Lumipulse replication — version 1
+target_id: ad_like_lumipulse
+version: v1
+status: frozen_pending_supervisor_signoff
+construct: >
+  Replication of the AD-like (amyloid) signal on an independent platform: the
+  baseline CSF Abeta42/Abeta40 ratio measured with Fujirebio Lumipulse in
+  project 283. Never pooled with the Elecsys values of ad_like_v1. Not a diagnosis.
+
+source:
+  table: Current_Biospecimen_Analysis_Results    # never the Pilot or Deprecated tables
+  visit: BL
+  project: 283
+  sample_matrix: CSF
+  tests:
+    abeta42: ABeta42
+    abeta40: ABeta40
+    ptau181: pTau181        # carried for description only; not part of this label
+
+preprocessing:
+  technical_value_handling: >
+    Non-numeric or non-positive values are masked. If a participant has more
+    than one BL result for a test, the mean is used.
+  derived_value: "ratio = ABeta42 / ABeta40"
+
+rule:
+  positive: "ratio < threshold (low Abeta42/Abeta40 = amyloid-positive)"
+  negative: "ratio >= threshold"
+  masked: "Abeta42 or Abeta40 missing or invalid at BL"
+  threshold_method: >
+    2-component Gaussian mixture fitted to log(ratio) of eligible
+    DEVELOPMENT-set participants only, after the frozen split, with a fixed
+    seed. The threshold is the point between the two component means where
+    the posterior probabilities are equal. It is saved to
+    configs/frozen/lumipulse_gmm_v1.json and applied unchanged to the test set.
+  threshold_file: configs/frozen/lumipulse_gmm_v1.json
+  citation: >
+    PPMI project 283 methods (Indiana University / NCRAD, Fujirebio Lumipulse);
+    docs/phase1_final_decisions_v1.md section 5.2 and the 11 Oct 2026 implementation rules.
+
+eligible_population: "All baseline-universe cohorts with project 283 CSF Abeta42 and Abeta40 at BL (expected about 1,919)"
+
+sensitivity_variants: []
+
+leakage:
+  defining_features: [lumi_abeta42, lumi_abeta40, lumi_ptau181, lumi_ratio_4240,
+                      IU_ABeta42_CSF, IU_ABeta40_CSF, IU_pTau181_CSF]
+  never_features: "every CSF amyloid/tau field of either platform; see configs/leakage_matrix.csv"
+  strict_tier_also_exclude: [Lilly_ptau217p, Lilly_ptau217p_LLOD, ptau217_plasma, bd_tau_plasma]
+
+limitations:
+  - "The cut-off is data-driven (mixture model), not an externally validated threshold."
+  - "This label is never used to build the split."

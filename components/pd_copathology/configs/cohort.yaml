@@ -1,0 +1,11 @@
+# Cohort definition - placeholder.
+# Filled in after the dataset audit (notebooks/02_cohort_definition.ipynb).
+# No PPMI column names are fixed yet.
+version: 0
+status: draft
+
+inclusion: []
+exclusion: []
+
+visits:
+  policy: null   # e.g. baseline only vs. longitudinal - to be decided
