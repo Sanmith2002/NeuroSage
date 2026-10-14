@@ -2,7 +2,7 @@
 
 **Project:** Explainable Co-Pathology Signal Estimation in Parkinson's Disease Using PPMI Data (J26-DS-306)
 **Branch / worktree:** `feature/pd-copathology` in `NeuroSage-pd-copathology`
-**Status at 11 Oct 2026, 16:45:** Phase 2 is permanently frozen and Phase 3 training is ready to start.
+**Status at 14 Oct 2026:** Phase 3 model development, robustness, explainability and the one-time held-out final evaluation are complete. The selected models are frozen and the final-evaluation lock has been written. The component is moving to read-only reporting and frozen-model inference (JSON output contract). API, database and frontend integration are pending a team architecture decision.
 **Companion document:** `docs/phase1_final_decisions_v1.md`, which holds the authoritative scientific decisions. This log records *what was done, in what order, and why*.
 **Place in repo:** `components/pd_copathology/docs/PROGRESS_LOG.md`
 
@@ -24,8 +24,14 @@
 | 9 | Phase 2 | Cohort builder, six label variants, machine-readable leakage matrix, frozen split, test-set guard | 5,019 × 385 table; balanced 4,015 / 1,004 split |
 | 10 | Phase 2 review | Two independent reviews of the aggregate reports | Found the AD-like censoring bias and smaller issues (below) |
 | 11 | Phase 2.1 | Fixes plus re-freeze (the only re-freeze allowed) | AD-like eligible 1,029 → 1,277; split rebuilt and locked |
-| 12 | Phase 3 harness | Nested CV, two-stage selection, robustness, extras, SHAP, locked final evaluation | 113 synthetic tests pass; five candidate models |
-| 13 | Git | Four local commits; nothing pushed | Checkpoint safe |
+| 12 | Phase 3 harness | Nested CV, two-stage selection, robustness, extras, SHAP, locked final evaluation | 113 synthetic tests pass at this point; five candidate models |
+| 13 | Git | Local checkpoint commits; nothing pushed | Checkpoint safe |
+| 13b | Phase 3 stability fix | HGB failed on all-NaN / constant features inside some folds. Added fold-safe `DropDegenerateColumns` (pipeline version 2), fail-loud on all-failed trials, and `reset-cv` to discard the old CV run | CV restarted cleanly; 127 synthetic tests pass |
+| 14 | Phase 3 training and selection | Nested CV of 5 candidates + 2 baselines; two-stage selection; robustness, ablation, sensitivity labels, SHAP; PD missingness audit | RF / elastic-net LR / RF selected; all gates passed |
+| 15 | Pre-test review | `phase3_development_review.md` written and committed before test access; approval file created (2026-10-14) | Caveats recorded before the test |
+| 16 | Final evaluation | One-time held-out test evaluation | Held-out results consistent with development estimates; models frozen; lock written |
+| 17 | Current stage | Phase 3b read-only held-out reporting, then Phase 4A frozen-model inference + input/output JSON contracts + CLI | In progress |
+| 18 | Later (team decision) | Shared API, database, frontend and Safety Framework integration | Pending team architecture decision |
 
 ---
 
@@ -60,6 +66,8 @@
 | Limit flags could leak cohort | Supporter review | Flags set to `never` as predictors |
 | Lumipulse GMM could silently re-fit | Claude Code traceability check | Hash recorded in the manifest; a normal run fails if the file is missing or changed |
 | Smoke tests could write into the tracked registry | Supporter review | Smoke runs use scratch paths; the registry is checked unchanged |
+| HGB crashed on features that were all-missing or constant within a training fold | First real CV run (ValueError) | Fold-safe `DropDegenerateColumns` fitted inside each fold; pipeline version 2; fail-loud if all trials fail; old CV discarded with `reset-cv` and re-run |
+| PD model could learn from missingness patterns | Phase 3 review (missingness-only check) | Missingness audit plus low-missingness re-run: strict BSS 0.760 vs 0.768, so the PD signal does not depend on missingness |
 
 ---
 
@@ -101,7 +109,7 @@
 
 ---
 
-## 5. Phase 3 plan (ready to run)
+## 5. Phase 3 methodology and run protocol (completed)
 
 **Candidates (per label, binary relevance):**
 1. L2 logistic regression
@@ -146,6 +154,11 @@
 | `769c789` | Component skeleton, audit, Phase 2/2.1 pipeline, Phase 3 harness |
 | `602a806` | `.gitattributes` (nbstripout), `data/README.md`; Lumipulse GMM file untracked |
 | `48aa388` | L2 LR candidate, never-flag censoring indicators, provisional lock, GMM hash traceability |
+| `9f72edf` | Fold-safe degenerate-column handling (`DropDegenerateColumns`) and Phase 3 CV restart support (`reset-cv`) |
+| `40ff1c3` | PD missingness audit and low-missingness re-run |
+| `4cf22ac` | Pre-test development review and decisions log; selection approved for held-out evaluation |
+
+From 14 Oct 2026, all commits are made manually by the student; the coding agent does not stage, commit or push.
 
 - **Not tracked:** `data/`, `reports/`, `models/final/`, `configs/frozen/lumipulse_gmm_v*.json`, approval and lock files.
 - **Not pushed.** Before any push, confirm with the supervisor what PPMI-derived material may be shared.
@@ -162,4 +175,49 @@
   - only 336 healthy controls;
   - MRI covers about a third of participants;
   - no external validation.
-- **After the deadline:** FastAPI inference endpoint, prototype view, and the JSON contract with the Safety Framework.
+- **Current:** frozen inference package + input/output JSON contracts + CLI (Phase 4A), after read-only held-out reporting (Phase 3b).
+- **Later, after the team architecture decision:** shared API, database persistence and frontend integration with the Clinical Predictive Safety Framework.
+
+---
+
+## 8. Phase 3 results (development CV, 11–13 Oct; held-out test, 14 Oct 2026)
+
+**Selected models** (frozen selection SHA-256 `07ff5edb…d090646`; approval dated 2026-10-14):
+- PD-type: Random Forest
+- AD-like: elastic-net logistic regression
+- Vascular: Random Forest
+
+All gates passed, so no label was provisional. The caveats in `docs/phase3_development_review.md` were recorded **before** the test.
+
+| Signal | Metric | Development (out-of-fold) | Held-out test (95% bootstrap CI) |
+|---|---|---|---|
+| PD-type (n test 404) | AUROC | 0.9997 | 0.998 (0.995–1.000) |
+| | BSS | 0.961 | 0.965 (0.923–0.999) |
+| | Calibration slope | 1.30 (pooled; fold-wise unstable) | 1.15 (0.96–4.49) |
+| AD-like (n test 255, ~28 positives) | AUROC | 0.801 | 0.799 (0.682–0.897) |
+| | AUPRC (prevalence ≈ 0.11) | 0.434 | 0.457 (0.290–0.662) |
+| | BSS | 0.185 | 0.206 (0.076–0.325) |
+| | Calibration slope | 1.12 | 1.23 (0.74–1.90) |
+| Vascular (n test 1,002) | AUROC | 0.711 | 0.731 (0.694–0.764) |
+| | AUPRC (prevalence ≈ 0.28) | 0.475 | 0.473 (0.418–0.539) |
+| | BSS | 0.110 | 0.122 (0.084–0.159) |
+| | Calibration slope | 1.10 | 1.17 (0.96–1.39) |
+| System | Macro BSS | 0.418 | 0.431 |
+| (eligible for all three labels) | Hamming loss / macro-F1 | 0.158 / 0.659 | 0.166 / 0.661 (n = 165) |
+
+**Interpretation:**
+- Held-out performance was consistent with the development estimates for all three signals, with no material evidence of overfitting or optimistic model selection.
+- AD-like and vascular BSS confidence intervals exclude 0, so both signals perform better than predicting prevalence on unseen participants.
+- The AD-like intervals are wide because of the small number of positives.
+- The calibration-slope intervals for AD-like and vascular include 1. The PD-type slope interval is wide because of near-perfect separation.
+- The vascular threshold favours recall (0.86) over precision (0.38).
+- The interpretation caveats from the development review still apply.
+
+Final models are saved in `models/final/v1.0/` (git-ignored) and the final-evaluation lock is written. **No further model changes are allowed.**
+
+**Wording rules for the dissertation and viva:**
+- "Estimates an AD-like research proxy signal", not "diagnoses Alzheimer's disease".
+- "Estimates treated or measured vascular risk-factor burden", not "detects vascular disease".
+- "Held-out performance was consistent with development estimates", not "no overfitting occurred".
+- "MRI features contributed to individual predictions, but ablation showed little unique incremental contribution", not "MRI is essential because SHAP is high".
+- No new baseline was fitted on the held-out set after test access; held-out comparison with the prevalence reference is given by the Brier Skill Score.
