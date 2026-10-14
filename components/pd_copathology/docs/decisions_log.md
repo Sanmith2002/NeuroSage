@@ -287,6 +287,21 @@ Reason: Shows how much of the PD-type result survives when only features that ar
 Impact: phase3/missingness.py, training/train.py (optional per-fold column rule), phase3/core.run (optional `select`).
 ```
 
+### Phase 3 development review (14 October 2026)
+
+```
+Date: 2026-10-14
+Decision: Phase 3 development review completed; development-stage selection approved for held-out evaluation
+  (rf / lr_enet / rf). Interpretation caveats were recorded in phase3_development_review.md before accessing
+  the held-out test set.
+Evidence: docs/phase3_development_review.md (written before the final test; selection file
+  configs/frozen/selected_models_v1.yaml, SHA-256 recorded in that document).
+Alternatives considered: None; the frozen protocol decided the selection.
+Reason: Interpretation limits (PD-type near the ceiling, fold-wise calibration slopes, moderate AD-like stability,
+  SHAP versus ablation) must be on record before the test result can influence the wording.
+Impact: Documentation only. No code, configuration, label, feature set or frozen selection changed.
+```
+
 ### Phase 2 — implementation (11 October 2026)
 
 ```
