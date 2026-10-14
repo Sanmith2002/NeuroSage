@@ -23,6 +23,13 @@ _STRUCTURED_RE = re.compile(
     r"^(-?\d+(\.\d+)*|<\d+|\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2})?)?)$"
 )
 _TEXT_SUFFIXES = {".csv", ".md", ".json", ".txt"}
+# A plain number as a report writes it (integer, decimal, exponent), a suppression marker such as "<5", or an empty cell.
+_NUMBER_RE = re.compile(r"^([+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?|<\d+|nan|inf|-inf)?$")
+# A word for the strict text check: a decimal number stays ONE word ("0.7101" is not the word "7101").
+_WORD_RE = re.compile(r"\d+(?:\.\d+)+|[A-Za-z0-9]+")
+# Column names that are identifier columns: they fail the scan whatever they contain.
+IDENTIFIER_COLUMNS = {"patno", "patnos", "participant_id", "participantid", "participant", "subject_id", "subjectid", "subject",
+                      "subjid", "subj_id", "patient_id", "patientid", "patient", "pid", "id"}
 
 # Columns whose cells are a controlled vocabulary copied from the data (assay
 # test names, units, censoring tokens). They legitimately contain numbers such
@@ -96,6 +103,15 @@ def checkable_ids(ids: Iterable[str]) -> tuple[set[str], int]:
 
 def _tokens(text: str) -> set[str]:
     return set(_TOKEN_RE.findall(text))
+
+
+def _is_number(cell: str) -> bool:
+    return bool(_NUMBER_RE.match(cell.strip()))
+
+
+def _words(text: str) -> set[str]:
+    """Whole words of a text, with a trailing ``.0`` removed so that ``3101.0`` reads as ``3101``."""
+    return {normalise_id(w) for w in _WORD_RE.findall(text)}
 
 
 def _json_strings(node: object) -> Iterable[str]:
@@ -206,7 +222,7 @@ def reference_table_issue(frame, ids: Iterable[str]) -> str:
 
 
 def scan_reports_for_ids(
-    root: Path, ids: Iterable[str], exclude_dirs: tuple[Path, ...] = ()
+    root: Path, ids: Iterable[str], exclude_dirs: tuple[Path, ...] = (), declared: dict[str, Iterable[str]] | None = None
 ) -> list[dict[str, object]]:
     """Scan every text report under ``root`` for participant identifiers.
 
@@ -223,6 +239,17 @@ def scan_reports_for_ids(
 
     Identifiers containing a letter are additionally searched for in the whole
     text of every file. Findings never contain the identifier itself.
+
+    CSV columns are checked by kind. A column named like an identifier (PATNO,
+    participant_id, ...) always fails. A *declared* aggregate column (an
+    ``n_*``/``pct_*``/metric column, or one listed for that file in ``declared``,
+    a mapping ``file name -> column names``) may hold numbers, which are not
+    compared with identifiers at all (a count can equal an identifier by
+    chance); any non-numeric cell in it is still checked as text. Every other
+    column is checked strictly: a numeric cell must not equal an identifier, and
+    a text cell must not contain one as a whole word (a decimal such as
+    ``0.7101`` is one word, not the word ``7101``). Unknown columns are never
+    trusted.
 
     ``exclude_dirs`` are skipped: the printed documentation tables under
     ``reference/`` hold counts and project numbers as plain cells and are
@@ -241,6 +268,11 @@ def scan_reports_for_ids(
     def token_hits(text: str) -> int:
         return len(_tokens(text) & simple) + sum(1 for c in compound if c in text)
 
+    def word_hits(text: str) -> int:
+        return len(_words(text) & simple) + sum(1 for c in compound if c in text)
+
+    declared_columns = {Path(name).name.lower(): {str(c) for c in columns} for name, columns in (declared or {}).items()}
+
     skipped = [Path(d).resolve() for d in exclude_dirs]
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
         suffix = path.suffix.lower()
@@ -258,12 +290,20 @@ def scan_reports_for_ids(
             record(token_hits(" ".join(header)), path, "header")
             for idx, name in enumerate(header):
                 cells = [r[idx].strip() for r in rows[1:] if idx < len(r)]
+                if name.strip().lower() in IDENTIFIER_COLUMNS:
+                    record(1, path, f"column {name} (identifier-named column)")
+                    continue
                 if name in VOCABULARY_COLUMNS:
                     record(len({normalise_id(c) for c in cells} & wanted), path, f"column {name}")
                     continue
-                if is_generated_column(name):
-                    cells = [c for c in cells if not _STRUCTURED_RE.match(c)]
-                record(token_hits(" ".join(cells)), path, f"column {name}")
+                if is_generated_column(name) or name in declared_columns.get(path.name.lower(), ()):
+                    # declared aggregate column: numbers and suppression markers are not compared with identifiers
+                    text_cells = [c for c in cells if not (_STRUCTURED_RE.match(c) or _is_number(c))]
+                    record(word_hits(" ".join(text_cells)), path, f"column {name}")
+                    continue
+                numbers = [normalise_id(c) for c in cells if c and _is_number(c)]  # undeclared: strict
+                record(sum(1 for c in numbers if c in wanted) + word_hits(" ".join(c for c in cells if c and not _is_number(c))),
+                       path, f"column {name}")
         elif suffix == ".json":
             try:
                 strings = [s for s in _json_strings(json.loads(text)) if not _STRUCTURED_RE.match(s.strip())]

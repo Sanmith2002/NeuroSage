@@ -316,10 +316,19 @@ def write_text(ctx: Context, text: str, path: Path) -> Path:
     return path
 
 
+# Aggregate numeric columns of reports, beyond the generic n_* / pct_* / metric names (see data.privacy.scan_reports_for_ids).
+# They hold computed metrics, confidence bounds or counts only; a number in them is never compared with an identifier.
+AGGREGATE_COLUMNS = {
+    "dev_vs_test.csv": {"dev_oof_pooled", "heldout", "heldout_ci_low", "heldout_ci_high"},
+    "final_test_results.csv": {"value", "ci_low", "ci_high"},
+    "final_test_supplementary.csv": {"value"},
+}
+
+
 def privacy_check(ctx: Context, extra_ids: list[str] | None = None) -> int:
     """Scan every Phase 3 report for participant identifiers; delete this command's reports if one is found."""
     ids = set(ctx.frame[KEY].astype(str)) | set(extra_ids or [])
-    findings = scan_reports_for_ids(ctx.paths.reports, ids) if ctx.paths.reports.is_dir() else []
+    findings = scan_reports_for_ids(ctx.paths.reports, ids, declared=AGGREGATE_COLUMNS) if ctx.paths.reports.is_dir() else []
     if findings:
         for path in ctx.written:
             Path(path).unlink(missing_ok=True)

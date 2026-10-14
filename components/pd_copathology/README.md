@@ -160,6 +160,7 @@ python -m copath.phase3 extras                      # 5. ablation, sensitivity l
 python -m copath.phase3 explain                     # 6. SHAP reports for the selected models
 # ---- human review of reports/phase3 ----
 python -m copath.phase3 final --final               # 7. single test-set evaluation (locked, see below)
+python -m copath.phase3 report-final               # read-only held-out reports/figures from the predictions `final` saved
 python -m copath.phase3 missingness-audit           # pd_type_v1: PD vs HC availability per feature + low-gap-features run
 python -m copath.phase3 reset-cv --confirm          # restart cv from scratch (removes ONLY the cv outputs; see below)
 ```

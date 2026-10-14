@@ -862,3 +862,296 @@ def test_missingness_audit_without_a_frozen_selection_writes_the_audit_and_expla
     with pytest.raises(Phase3Error, match="select --stage final"):
         missingness.cmd_missingness_audit(load_context(paths))
     assert (paths.reports / "pd_missingness_audit.csv").is_file() and not (paths.reports / "pd_low_missingness_run.csv").exists()
+
+
+# ------------------------------------------------------- report-final (read-only held-out reporting)
+
+@pytest.fixture(scope="session")
+def finished(pipe, phase2, tmp_path_factory):
+    """A synthetic pipeline in which `final` has run once (synthetic approval), as report-final expects to find it."""
+    import os
+
+    paths = phase3_paths(tmp_path_factory.mktemp("phase3_finished"), phase2, **FAST)
+    for source, target in ((pipe.processed, paths.processed), (pipe.runs, paths.runs), (pipe.frozen, paths.frozen)):
+        shutil.copytree(source, target)
+    shutil.copy(pipe.registry, paths.registry)
+    paths.config.write_text(pipe.config.read_text(encoding="utf-8"), encoding="utf-8")
+    chosen = yaml.safe_load(paths.selected.read_text(encoding="utf-8"))
+    paths.approval.write_text(yaml.safe_dump({"approved": True, "reviewer": "Synthetic Reviewer", "date": "2031-01-01",
+                                              "selected_models_sha256": sha256(paths.selected),
+                                              "acknowledge_provisional": chosen["provisional_labels"]}), encoding="utf-8")
+    os.environ.pop(split.FINAL_EVALUATION_ENV, None)
+    final.cmd_final(paths, final_flag=True)
+    return paths
+
+
+def _finished_copy(finished, work):
+    shutil.copytree(finished.config.parent, work)
+    return Paths(config=work / "phase3.yaml", frozen=work / "frozen", processed=work / "processed", splits=finished.splits,
+                 reports=work / "reports" / "phase3", phase2_reports=finished.phase2_reports,
+                 registry=work / "experiments" / "registry.csv", runs=work / "experiments" / "phase3", models=work / "models" / "final")
+
+
+def _no_model_activity(monkeypatch):
+    """Patch every fit / tune / calibrate / predict entry point and the model loader so that any call fails the test."""
+    import joblib
+    from sklearn.calibration import CalibratedClassifierCV
+
+    def forbidden(name):
+        def call(*args, **kwargs):
+            raise AssertionError(f"report-final called {name}")
+        return call
+
+    for owner, name in ((train, "fit_predict"), (train, "outer_cv"), (tuning, "tune"), (candidates, "build"), (baselines, "build"),
+                        (joblib, "load"), (final, "cmd_final"), (CalibratedClassifierCV, "fit"), (CalibratedClassifierCV, "predict_proba")):
+        monkeypatch.setattr(owner, name, forbidden(f"{owner.__name__}.{name}"))
+
+
+def _watched(paths):
+    return {str(p): sha256(p) for folder in (paths.processed, paths.models, paths.frozen, paths.runs) for p in folder.rglob("*") if p.is_file()}
+
+
+def test_report_final_reads_saved_artifacts_only_and_reproduces_the_saved_metrics(finished, tmp_path, monkeypatch):
+    paths = _finished_copy(finished, tmp_path / "copy")
+    before, registry_before = _watched(paths), paths.registry.read_text(encoding="utf-8")
+    _no_model_activity(monkeypatch)
+    from copath.phase3 import report_final
+
+    report_final.cmd_report_final(load_context(paths))
+    assert _watched(paths) == before and paths.registry.read_text(encoding="utf-8") == registry_before  # nothing written outside reports/
+    table = _report(paths, "dev_vs_test.csv")
+    assert list(table.columns) == ["label", "model", "metric", "dev_oof_pooled", "heldout", "heldout_ci_low", "heldout_ci_high",
+                                   "n_dev_eligible", "n_test_eligible"]
+    assert set(table["label"]) == set(builders.PRIMARY_LABELS) and {"auroc", "auprc", "bss"} <= set(table["metric"])
+    saved = _report(paths, "final_test_results.csv")
+    for _, row in table.iterrows():  # the held-out values ARE the saved values, and the saved predictions reproduce them
+        mine = saved[(saved["label"] == row["label"]) & (saved["metric"] == row["metric"])].iloc[0]
+        assert row["heldout"] == mine["value"] and row["heldout_ci_low"] == mine["ci_low"]
+    chosen = yaml.safe_load(paths.selected.read_text(encoding="utf-8"))["labels"]
+    for label, choice in chosen.items():
+        test = pd.read_parquet(paths.processed / "final" / f"test_predictions_{label}.parquet")
+        prevalence = json.loads((paths.models / "v1.0" / label / "config.json").read_text(encoding="utf-8"))["development_prevalence"]
+        again = metrics.label_metrics(test["y"].to_numpy(), test["p_cal"].to_numpy(), np.full(len(test), prevalence), test["pred"].to_numpy())
+        value = float(table[(table["label"] == label) & (table["metric"] == "auroc")]["heldout"].iloc[0])
+        assert again["auroc"] == pytest.approx(value, abs=2e-4)
+        dev_value = float(table[(table["label"] == label) & (table["metric"] == "auroc")]["dev_oof_pooled"].iloc[0])
+        assert dev_value == pytest.approx(registry.load_details(paths.runs, choice["cv_run_id"])["summary"]["pooled"]["auroc"], abs=2e-4)
+        assert (paths.reports / "figures" / f"final_test_curves_{label}.png").is_file()
+    assert (paths.reports / "figures" / "final_test_summary.png").is_file()
+    held_out = _test_ids(paths)
+    for path in paths.reports.rglob("*"):
+        if path.suffix in (".csv", ".md"):
+            assert not any(pid in path.read_text(encoding="utf-8") for pid in held_out), path.name  # no participant IDs
+
+
+def test_supplementary_has_the_label_the_frozen_threshold_and_the_baseline_note_without_a_new_baseline(finished, tmp_path):
+    paths = _finished_copy(finished, tmp_path / "copy")
+    from copath.phase3 import report_final
+
+    report_final.cmd_report_final(load_context(paths))
+    supp = _report(paths, "final_test_supplementary.csv")
+    assert set(supp["section"]) == {"SUPPLEMENTARY / NOT PART OF THE PRE-SPECIFIED SELECTION PROTOCOL"}
+    for label in builders.PRIMARY_LABELS:
+        threshold = json.loads((paths.models / "v1.0" / label / "config.json").read_text(encoding="utf-8"))["threshold"]
+        part = supp[supp["label"] == label].set_index("item")
+        assert float(part.loc["frozen decision threshold (from the final bundle)", "value"]) == pytest.approx(threshold, abs=1e-6)
+        assert len([i for i in part.index if i.startswith("confusion count")]) == 4
+    note = supp[supp["item"] == "held-out baseline comparison"]["note"].iloc[0]
+    assert "Brier Skill Score" in note and "No new held-out baseline was fitted" in note
+    assert "age" not in " ".join(_report(paths, "dev_vs_test.csv")["model"])  # no baseline rows were added
+
+
+def test_without_a_persisted_frozen_threshold_the_confusion_counts_are_skipped_with_a_note(finished, tmp_path):
+    paths = _finished_copy(finished, tmp_path / "copy")
+    label = builders.PRIMARY_LABELS[0]
+    config = paths.models / "v1.0" / label / "config.json"
+    data = json.loads(config.read_text(encoding="utf-8"))
+    data.pop("threshold")
+    config.write_text(json.dumps(data), encoding="utf-8")
+    from copath.phase3 import report_final
+
+    report_final.cmd_report_final(load_context(paths))
+    part = _report(paths, "final_test_supplementary.csv")
+    mine = part[part["label"] == label]
+    assert list(mine["item"]) == ["confusion counts"] and "no frozen threshold is persisted" in mine["note"].iloc[0] and mine["value"].iloc[0] == ""
+    other = part[part["label"] == builders.PRIMARY_LABELS[1]]
+    assert other["item"].str.startswith("confusion count").sum() == 4  # the other signals are unaffected
+
+
+def test_a_missing_saved_artifact_stops_with_its_name_and_makes_no_prediction(finished, tmp_path, monkeypatch):
+    from copath.phase3 import report_final
+
+    label = builders.PRIMARY_LABELS[1]
+    for victim in (lambda p: p.processed / "final" / f"test_predictions_{label}.parquet",
+                   lambda p: p.models / "v1.0" / label / "config.json",
+                   lambda p: p.reports / "final_test_results.csv", lambda p: p.lock):
+        paths = _finished_copy(finished, tmp_path / f"copy{abs(hash(str(victim(finished))))}")
+        victim(paths).unlink()
+        _no_model_activity(monkeypatch)
+        with pytest.raises(Phase3Error, match="missing") as caught:
+            report_final.cmd_report_final(load_context(paths))
+        assert victim(paths).name in str(caught.value) and "no prediction was made" in str(caught.value)
+        monkeypatch.undo()
+        assert not (paths.reports / "dev_vs_test.csv").exists()
+
+
+def test_saved_files_that_do_not_belong_together_are_refused(finished, tmp_path):
+    from copath.phase3 import report_final
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    results = paths.reports / "final_test_results.csv"
+    table = pd.read_csv(results, dtype=str, keep_default_na=False)
+    mask = (table["label"] == builders.PRIMARY_LABELS[0]) & (table["metric"] == "auroc")
+    table.loc[mask, "value"] = "0.1234"
+    table.to_csv(results, index=False)
+    with pytest.raises(Phase3Error, match="do not reproduce"):
+        report_final.cmd_report_final(load_context(paths))
+
+
+def test_reliability_bins_below_five_rows_are_excluded_and_small_counts_are_suppressed():
+    from copath.phase3 import figures, report_final
+
+    p = np.r_[np.full(20, 0.15), np.full(4, 0.55), np.full(6, 0.95)]
+    y = np.r_[np.zeros(20), [1, 0, 1, 0], np.ones(6)].astype(int)
+    points = figures.reliability_points(y, p)
+    assert [n for _, _, n in points] == [20, 6]  # the bin with 4 rows is not shown
+    cells = report_final.confusion_cells(np.r_[np.ones(3), np.zeros(40), np.ones(20)], np.r_[np.zeros(3), np.zeros(40), np.ones(20)])
+    assert cells == {"tp": "<5", "fp": 0, "fn": "<5", "tn": 40}  # fn = 3 is suppressed and hides the smallest other non-zero cell (tp)
+    suppressed = [v for v in report_final.confusion_cells(np.r_[np.ones(3), np.zeros(50), np.ones(30), np.zeros(9)],
+                                                          np.r_[np.zeros(3), np.zeros(50), np.ones(30), np.ones(9)]).values() if v == "<5"]
+    assert len(suppressed) == 2  # one small cell also hides the smallest other non-zero cell (no recovery from the sample size)
+    clean = report_final.confusion_cells(np.r_[np.ones(10), np.zeros(10)], np.r_[np.ones(10), np.zeros(10)])
+    assert clean == {"tp": 10, "fp": 0, "fn": 0, "tn": 10}
+
+
+def test_report_final_command_line_and_no_writes_outside_reports(finished, tmp_path, monkeypatch):
+    from copath.phase3 import __main__ as cli
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    before = _watched(paths)
+    monkeypatch.setattr(cli, "load_context", lambda: load_context(paths))
+    assert main(["report-final"]) == 0 and _watched(paths) == before
+    assert (paths.reports / "final_report_notes.md").is_file()
+    paths.lock.unlink()
+    assert main(["report-final"]) == 1  # a missing artifact is a clear stop, not a crash
+
+
+# ----------------------------------------- report-final: privacy self-check and metric validation
+
+def test_heldout_values_are_the_metric_code_outputs_not_values_carried_over_from_an_identifier_column(finished, tmp_path):
+    from copath.phase3 import report_final
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    report_final.cmd_report_final(load_context(paths))
+    table = _report(paths, "dev_vs_test.csv")
+    ids = set(_test_ids(paths)) | set(fx.UNIVERSE_IDS)
+    for label in builders.PRIMARY_LABELS:
+        test = pd.read_parquet(paths.processed / "final" / f"test_predictions_{label}.parquet")
+        prevalence = json.loads((paths.models / "v1.0" / label / "config.json").read_text(encoding="utf-8"))["development_prevalence"]
+        again = metrics.label_metrics(test["y"].to_numpy(), test["p_cal"].to_numpy(), np.full(len(test), prevalence), test["pred"].to_numpy())
+        for _, row in table[table["label"] == label].iterrows():
+            if row["heldout"] != "":
+                assert float(row["heldout"]) == pytest.approx(again[row["metric"]], abs=2e-4)  # every metric, recomputed
+        # no identifier-like value in the aggregate columns: they are metrics, whatever digits they contain
+        assert "PATNO" not in table.columns and not set(table["heldout"]) & ids
+
+
+def test_the_report_passes_the_privacy_check_although_metric_digits_can_look_like_identifiers(finished, tmp_path):
+    from copath.phase3 import report_final
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    ctx = load_context(paths)
+    ids = sorted(set(ctx.frame["PATNO"].astype(str)))
+    original = report_final.validate_metric_rows
+    report_final.cmd_report_final(ctx)
+    table = _report(paths, "dev_vs_test.csv")
+    # make the first held-out metric end in the digits of a real (synthetic) identifier: still an aggregate value
+    value = f"0.{ids[0]}"
+    table.loc[0, ["heldout", "heldout_ci_low", "heldout_ci_high"]] = [value, "0.0001", "0.9999"]
+    table.to_csv(paths.reports / "dev_vs_test.csv", index=False)
+    assert report_final.privacy_check(ctx) > 0  # no false positive
+    assert original is report_final.validate_metric_rows
+
+
+def test_a_genuine_failure_deletes_all_report_final_outputs_and_the_message_hides_the_id_and_the_value(finished, tmp_path, monkeypatch):
+    from copath.phase3 import report_final
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    ctx = load_context(paths)
+    planted = str(ctx.frame["PATNO"].iloc[0])
+    real = report_final.write_csv
+
+    def leaking(ctx_, rows, name):
+        if name == "final_test_supplementary.csv":
+            rows = list(rows) + [{"section": "x", "label": "ALL", "model": "", "item": "note", "value": "", "note": f"participant {planted} excluded"}]
+        return real(ctx_, rows, name)
+
+    monkeypatch.setattr(report_final, "write_csv", leaking)
+    existing = {p.name for p in paths.reports.rglob("*") if p.is_file()}
+    with pytest.raises(PrivacyCheckError) as caught:
+        report_final.cmd_report_final(ctx)
+    message = str(caught.value)
+    assert planted not in message and "excluded" not in message and "final_test_supplementary.csv" in message and "column note" in message
+    assert {p.name for p in paths.reports.rglob("*") if p.is_file()} == existing  # csv, notes AND png outputs were all deleted
+    assert not list((paths.reports / "figures").glob("final_test_*"))
+
+
+def test_metric_columns_outside_their_valid_range_are_refused():
+    from copath.phase3.report_final import validate_metric_rows
+
+    def row(metric, heldout, low="", high="", dev="0.5", n_test=100):
+        return {"label": "pd_type_v1", "model": "rf", "metric": metric, "dev_oof_pooled": dev, "heldout": heldout, "heldout_ci_low": low,
+                "heldout_ci_high": high, "n_dev_eligible": 500, "n_test_eligible": n_test}
+
+    validate_metric_rows([row("auroc", 0.9, 0.8, 0.95), row("bss", -0.4, -0.9, 0.1), row("cal_slope", 15.3, 2.0, 40.0), row("cal_intercept", -3.2),
+                          row("f1", 1.0), row("ece", 0.0), row("auprc", ""), row("auroc", 0.5, n_test="<5")])  # all valid
+    for metric in ("auroc", "auprc", "brier", "ece", "f1", "precision", "recall"):
+        for bad in (1.2, -0.1):
+            with pytest.raises(Phase3Error, match="outside"):
+                validate_metric_rows([row(metric, bad)])
+    with pytest.raises(Phase3Error, match="outside"):
+        validate_metric_rows([row("auroc", 0.5, dev="1.5")])  # the development value is checked too
+    with pytest.raises(Phase3Error, match="above 1"):
+        validate_metric_rows([row("bss", 1.01)])
+    for metric in ("cal_slope", "cal_intercept"):
+        validate_metric_rows([row(metric, 25.0), row(metric, -40.0)])  # no [0, 1] rule for these
+        with pytest.raises(Phase3Error, match="not finite"):
+            validate_metric_rows([row(metric, float("inf"))])
+    with pytest.raises(Phase3Error, match="lower bound is above"):
+        validate_metric_rows([row("auroc", 0.5, 0.7, 0.6)])
+    notes = validate_metric_rows([row("auroc", 0.95, 0.6, 0.9), row("cal_slope", 15.3, 18.0, 60.0)])  # estimate outside its CI: a note, not an error
+    assert len(notes) == 2 and all("not an error" in n for n in notes) and "pd_type_v1 / auroc" in notes[0] and "0.95" not in " ".join(notes)
+    assert validate_metric_rows([row("auroc", 0.9, 0.8, 0.95)]) == []
+    for bad in (-1, 3.5, "x"):
+        with pytest.raises(Phase3Error, match="non-negative integer"):
+            validate_metric_rows([row("auroc", 0.9, n_test=bad)])
+    validate_metric_rows([row("auroc", 0.9, n_test=0)])
+
+
+def test_report_final_refuses_to_write_when_a_saved_metric_is_out_of_range(finished, tmp_path):
+    from copath.phase3 import report_final
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    results = paths.reports / "final_test_results.csv"
+    table = pd.read_csv(results, dtype=str, keep_default_na=False)
+    mask = (table["label"] == builders.PRIMARY_LABELS[0]) & (table["metric"] == "f1")
+    table.loc[mask, "value"] = "1.5"
+    table.to_csv(results, index=False)
+    with pytest.raises(Phase3Error):  # the saved value no longer reproduces from the predictions
+        report_final.cmd_report_final(load_context(paths))
+    assert not (paths.reports / "dev_vs_test.csv").exists()
+
+
+def test_an_estimate_outside_its_percentile_interval_is_a_note_in_the_report_not_a_failure(finished, tmp_path):
+    from copath.phase3 import report_final
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    results = paths.reports / "final_test_results.csv"
+    table = pd.read_csv(results, dtype=str, keep_default_na=False)
+    mask = (table["label"] == builders.PRIMARY_LABELS[0]) & (table["metric"] == "auroc")
+    table.loc[mask, ["ci_low", "ci_high"]] = ["0.0100", "0.0200"]  # an interval that excludes the saved estimate
+    table.to_csv(results, index=False)
+    report_final.cmd_report_final(load_context(paths))  # completes
+    notes = (paths.reports / "final_report_notes.md").read_text(encoding="utf-8")
+    assert "## Notes" in notes and f"{builders.PRIMARY_LABELS[0]} / auroc" in notes and "not an error" in notes
+    assert (paths.reports / "dev_vs_test.csv").is_file()
