@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import shutil
+import time
 
 import numpy as np
 import pandas as pd
@@ -1155,3 +1156,359 @@ def test_an_estimate_outside_its_percentile_interval_is_a_note_in_the_report_not
     notes = (paths.reports / "final_report_notes.md").read_text(encoding="utf-8")
     assert "## Notes" in notes and f"{builders.PRIMARY_LABELS[0]} / auroc" in notes and "not an error" in notes
     assert (paths.reports / "dev_vs_test.csv").is_file()
+
+
+# ------------------------------------------------ Phase 4A.0: frozen-bundle packaging
+
+FAMILIES = {"pd_type_v1": "rf", "ad_like_v1": "lr_enet", "vascular_v1": "rf"}
+HYPER = {"rf": {"n_estimators": 30, "max_depth": 4, "min_samples_leaf": 5, "max_features": "sqrt", "class_weight": "none"},
+         "lr_enet": {"C": 1.0, "l1_ratio": 0.5, "class_weight": "none"}}
+
+
+def _make_bundle(work, phase2, versions=None, lock_versions=None):
+    """A small synthetic stand-in for models/final/v1.0 fitted on the synthetic development data (test code may fit)."""
+    from sklearn.base import clone
+    from sklearn.calibration import CalibratedClassifierCV
+
+    from copath.phase3.core import library_versions
+
+    paths = _paths(work, phase2)
+    ctx = load_context(paths)
+    paths.frozen.mkdir(parents=True, exist_ok=True)
+    paths.runs.mkdir(parents=True, exist_ok=True)
+    selected = {"version": "v1", "labels": {label: {"model": fam, "cv_run_id": f"cv-{label}-primary-{fam}-s1", "gates_passed": True}
+                                              for label, fam in FAMILIES.items()}}
+    paths.selected.write_text(yaml.safe_dump(selected, sort_keys=False), encoding="utf-8")
+    digest = sha256(paths.selected)
+    for label, fam in FAMILIES.items():
+        data = prepare(ctx, label, "primary")
+        pipeline = candidates.build(fam, HYPER[fam], data["y"], 1, ctx.cfg).fit(data["X"], data["y"])
+        calibrated = CalibratedClassifierCV(clone(pipeline), method="sigmoid", cv=3).fit(data["X"], data["y"])
+        folder = paths.models / "v1.0" / label
+        folder.mkdir(parents=True, exist_ok=True)
+        import joblib
+
+        joblib.dump(pipeline, folder / "pipeline.joblib")
+        joblib.dump(calibrated, folder / "calibrator.joblib")
+        (folder / "features.json").write_text(json.dumps(data["features"], indent=1) + "\n", encoding="utf-8")
+        config = {"label": label, "model": fam, "tier": "primary", "seed": 1, "hyperparameters": HYPER[fam], "threshold": 0.3,
+                  "calibration": {"method": "sigmoid", "cv": 3}, "development_prevalence": 0.3, "label_card_sha256": "a" * 64,
+                  "selected_models_sha256": digest, "phase3_config": {"final": {"version": "v1.0"}},
+                  "fold_scheme_sha256": "b" * 64, "dataset_sha256": "c" * 64, "config_sha256": "d" * 64}
+        (folder / "config.json").write_text(json.dumps(config, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        (folder / "metrics.json").write_text(json.dumps({"test": {"auroc": 0.5}}) + "\n", encoding="utf-8")
+        (folder / "model_card.md").write_text(f"# Model card: {label}\n", encoding="utf-8")
+        (paths.runs / f"cv-{label}-primary-{fam}-s1.json").write_text(
+            json.dumps({"run_id": f"cv-{label}-primary-{fam}-s1", "library_versions": versions or library_versions()}), encoding="utf-8")
+    lock_run = {"finished_at": "2031-01-01T00:00:00Z", "selected_models_sha256": digest, "forced": False,
+                **({"library_versions": lock_versions} if lock_versions else {})}
+    paths.lock.write_text(json.dumps({"locked": True, "runs": [lock_run]}, indent=1) + "\n", encoding="utf-8")
+    return paths, digest
+
+
+@pytest.fixture(scope="module")
+def bundle(phase2, tmp_path_factory):
+    return _make_bundle(tmp_path_factory.mktemp("bundle"), phase2)
+
+
+def _copy_bundle(bundle, work):
+    paths, digest = bundle
+    shutil.copytree(paths.config.parent, work)
+    return Paths(config=work / "phase3.yaml", frozen=work / "frozen", processed=work / "processed", splits=paths.splits, reports=work / "reports" / "phase3",
+                 phase2_reports=paths.phase2_reports, registry=work / "experiments" / "registry.csv", runs=work / "experiments" / "phase3",
+                 models=work / "models" / "final"), digest
+
+
+def _bundle_hashes(paths):
+    return {str(p.relative_to(paths.models)): sha256(p) for p in sorted(paths.models.rglob("*")) if p.is_file() and "packaging" not in p.parts}
+
+
+def _packaged(bundle, work):
+    paths, digest = _copy_bundle(bundle, work)
+    from copath.phase3 import packaging
+
+    manifest = packaging.cmd_package(paths, digest, log=lambda m: None)
+    return paths, digest, manifest
+
+
+def _no_fit_or_predict(monkeypatch):
+    from sklearn.calibration import CalibratedClassifierCV
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    def forbidden(name):
+        def call(*args, **kwargs):
+            raise AssertionError(f"packaging called {name}")
+        return call
+
+    for owner, names in ((RandomForestClassifier, ("fit", "predict", "predict_proba")), (LogisticRegression, ("fit", "predict", "predict_proba", "decision_function")),
+                         (Pipeline, ("fit", "predict", "predict_proba", "fit_transform", "decision_function")), (StandardScaler, ("fit", "partial_fit")),
+                         (CalibratedClassifierCV, ("fit", "predict_proba")), (tuning, ("tune",)), (train, ("fit_predict", "outer_cv"))):
+        for name in names:
+            monkeypatch.setattr(owner, name, forbidden(f"{owner.__name__}.{name}"))
+
+
+def test_packaging_is_additive_only_and_never_fits_predicts_or_calibrates(bundle, tmp_path, monkeypatch):
+    from copath.phase3 import packaging, reset
+
+    paths, digest = _copy_bundle(bundle, tmp_path / "copy")
+    before, lock_before = _bundle_hashes(paths), sha256(paths.lock)
+    final_before = reset._final_artifacts(paths, [])
+    _no_fit_or_predict(monkeypatch)
+    manifest = packaging.cmd_package(paths, digest, log=lambda m: None)
+    assert _bundle_hashes(paths) == before and sha256(paths.lock) == lock_before  # no bundle file and not the lock changed
+    assert {p.name for p in packaging.packaging_dir(paths, "v1.0").iterdir()} == {"bundle_manifest.json", "explainer_specs.json"}
+    assert reset._final_artifacts(paths, []) == final_before  # the final-evaluation guards see the same state
+    assert not (paths.reports.exists() and list(paths.reports.rglob("*")))  # nothing under reports/
+    assert manifest["model_version"] == "pd-copathology-v1.0" and manifest["final_bundle_version"] == "v1.0"
+    assert manifest["selected_models_sha256"] == digest and manifest["final_lock"] == {"present": True, "sha256": lock_before}
+    assert "no model fitting, prediction, thresholding or evaluation was performed" in manifest["provenance_note"]
+
+
+def test_manifest_fields_per_signal_and_the_canonical_feature_hash(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest, manifest = _packaged(bundle, tmp_path / "copy")
+    assert set(manifest["signals"]) == {"pd_type", "ad_like", "vascular_risk"}
+    for label, signal in packaging.SIGNALS.items():
+        item, folder = manifest["signals"][signal], paths.models / "v1.0" / label
+        features = json.loads((folder / "features.json").read_text(encoding="utf-8"))
+        assert item["target_definition"] == label and item["estimator_family"] == FAMILIES[label] and item["calibration_method"] == "sigmoid"
+        assert set(item["files_sha256"]) == set(packaging.BUNDLE_FILES) and all(item["files_sha256"][n] == sha256(folder / n) for n in packaging.BUNDLE_FILES)
+        assert item["raw_feature_list_sha256"] == packaging.feature_list_sha256(features) and item["n_raw_features"] == len(features)
+        assert item["label_card_sha256"] == "a" * 64 and item["config_sha256"] == "d" * 64
+    reordered = list(reversed(features))
+    assert packaging.feature_list_sha256(reordered) != packaging.feature_list_sha256(features)
+    assert packaging.feature_list_sha256(features) == __import__("hashlib").sha256(json.dumps(features, separators=(",", ":")).encode()).hexdigest()
+    specs = packaging.packaging_dir(paths, "v1.0") / "explainer_specs.json"
+    assert manifest["explainer_specs"] == {"file": "explainer_specs.json", "sha256": sha256(specs)}
+
+
+def test_training_versions_come_from_the_selected_cv_run_and_are_not_called_final_fit_versions(bundle, tmp_path):
+    from copath.phase3.core import library_versions
+
+    paths, digest, manifest = _packaged(bundle, tmp_path / "copy")
+    assert manifest["reference_training_library_versions"] == library_versions()
+    assert manifest["version_source"] == "selected_cv_run_metadata"
+    assert "not directly observed final-fit versions" in manifest["version_source_detail"]
+    assert all(f"cv-{label}-primary-" in manifest["version_source_detail"] for label in FAMILIES)
+    assert manifest["packaging_runtime_versions"]["scikit-learn"] == manifest["reference_training_library_versions"]["scikit-learn"]
+    text = json.dumps(manifest)
+    assert "observed final-fit" not in text.replace("not directly observed final-fit", "")
+
+
+def test_versions_stored_by_the_final_run_itself_take_precedence(phase2, tmp_path):
+    from copath.phase3 import packaging
+    from copath.phase3.core import library_versions
+
+    paths, digest = _make_bundle(tmp_path / "b", phase2, versions={"scikit-learn": "0.0.1"}, lock_versions=library_versions())
+    manifest = packaging.cmd_package(paths, digest, log=lambda m: None)
+    assert manifest["version_source"] == "final_run_metadata" and manifest["reference_training_library_versions"] == library_versions()
+
+
+def test_packaging_stops_without_the_lock_with_another_selection_or_without_run_metadata(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest = _copy_bundle(bundle, tmp_path / "a")
+    paths.lock.unlink()
+    with pytest.raises(packaging.PackagingError, match="lock does not exist"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+    paths, digest = _copy_bundle(bundle, tmp_path / "b")
+    with pytest.raises(packaging.PackagingError, match="frozen SHA-256"):
+        packaging.cmd_package(paths, "0" * 64, log=lambda m: None)
+    paths, digest = _copy_bundle(bundle, tmp_path / "c")
+    for record in paths.runs.glob("cv-*.json"):
+        record.unlink()
+    with pytest.raises(packaging.PackagingError, match="no library versions"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+    paths, digest = _copy_bundle(bundle, tmp_path / "d")
+    for record in paths.runs.glob("cv-*.json"):
+        record.write_text(json.dumps({"run_id": record.stem}), encoding="utf-8")  # a record without library_versions
+    with pytest.raises(packaging.PackagingError, match="neither the final run nor the selected cv run"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+    assert not packaging.packaging_dir(paths, "v1.0").exists()
+
+
+def test_a_scikit_learn_version_difference_or_an_inconsistent_version_warning_stops_packaging(bundle, tmp_path, monkeypatch):
+    import joblib
+    import warnings
+
+    from sklearn.exceptions import InconsistentVersionWarning
+
+    from copath.phase3 import packaging
+    from copath.phase3.core import library_versions
+
+    paths, digest = _copy_bundle(bundle, tmp_path / "a")
+    for record in paths.runs.glob("cv-*.json"):
+        record.write_text(json.dumps({"run_id": record.stem, "library_versions": {**library_versions(), "scikit-learn": "0.0.1"}}), encoding="utf-8")
+    with pytest.raises(packaging.PackagingError, match="scikit-learn mismatch"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+    paths, digest = _copy_bundle(bundle, tmp_path / "b")
+    real = joblib.load
+
+    def warns(path, *args, **kwargs):
+        warnings.warn(InconsistentVersionWarning(estimator_name="Pipeline", current_sklearn_version="9.9", original_sklearn_version="0.0.1"))
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(packaging.joblib, "load", warns)
+    with pytest.raises(packaging.PackagingError, match="another scikit-learn version"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+    assert not packaging.packaging_dir(paths, "v1.0").exists()
+
+
+def test_other_library_differences_only_warn(bundle, tmp_path):
+    from copath.phase3 import packaging
+    from copath.phase3.core import library_versions
+
+    paths, digest = _copy_bundle(bundle, tmp_path / "copy")
+    for record in paths.runs.glob("cv-*.json"):
+        record.write_text(json.dumps({"run_id": record.stem, "library_versions": {**library_versions(), "numpy": "0.1"}}), encoding="utf-8")
+    seen = []
+    manifest = packaging.cmd_package(paths, digest, log=seen.append)
+    assert any("WARNING: numpy differs" in line for line in seen) and manifest["reference_training_library_versions"]["numpy"] == "0.1"
+
+
+def test_verify_recomputes_every_hash_writes_nothing_and_detects_a_changed_byte(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest, _ = _packaged(bundle, tmp_path / "copy")
+    folder = packaging.packaging_dir(paths, "v1.0")
+    before = {p.name: sha256(p) for p in folder.iterdir()}
+    assert packaging.verify(paths, digest) == []
+    assert {p.name: sha256(p) for p in folder.iterdir()} == before  # --verify writes nothing
+    for name, damage in (("model_card.md", lambda b: b + b"x"), ("metrics.json", lambda b: b.replace(b"0.5", b"0.6")),
+                         ("pipeline.joblib", lambda b: b + b"\0"), ("calibrator.joblib", lambda b: b + b"\0")):
+        target = paths.models / "v1.0" / "ad_like_v1" / name
+        original = target.read_bytes()
+        target.write_bytes(damage(original))
+        problems = packaging.verify(paths, digest)
+        assert problems and any(name in p for p in problems), (name, problems)
+        target.write_bytes(original)
+    assert packaging.verify(paths, digest) == []
+    features = paths.models / "v1.0" / "ad_like_v1" / "features.json"
+    original = features.read_bytes()
+    features.write_bytes(original.replace(b"age", b"agX", 1))
+    assert packaging.verify(paths, digest)
+    features.write_bytes(original)
+    paths.lock.write_text(paths.lock.read_text(encoding="utf-8").replace("2031", "2032"), encoding="utf-8")
+    assert any("lock" in p or "header" in p for p in packaging.verify(paths, digest))  # a changed lock is noticed
+
+
+def test_the_explainer_specs_record_the_phase3_convention_without_inventing_one(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest, _ = _packaged(bundle, tmp_path / "copy")
+    specs = json.loads((packaging.packaging_dir(paths, "v1.0") / "explainer_specs.json").read_text(encoding="utf-8"))["signals"]
+    for signal in ("pd_type", "vascular_risk"):
+        spec = specs[signal]
+        assert spec["explainer"] == "shap.TreeExplainer" and spec["feature_perturbation"] == "tree_path_dependent" and spec["background_data"] is None
+        assert spec["output_space"].startswith("probability") and spec["class_index"] == 1 and spec["pipeline_steps"] == ["drop", "impute", "model"]
+    ad = specs["ad_like"]
+    assert ad["output_space"].startswith("log-odds") and ad["pipeline_steps"] == ["drop", "impute", "scale", "model"]
+    assert ad["reference"].startswith("zero vector in post-pipeline scaled space") and ad["contribution"] == "coef_j * scaled_value_j" and ad["base_value"] == "intercept_"
+    assert ad["justification"] == packaging.JUSTIFICATION and "subsampled" in ad["explainer"]  # the full, unsubsampled background
+    assert "1,000" not in json.dumps(ad) and "818" not in json.dumps(ad)  # no claim about a subsampled background or fold sizes
+    assert "still excluded from top_features" in ad["absent_features"] and "non-zero contribution" in ad["absent_features"]
+    assert set(specs) == {"pd_type", "ad_like", "vascular_risk"}
+
+
+def test_an_estimator_input_that_no_scaler_centres_stops_packaging():
+    from sklearn.impute import SimpleImputer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    from copath.models.preprocessing import DropDegenerateColumns
+    from copath.phase3 import packaging
+
+    X, y, _ = _toy(n=200)
+    good = candidates.build("lr_enet", HYPER["lr_enet"], y, 1, CFG).fit(X, y)
+    assert packaging.check_pipeline("x", "lr_enet", good, list(X.columns))["scaler_with_mean"] is True
+    uncentred = Pipeline([("drop", DropDegenerateColumns()), ("impute", SimpleImputer(strategy="median")), ("scale", StandardScaler(with_mean=False)),
+                          ("model", LogisticRegression(max_iter=500))]).fit(X, y)
+    with pytest.raises(packaging.PackagingError, match="does not centre"):
+        packaging.check_pipeline("x", "lr_enet", uncentred, list(X.columns))
+    indicators = Pipeline([("drop", DropDegenerateColumns()), ("impute", SimpleImputer(strategy="median", add_indicator=True)),
+                           ("scale", StandardScaler()), ("model", LogisticRegression(max_iter=500))]).fit(X, y)
+    with pytest.raises(packaging.PackagingError, match="missing-indicator|column counts differ"):
+        packaging.check_pipeline("x", "lr_enet", indicators, list(X.columns))
+    passthrough = Pipeline([("drop", DropDegenerateColumns()), ("impute", SimpleImputer(strategy="median")), ("model", LogisticRegression(max_iter=500))]).fit(X, y)
+    with pytest.raises(packaging.PackagingError, match="unexpected linear pipeline structure"):
+        packaging.check_pipeline("x", "lr_enet", passthrough, list(X.columns))
+    with pytest.raises(packaging.PackagingError, match="does not take exactly the raw features"):
+        packaging.check_pipeline("x", "lr_enet", good, list(reversed(list(X.columns))))
+    with pytest.raises(packaging.PackagingError, match="not supported"):
+        packaging.check_pipeline("x", "hgb", good, list(X.columns))
+
+
+def test_manifest_and_specs_hold_no_participant_identifiers_or_values(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest, _ = _packaged(bundle, tmp_path / "copy")
+    for name in ("bundle_manifest.json", "explainer_specs.json"):
+        text = (packaging.packaging_dir(paths, "v1.0") / name).read_text(encoding="utf-8")
+        assert not any(pid in text for pid in fx.UNIVERSE_IDS) and "PATNO" not in text
+
+
+def test_repeating_the_packaging_rewrites_nothing_and_keeps_the_first_packaged_at(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest, first = _packaged(bundle, tmp_path / "copy")
+    folder = packaging.packaging_dir(paths, "v1.0")
+    stamps = {p.name: (p.stat().st_mtime_ns, sha256(p)) for p in folder.iterdir()}
+    time.sleep(1.1)
+    again = packaging.cmd_package(paths, digest, log=lambda m: None)
+    assert again["packaged_at"] == first["packaged_at"] and {p.name: (p.stat().st_mtime_ns, sha256(p)) for p in folder.iterdir()} == stamps
+
+
+def test_a_conflicting_existing_manifest_is_never_overwritten(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest, _ = _packaged(bundle, tmp_path / "copy")
+    folder = packaging.packaging_dir(paths, "v1.0")
+    manifest = folder / "bundle_manifest.json"
+    changed = json.loads(manifest.read_text(encoding="utf-8"))
+    changed["signals"]["ad_like"]["n_raw_features"] += 1
+    manifest.write_text(json.dumps(changed, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    kept = sha256(manifest)
+    with pytest.raises(packaging.PackagingError, match="never overwritten"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+    assert sha256(manifest) == kept
+    (folder / "explainer_specs.json").unlink()
+    with pytest.raises(packaging.PackagingError, match="only one of the two"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+
+
+def test_verify_explainer_spec_matches_shap_on_the_development_set(bundle, tmp_path, capsys, monkeypatch):
+    from copath.phase3 import packaging
+
+    paths, digest, _ = _packaged(bundle, tmp_path / "copy")
+    results = packaging.cmd_verify_explainer_spec(paths, log=print)
+    assert set(results) == {"pd_type", "ad_like", "vascular_risk"} and all(r["pass"] for r in results.values())
+    assert results["ad_like"]["max_abs_difference"] < 1e-8 and results["ad_like"]["max_abs_mean_scaled_background"] < 1e-8
+    assert results["pd_type"]["max_abs_difference"] < 1e-6 and "max_abs_mean_scaled_background" not in results["pd_type"]
+    out = capsys.readouterr().out
+    assert out.count("PASS") == 3 and not any(pid in out for pid in fx.UNIVERSE_IDS)
+    assert not (paths.reports.exists() and list(paths.reports.rglob("*")))  # prints only; writes nothing
+    parts, real = [], split.load_analytic
+
+    def watch(*args, **kwargs):
+        parts.append(kwargs.get("part", args[2] if len(args) > 2 else "dev"))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(split, "load_analytic", watch)
+    packaging.cmd_verify_explainer_spec(paths, log=lambda m: None)
+    assert parts == ["dev"]  # the held-out part is never loaded
+
+
+def test_packaging_command_line_enforces_the_frozen_selection_hash(bundle, tmp_path, monkeypatch, capsys):
+    from copath.phase3 import packaging
+
+    paths, digest = _copy_bundle(bundle, tmp_path / "copy")
+    monkeypatch.setattr(packaging, "Paths", lambda: paths)
+    assert main(["package-final-bundle"]) == 1  # the synthetic selection does not have the frozen real hash
+    assert "frozen SHA-256" in capsys.readouterr().err and not packaging.packaging_dir(paths, "v1.0").exists()
+    monkeypatch.setattr(packaging, "FROZEN_SELECTED_SHA256", digest)
+    assert main(["package-final-bundle"]) == 0 and main(["package-final-bundle", "--verify"]) == 0

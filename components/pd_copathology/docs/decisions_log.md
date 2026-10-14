@@ -302,6 +302,27 @@ Reason: Interpretation limits (PD-type near the ceiling, fold-wise calibration s
 Impact: Documentation only. No code, configuration, label, feature set or frozen selection changed.
 ```
 
+### Phase 4A.0 frozen-bundle packaging (15 October 2026)
+
+```
+Date: 2026-10-15
+Decision: `package-final-bundle` adds bundle_manifest.json (SHA-256 of every bundle file, canonical raw feature-list hash,
+  the hashes already in config.json, library versions, lock hash) and explainer_specs.json (the Phase 3 SHAP convention per
+  signal) in models/final/<version>/packaging/. It is additive and idempotent, and never changes a model, threshold,
+  bundle file or the lock. Training library versions are taken from the selected cv run records because the final run
+  did not store versions; they are labelled as such, not as observed final-fit versions. An exact scikit-learn match
+  and loading the frozen artifacts with InconsistentVersionWarning as an error are mandatory.
+Evidence: Source review of phase3/final.py (no versions, explainer state or feature-list hash in the bundle) and of
+  explain/shap_explainer.py (RF: TreeExplainer without data, probability of class 1; elastic net: LinearExplainer on
+  the scaled training background, log-odds).
+Alternatives considered: Rebuilding a background from development data at inference (rejected: no development data at
+  inference); changing `final` (rejected: the modelling phase is closed).
+Reason: Inference needs verifiable provenance and a reproducible explanation reference. For the elastic net the reference
+  is the zero vector in scaled space (the mean of the final model's own training representation), valid only if every
+  estimator input is centred by the fitted StandardScaler; packaging stops otherwise.
+Impact: phase3/packaging.py; no model or evaluation result changes.
+```
+
 ### Phase 2 — implementation (11 October 2026)
 
 ```

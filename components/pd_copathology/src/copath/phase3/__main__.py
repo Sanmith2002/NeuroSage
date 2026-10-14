@@ -3,6 +3,8 @@
     python -m copath.phase3 cv [--label L ...] [--model M ...]
     python -m copath.phase3 missingness-audit   (pd_type_v1 only; needs `select --stage final` for the extra run)
     python -m copath.phase3 report-final        (read-only; after `final` has run)
+    python -m copath.phase3 package-final-bundle [--verify]   (provenance metadata next to the frozen bundle; additive only)
+    python -m copath.phase3 verify-explainer-spec             (development set only; prints aggregate scalars)
     python -m copath.phase3 reset-cv --confirm   (removes ONLY the cv outputs; refused once a final run or lock exists)
     python -m copath.phase3 select --stage preliminary
     python -m copath.phase3 robustness
@@ -22,7 +24,7 @@ from ..data.provenance import error_record
 from ..data.split import SplitError, TestSetAccessError
 from ..features.leakage_guard import LeakageError
 from ..targets.builders import CardError
-from . import commands, final, missingness, report_final, reset
+from . import commands, final, missingness, packaging, report_final, reset
 from .core import ALL_MODELS, Phase3Error, PrivacyCheckError, load_context
 
 
@@ -34,6 +36,9 @@ def main(argv: list[str] | None = None) -> int:
     cv.add_argument("--model", action="append", choices=ALL_MODELS, help="only this model (repeatable)")
     wipe = sub.add_parser("reset-cv", help="remove ONLY the cv outputs (registry rows, oof files, cv reports) to restart cv")
     wipe.add_argument("--confirm", action="store_true", help="really remove them (without it nothing is removed)")
+    pack = sub.add_parser("package-final-bundle", help="add provenance metadata next to the frozen final bundle (additive; no model is touched)")
+    pack.add_argument("--verify", action="store_true", help="only recompute every hash and compare it with the manifest; writes nothing")
+    sub.add_parser("verify-explainer-spec", help="compare the packaged explanation convention with shap on the DEVELOPMENT set (aggregate scalars)")
     sub.add_parser("report-final", help="READ-ONLY aggregate reports and figures from the predictions `final` saved")
     sub.add_parser("missingness-audit", help="pd_type_v1: availability of each feature in PD vs HC, and a low-gap-features run")
     select = sub.add_parser("select", help="model selection")
@@ -49,6 +54,18 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "final":
             final.cmd_final(final_flag=args.final, force=args.force, reason=args.reason)
+            return 0
+        if args.command == "package-final-bundle":
+            if args.verify:
+                problems = packaging.verify()
+                for line in problems:
+                    print(f"VERIFY FAILED: {line}", file=sys.stderr)
+                print("bundle packaging verified" if not problems else f"{len(problems)} problem(s)")
+                return 0 if not problems else 1
+            packaging.cmd_package(log=lambda m: print(m, file=sys.stderr))
+            return 0
+        if args.command == "verify-explainer-spec":
+            packaging.cmd_verify_explainer_spec(log=print)
             return 0
         if args.command == "reset-cv":
             reset.cmd_reset_cv(confirm=args.confirm, log=lambda m: print(m, file=sys.stderr))
