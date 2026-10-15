@@ -8,6 +8,16 @@
 
 **Input**: User description: "Feature 001: model registration and exact-version registry for supervised multi-label primary classifiers."
 
+## Clarifications
+
+### Session 2026-10-15
+
+- Q: For Feature 001, must registered model-version records remain retrievable after a process restart, or only during the active registry lifecycle? → A: Identity and metadata survive restarts; the compatible adapter is reattached afterward.
+- Q: Before a downstream feature uses a registered model version, should Safira resolve its exact classifier and compatible adapter as one validated association? → A: Yes; exact classifier-version and compatible adapter must resolve together before use, while metadata-only lookup remains available.
+- Q: How should Feature 001 handle SC-005’s one-second lookup target when no research or product requirement justifies that number? → A: Remove the unsupported latency criterion; rely on SC-002 for exact lookup correctness and restart coverage.
+- Q: If a registered classifier, its label schema, preprocessing, or adapter version changes, must it be registered under a new model version before downstream use? → A: Yes; every material change requires a new model version, and the earlier registration remains unchanged.
+- Q: In Feature 001, must each supported label have a binary positive/negative outcome, or may a label have more than two classes? → A: Each label has binary ground truth, but the primary classifier must provide a continuous per-label score or probability and a defined score-to-class mapping; Safira's later reliability score and status are separate.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Register and Retrieve a Classifier (Priority: P1)
@@ -26,8 +36,10 @@ matches the submitted definition without starting safety training.
 **Acceptance Scenarios**:
 
 1. **Given** a valid supervised multi-label classifier definition with a compatible
-   adapter and two distinct labels, **when** it is registered, **then** a retrievable
-   model-version record contains its identity, label schema, adapter identity, and
+   adapter, two distinct binary-outcome labels, and continuous per-label prediction
+   outputs, **when** it is registered, **then** a retrievable model-version record
+   contains its model identifier, version-specific classifier artifact identity, label
+   schema, adapter identity, output meanings, prediction-to-class mappings, and
    declared capabilities.
 2. **Given** a registered classifier, **when** its exact identifier and version are
    requested, **then** the corresponding record and label/output semantics are returned.
@@ -36,6 +48,13 @@ matches the submitted definition without starting safety training.
    initiating training, calibration, signal extraction, policy selection, or assessment.
 4. **Given** a valid definition with input, modality, and preprocessing declarations,
    **when** it is retrieved, **then** those declarations match the registered version.
+5. **Given** an active registration with its exact classifier and compatible adapter,
+   **when** a downstream feature requests usable access to that identifier and version,
+   **then** it receives the validated classifier-adapter association for that version.
+6. **Given** a registered label with a continuous primary prediction score or
+   probability, **when** its definition is retrieved, **then** the value's meaning,
+   scale, and positive/negative class mapping are available without presenting it as
+   Safira's separate reliability score.
 
 ---
 
@@ -61,6 +80,13 @@ then retrieve each and compare its schema and adapter metadata.
    safety package linked to it.
 4. **Given** one registered version, **when** another version is requested, **then**
    lookup does not silently return the existing version.
+5. **Given** registered model-version metadata and a process restart, **when** the
+   exact identifier and version are requested, **then** the same metadata is returned;
+   downstream use remains unavailable until the exact classifier and compatible adapter
+   are reattached and validated together.
+6. **Given** a registered version, **when** its classifier, label schema, preprocessing,
+   or adapter version changes materially, **then** the changed definition requires a new
+   model version and the earlier record remains unchanged.
 
 ---
 
@@ -92,6 +118,18 @@ leaves existing registrations unchanged and identifies the reason.
 6. **Given** a registration definition containing patient observations or restricted
    clinical data, **when** registration is attempted, **then** it is rejected without
    retaining or echoing that data in routine errors.
+7. **Given** retained metadata but a missing or mismatched classifier-adapter pair,
+   **when** usable access is requested, **then** Safira reports the linkage problem
+   without substituting a different classifier or adapter.
+8. **Given** an earlier identifier-version pair, **when** a materially changed
+   classifier, schema, preprocessing, or adapter is reattached under that pair,
+   **then** usable access is rejected without altering the earlier registration.
+9. **Given** a classifier that exposes only hard 0/1 predictions, a label with more
+   than two ground-truth classes, or an undefined score-to-class mapping, **when**
+   registration is attempted, **then** it is rejected without creating a record.
+10. **Given** competing registration attempts for the same identifier and version,
+    **when** they occur together, **then** at most one succeeds and no accepted record
+    is overwritten.
 
 ### Edge Cases
 
@@ -102,9 +140,20 @@ leaves existing registrations unchanged and identifies the reason.
 - A one-label schema is not a multi-label registration.
 - Distinct display names do not make duplicate stable label identifiers valid.
 - A label whose output mapping or outcome meaning is undefined makes the schema invalid.
+- A score or probability may equal 0 or 1 for a particular prediction; registration
+  remains valid if the classifier can produce continuous per-label outputs. A classifier
+  limited to hard 0/1 outputs is invalid for Feature 001.
+- A non-probability score requires its scale, direction, and mapping to the binary
+  positive/negative outcome to be declared; it is not silently treated as a probability.
 - An unsupported capability remains explicitly unsupported in registration metadata;
   registration does not invent a safety value for it.
 - A failed registration leaves all prior records and later linked packages untouched.
+- Competing attempts for one identifier-version pair cannot create two accepted
+  definitions or overwrite the accepted record.
+- A changed classifier or adapter cannot be reattached under an unchanged version
+  merely because its declared labels or capabilities appear similar.
+- After a restart, retained metadata does not imply that a classifier-adapter pair is
+  attached or that a safety package is ready for use.
 - Registration records contain model metadata, not patient observations or restricted data.
 
 ## Requirements *(mandatory)*
@@ -112,30 +161,49 @@ leaves existing registrations unchanged and identifies the reason.
 ### Functional Requirements
 
 - **FR-001**: Safira MUST accept only supervised multi-label primary classifiers with at
-  least two distinct supported label identifiers. It MUST reject standalone single-label
-  binary, regression, unsupervised, and reinforcement-learning tasks in Feature 001.
+  least two distinct supported label identifiers, each with binary ground-truth outcomes
+  and a continuous per-label prediction score or probability. It MUST reject standalone
+  single-label binary, regression, unsupervised, and reinforcement-learning tasks in
+  Feature 001.
 - **FR-002**: Every registration MUST specify a stable model identifier and explicit
   version. Both MUST be nonblank, free of control characters, and free of leading or
-  trailing whitespace. The identifier-version pair MUST designate one immutable definition.
+  trailing whitespace. The identifier-version pair MUST designate one immutable
+  classifier definition.
 - **FR-003**: The label schema MUST contain nonblank, unique, stable label identifiers
-  and an explicit mapping from classifier outputs to each label. It MUST define each label's
-  outcome meaning, including positive and negative meanings for binary labels.
+  and an explicit mapping from classifier outputs to each label. For every label it
+  MUST define the positive and negative ground-truth outcomes, the meaning and scale
+  of its continuous primary prediction score or probability, and the declared mapping
+  from that value to the classifier's positive or negative prediction. A hard 0/1
+  prediction alone MUST NOT satisfy the continuous-output requirement.
 - **FR-004**: Registration MUST confirm compatibility with Safira's existing ModelAdapter
   and AdapterCapabilities contracts and reject capability declarations without valid
   true/false values or incompatible adapters without calling them on patient data.
+  The adapter MUST declare a compatible way to expose each label's continuous primary
+  prediction value through the existing contract. It MUST be associated with the exact
+  classifier identifier and version; a non-probability score MUST NOT be represented
+  as a probability capability.
 - **FR-005**: Each registered record MUST expose adapter identity and version and its
   declared optional capabilities, including which are unsupported. Registration MUST NOT
-  treat capability declarations as measured safety evidence.
+  treat capability declarations as measured safety evidence. After a restart, the exact
+  classifier and compatible adapter MUST be reattached and verified together before use.
 - **FR-006**: Each record MUST retain the classifier task type, label schema, declared
-  input schema and modalities, and preprocessing identity for later compatibility checks.
-  An explicit none value is permitted when no preprocessing applies.
+  classifier artifact identity, input schema and modalities, and preprocessing identity
+  for later compatibility checks.
+  An explicit none value is permitted when no preprocessing applies. Material changes to
+  the classifier, label schema, preprocessing, or adapter version MUST require a new
+  model version rather than modifying this record.
 - **FR-007**: Safira MUST allow multiple model identifiers and multiple versions under
-  one identifier to coexist without changing earlier definitions.
+  one identifier to coexist without changing earlier definitions. Their identity and
+  metadata MUST remain retrievable after a process restart.
 - **FR-008**: Re-registering an existing identifier-version pair MUST fail explicitly,
   even when the submitted metadata appears identical. It MUST NOT replace the existing
-  configuration or an associated safety package.
+  configuration or an associated safety package. Competing registration attempts for
+  that pair MUST result in at most one accepted definition.
 - **FR-009**: Retrieval MUST require both identifier and exact version. It MUST NOT
-  silently substitute another model or version.
+  silently substitute another model or version. Metadata-only lookup MAY succeed when
+  the usable classifier-adapter association is absent, but downstream usable access
+  MUST fail explicitly until the exact pair is available and validated against the
+  immutable registered definition.
 - **FR-010**: Failed registration and lookup MUST distinguish invalid fields, unsupported
   task type, incompatible adapter, duplicate registration, unknown identifier, and
   unknown version with actionable reasons.
@@ -153,12 +221,16 @@ leaves existing registrations unchanged and identifies the reason.
 ### Key Entities
 
 - **Registered Model Version**: One immutable classifier identifier and exact version,
-  supervised multi-label task declaration, label schema, adapter declaration, input
-  definition, and preprocessing identity. A later safety package may refer to it;
-  registration does not create that package.
+  supervised multi-label task declaration, classifier artifact identity, label schema,
+  adapter declaration, input definition, preprocessing identity, and association to
+  its compatible adapter. A
+  later safety package may refer to it; registration does not create that package.
 - **Label Definition**: A stable label identifier, output mapping, and documented
-  outcome meaning, kept distinct for future patient-label safety assessment.
-- **Adapter Declaration**: Adapter identity, version, and declared optional capabilities.
+  positive and negative ground-truth meanings, continuous primary score or probability
+  semantics, and score-to-class mapping, kept distinct for future patient-label safety
+  assessment.
+- **Adapter Declaration**: Adapter identity, version, declared optional capabilities,
+  and the exact classifier version with which the adapter is associated.
   Capabilities describe possible evidence, not observed values or safety readiness.
 
 ## Success Criteria *(mandatory)*
@@ -166,28 +238,40 @@ leaves existing registrations unchanged and identifies the reason.
 ### Measurable Outcomes
 
 - **SC-001**: All valid review definitions with at least two distinct labels register
-  and return identical identity, version, label semantics, and capabilities on exact lookup.
+  and return identical model identifier, version, classifier artifact identity, binary
+  outcome semantics, continuous-score meanings, class mappings, and capabilities on
+  exact lookup.
 - **SC-002**: A review catalog of at least three distinct classifiers and three versions
-  of one classifier produces zero overwritten records and 100% correct exact lookups.
+  of one classifier produces zero overwritten records and 100% correct exact metadata
+  lookups, including after a process restart.
 - **SC-003**: Every specified invalid-registration category and missing-lookup scenario
   yields the correct actionable reason and leaves existing records unchanged.
 - **SC-004**: Across all registration acceptance scenarios, zero safety-training,
   calibration, signal-extraction, policy-selection, or patient-assessment operations occur.
-- **SC-005**: With 100 registered model-version records, at least 95% of exact lookups
-  complete within one second in an agreed reference environment.
 - **SC-006**: Reviewers can identify every accepted label's outcome meaning and
-  distinguish supported from unsupported adapter capabilities without inspecting the
-  classifier's internal implementation.
+  distinguish its primary prediction score or probability from Safira's future
+  reliability score, and identify supported versus unsupported adapter capabilities
+  without inspecting the classifier's internal implementation.
 
 ## Assumptions
 
 - Multi-label registration declares at least two labels; each remains individually
   identifiable even when one prediction contains several labels.
+- Each disease label has verified binary outcomes. A primary classifier's continuous
+  per-label score or probability is different from Safira's later 0–1 reliability score
+  and TRUST/CAUTION/DEFER status. Registration preserves the output contract and
+  mapping; a later assessment preserves patient-level prediction scores separately
+  from reliability scores. The registry does not store patient-level prediction values
+  or generate assessments.
 - Versions are explicit, opaque identifiers. Feature 001 does not infer version order
-  or a latest version.
-- Records remain available throughout the active registry lifecycle. Persistence across
-  process restarts, import/export, and distributed synchronization are excluded from
-  Feature 001 unless later specified.
+  or a latest version. A material classifier, label schema, preprocessing, or adapter
+  change receives a new version rather than replacing an existing definition. The
+  classifier artifact identity is version-specific and can be checked at reattachment;
+  this specification does not prescribe how that identity is produced.
+- Model-version identity and metadata survive process restarts. The compatible adapter
+  and exact classifier must be reattached and verified together after restart; an
+  unattached record is not usable for downstream work. Import/export and distributed
+  synchronization remain outside Feature 001.
 - Adapter compatibility can be checked from its contract and declarations without
   running predictions on clinical data. Actual evidence extraction is validated later.
 - Registration captures input and preprocessing identity but does not load a reference

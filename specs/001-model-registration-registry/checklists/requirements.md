@@ -33,6 +33,7 @@
 
 - The existing adapter and assessment contract names are retained because the user
   explicitly requires compatibility; no new implementation technology is selected.
-- Active-lifecycle retention is an explicit Feature 001 assumption. Cross-restart
-  persistence and standalone single-label binary support require separate scope approval.
+- Model-version identity and metadata survive restarts; the exact classifier and
+  compatible adapter are reattached before downstream use. Standalone single-label
+  binary support remains outside Feature 001 and requires separate scope approval.
 - The checklist reviews the specification only; no feature code or tests were changed.
