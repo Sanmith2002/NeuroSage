@@ -149,6 +149,20 @@ split with five development folds. No model is trained. The Phase 2.1 correction
 - Training code loads data with `copath.data.split.load_analytic`, which
   returns development rows only unless final-evaluation mode is switched on.
 
+## Phase 4A: frozen inference (JSON contracts)
+
+```bash
+python -m copath.inference --make-synthetic-example synthetic_demo.json          # fully synthetic record (SYNTHETIC_DEMO_001)
+python -m copath.inference --input synthetic_demo.json --output <path outside the repo or git-ignored>
+python -m copath.inference --write-contracts --from-bundle                       # regenerate docs/input_*_v1 and docs/output_schema_v1.json from the frozen bundle
+python -m copath.inference --check-contracts --from-bundle                       # READ-ONLY: committed input contract vs the frozen bundle
+```
+
+The package `copath.inference` verifies the frozen bundle (same code as `package-final-bundle --verify`, exact scikit-learn
+match), then maps one raw feature record to three research proxy signals with local explanations and data-quality information.
+Contracts: `docs/input_schema_v1.json`, `docs/input_features_v1.md`, `docs/output_schema_v1.json`, `docs/output_schema.md`;
+open integration questions: `docs/integration_open_questions.md`. No API, UI, database or persistence yet.
+
 ## Phase 3: training, selection and evaluation
 
 ```bash

@@ -278,34 +278,74 @@ def cmd_package(paths: Paths | None = None, expected_selected: str | None = None
     return manifest
 
 
-def verify(paths: Paths | None = None, expected_selected: str | None = None) -> list[str]:
-    """Recompute every hash and compare with the manifest. Writes nothing. Returns the list of problems (empty = verified)."""
+def verify(paths: Paths | None = None, expected_selected: str | None = None, warnings_out: list[str] | None = None) -> list[str]:
+    """Recompute every hash and compare it with the manifest. Writes nothing. Returns the problems (empty list = verified).
+
+    This one function is used by ``package-final-bundle --verify`` and by the inference package when it loads the bundle.
+    It needs only the bundle, its packaging files, the frozen selection and the lock; the reference library versions are the
+    ones recorded in the manifest. Differences in numpy / scipy / joblib / shap / xgboost are added to ``warnings_out``.
+    """
     paths = paths or Paths()
     expected_selected = expected_selected or FROZEN_SELECTED_SHA256
     cfg = yaml.safe_load(Path(paths.config).read_text(encoding="utf-8"))
-    folder = packaging_dir(paths, str(cfg["final"]["version"]))
+    version = str(cfg["final"]["version"])
+    folder = packaging_dir(paths, version)
     if not (folder / MANIFEST_FILE).is_file() or not (folder / SPECS_FILE).is_file():
         return ["the packaging files do not exist: run `package-final-bundle` first"]
-    saved, problems = _read_json(folder / MANIFEST_FILE), []
     try:
-        fresh, specs = build(paths, expected_selected)
-    except PackagingError as exc:
-        return [str(exc)]
-    except Exception as exc:  # noqa: BLE001 - an artifact that cannot even be loaded is a verification failure
-        return [f"a frozen artifact could not be loaded ({type(exc).__name__})"]
-    if sha256(folder / SPECS_FILE) != saved["explainer_specs"]["sha256"] or specs["text"] != (folder / SPECS_FILE).read_text(encoding="utf-8"):
-        problems.append("explainer_specs.json does not match its recorded SHA-256 or the frozen pipelines")
-    for signal, item in saved["signals"].items():
-        mine = fresh["signals"].get(signal, {})
-        for name, digest in item["files_sha256"].items():
-            if mine.get("files_sha256", {}).get(name) != digest:
-                problems.append(f"{signal}: {name} does not match the manifest")
-        for key in ("raw_feature_list_sha256", "n_raw_features", "label_card_sha256", "fold_scheme_sha256", "dataset_sha256", "config_sha256",
-                    "estimator_family", "calibration_method", "target_definition"):
-            if mine.get(key) != item.get(key):
-                problems.append(f"{signal}: {key} does not match the manifest")
-    if _substance(saved) != _substance({**fresh, "explainer_specs": saved["explainer_specs"]}):
-        problems.append("the manifest header (versions, lock hash, selection hash) differs from the current state")
+        saved, specs_doc = _read_json(folder / MANIFEST_FILE), _read_json(folder / SPECS_FILE)
+        signals_saved = saved["signals"]
+        problems: list[str] = []
+
+        def check(ok: bool, message: str) -> None:
+            if not ok:
+                problems.append(message)
+
+        check(saved.get("manifest_schema_version") == MANIFEST_SCHEMA_VERSION, "the manifest has another schema version")
+        check(specs_doc.get("explainer_spec_version") == EXPLAINER_SPEC_VERSION, "explainer_specs.json has another spec version")
+        check(saved.get("model_version") == f"pd-copathology-{version}" and saved.get("final_bundle_version") == version,
+              "the manifest belongs to another model / bundle version")
+        check(saved.get("selected_models_sha256") == expected_selected, "the manifest records a different selection than the frozen one")
+        check(paths.selected.is_file() and sha256(paths.selected) == expected_selected, "selected_models_v1.yaml does not have the frozen SHA-256")
+        check(paths.lock.is_file() and sha256(paths.lock) == (saved.get("final_lock") or {}).get("sha256"),
+              "the final-evaluation lock is missing or does not match the manifest")
+        check(sha256(folder / SPECS_FILE) == (saved.get("explainer_specs") or {}).get("sha256"),
+              "explainer_specs.json does not match its recorded SHA-256")
+        reference, runtime = saved.get("reference_training_library_versions") or {}, runtime_versions()
+        check(bool(reference) and reference.get("scikit-learn") == runtime["scikit-learn"],
+              f"scikit-learn mismatch: reference {reference.get('scikit-learn')}, installed {runtime['scikit-learn']} (an exact match is required)")
+        for name, installed in runtime.items():
+            if name != "scikit-learn" and reference.get(name) is not None and reference[name] != installed and warnings_out is not None:
+                warnings_out.append(f"{name} differs between the reference ({reference[name]}) and the installed version ({installed})")
+        check(set(signals_saved) == set(SIGNALS.values()) and set(specs_doc.get("signals", {})) == set(SIGNALS.values()),
+              "the manifest or the explainer specs do not describe exactly the three signals")
+        for label, signal in SIGNALS.items():
+            item, bundle_dir = signals_saved.get(signal) or {}, paths.models / version / label
+            check(item.get("target_definition") == label, f"{signal}: target_definition does not match")
+            for name, digest in (item.get("files_sha256") or {}).items():
+                check((bundle_dir / name).is_file() and sha256(bundle_dir / name) == digest, f"{signal}: {name} does not match the manifest")
+            check(set(item.get("files_sha256") or {}) == set(BUNDLE_FILES), f"{signal}: the manifest does not list exactly the bundle files")
+            if not all((bundle_dir / n).is_file() for n in BUNDLE_FILES):
+                continue
+            features, config = _read_json(bundle_dir / "features.json"), _read_json(bundle_dir / "config.json")
+            check(feature_list_sha256(features) == item.get("raw_feature_list_sha256") and len(features) == item.get("n_raw_features"),
+                  f"{signal}: the ordered raw feature list does not match the manifest")
+            check(config.get("model") == item.get("estimator_family") and config.get("label") == label, f"{signal}: config.json does not match the manifest")
+            check((config.get("calibration") or {}).get("method") == item.get("calibration_method"), f"{signal}: calibration method does not match")
+            check(config.get("selected_models_sha256") == expected_selected, f"{signal}: config.json refers to another selection")
+            for key in ("label_card_sha256", "fold_scheme_sha256", "dataset_sha256", "config_sha256"):
+                check(config.get(key) == item.get(key), f"{signal}: {key} does not match the manifest")
+            try:
+                pipeline, _ = load_artifact(bundle_dir / "pipeline.joblib"), load_artifact(bundle_dir / "calibrator.joblib")
+                structure = check_pipeline(label, item.get("estimator_family"), pipeline, features)
+                check(explainer_spec(label, item.get("estimator_family"), structure) == specs_doc["signals"].get(signal),
+                      f"{signal}: explainer_specs.json does not match the frozen pipeline structure")
+            except PackagingError as exc:
+                problems.append(str(exc))
+            except Exception as exc:  # noqa: BLE001 - an artifact that cannot even be loaded is a verification failure
+                problems.append(f"{signal}: a frozen artifact could not be loaded ({type(exc).__name__})")
+    except (KeyError, TypeError, ValueError) as exc:
+        return [f"the packaging files are invalid or incomplete ({type(exc).__name__})"]
     return sorted(set(problems))
 
 

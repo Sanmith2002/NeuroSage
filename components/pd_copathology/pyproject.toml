@@ -25,6 +25,7 @@ dependencies = [
     "matplotlib",
     "openpyxl",
     "python-dotenv",
+    "jsonschema",
 ]
 
 [project.optional-dependencies]

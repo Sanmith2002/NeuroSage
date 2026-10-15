@@ -1,0 +1,360 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "pd-copathology-output-schema-v1.0.json",
+ "title": "PD co-pathology signal estimation: inference output, schema version 1.0",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "schema_version",
+  "participant_id",
+  "model_version",
+  "selected_models_sha256",
+  "generated_at",
+  "signals",
+  "data_quality",
+  "disclaimer"
+ ],
+ "properties": {
+  "schema_version": {
+   "const": "1.0"
+  },
+  "participant_id": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "model_version": {
+   "type": "string"
+  },
+  "selected_models_sha256": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$"
+  },
+  "generated_at": {
+   "type": "string",
+   "format": "date-time",
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+  },
+  "signals": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ],
+   "properties": {
+    "pd_type": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "probability",
+      "model",
+      "calibration",
+      "target_definition",
+      "cohort_in_training_scope",
+      "shap_space",
+      "shap_explains",
+      "top_features"
+     ],
+     "properties": {
+      "probability": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "description": "Calibrated probability of the research proxy signal."
+      },
+      "model": {
+       "type": "string"
+      },
+      "calibration": {
+       "type": "string"
+      },
+      "target_definition": {
+       "type": "string"
+      },
+      "cohort_in_training_scope": {
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "shap_space": {
+       "type": "string"
+      },
+      "shap_explains": {
+       "type": "string"
+      },
+      "top_features": {
+       "type": "array",
+       "maxItems": 5,
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "feature",
+         "modality",
+         "shap",
+         "direction"
+        ],
+        "properties": {
+         "feature": {
+          "type": "string"
+         },
+         "modality": {
+          "type": "string"
+         },
+         "shap": {
+          "type": "number"
+         },
+         "direction": {
+          "enum": [
+           "increases",
+           "decreases"
+          ]
+         }
+        }
+       }
+      }
+     }
+    },
+    "ad_like": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "probability",
+      "model",
+      "calibration",
+      "target_definition",
+      "cohort_in_training_scope",
+      "shap_space",
+      "shap_explains",
+      "top_features"
+     ],
+     "properties": {
+      "probability": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "description": "Calibrated probability of the research proxy signal."
+      },
+      "model": {
+       "type": "string"
+      },
+      "calibration": {
+       "type": "string"
+      },
+      "target_definition": {
+       "type": "string"
+      },
+      "cohort_in_training_scope": {
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "shap_space": {
+       "type": "string"
+      },
+      "shap_explains": {
+       "type": "string"
+      },
+      "top_features": {
+       "type": "array",
+       "maxItems": 5,
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "feature",
+         "modality",
+         "shap",
+         "direction"
+        ],
+        "properties": {
+         "feature": {
+          "type": "string"
+         },
+         "modality": {
+          "type": "string"
+         },
+         "shap": {
+          "type": "number"
+         },
+         "direction": {
+          "enum": [
+           "increases",
+           "decreases"
+          ]
+         }
+        }
+       }
+      }
+     }
+    },
+    "vascular_risk": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "probability",
+      "model",
+      "calibration",
+      "target_definition",
+      "cohort_in_training_scope",
+      "shap_space",
+      "shap_explains",
+      "top_features"
+     ],
+     "properties": {
+      "probability": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "description": "Calibrated probability of the research proxy signal."
+      },
+      "model": {
+       "type": "string"
+      },
+      "calibration": {
+       "type": "string"
+      },
+      "target_definition": {
+       "type": "string"
+      },
+      "cohort_in_training_scope": {
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "shap_space": {
+       "type": "string"
+      },
+      "shap_explains": {
+       "type": "string"
+      },
+      "top_features": {
+       "type": "array",
+       "maxItems": 5,
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "feature",
+         "modality",
+         "shap",
+         "direction"
+        ],
+        "properties": {
+         "feature": {
+          "type": "string"
+         },
+         "modality": {
+          "type": "string"
+         },
+         "shap": {
+          "type": "number"
+         },
+         "direction": {
+          "enum": [
+           "increases",
+           "decreases"
+          ]
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "data_quality": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "n_features_expected",
+    "n_features_observed",
+    "feature_completeness",
+    "available_modalities",
+    "missing_modalities",
+    "modality_completeness",
+    "per_signal_completeness",
+    "n_unrecognised_fields"
+   ],
+   "properties": {
+    "n_features_expected": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "n_features_observed": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "feature_completeness": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 1,
+     "description": "Observed fraction of the expected raw features, before any imputation."
+    },
+    "available_modalities": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "missing_modalities": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "modality_completeness": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Observed fraction of the modality's features."
+     }
+    },
+    "per_signal_completeness": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "pd_type",
+      "ad_like",
+      "vascular_risk"
+     ],
+     "properties": {
+      "pd_type": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "description": "Observed fraction of this signal's features."
+      },
+      "ad_like": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "description": "Observed fraction of this signal's features."
+      },
+      "vascular_risk": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "description": "Observed fraction of this signal's features."
+      }
+     }
+    },
+    "n_unrecognised_fields": {
+     "type": "integer",
+     "minimum": 0
+    }
+   }
+  },
+  "disclaimer": {
+   "const": "Research proxy signals for co-pathology estimation. Not a clinical diagnosis. Reliability, out-of-distribution and TRUST/CAUTION/DEFER decisions are made by the downstream Clinical Predictive Safety Framework."
+  }
+ }
+}

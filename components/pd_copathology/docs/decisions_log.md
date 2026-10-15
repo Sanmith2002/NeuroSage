@@ -323,6 +323,26 @@ Reason: Inference needs verifiable provenance and a reproducible explanation ref
 Impact: phase3/packaging.py; no model or evaluation result changes.
 ```
 
+### Phase 4A frozen inference package (15 October 2026)
+
+```
+Date: 2026-10-15
+Decision: copath.inference verifies the frozen bundle with the SAME function as `package-final-bundle --verify`
+  (phase3.packaging.verify, now self-contained: it checks everything against the manifest, including the exact
+  scikit-learn version recorded there), then loads it and answers one record (or a batch) with three calibrated
+  probabilities, local explanations that obey explainer_specs.json (no fallback explainer), a runtime additivity guard
+  (1e-6) and completeness computed before imputation. Input validation is strict; the output contract is versioned
+  (schema_version 1.0). top_features contains observed features only. Nothing is persisted; the CLI refuses an --output
+  path inside the git working tree that is not git-ignored. No API, UI, database or persistence is built.
+Evidence: Phase 4A.0 packaging verified locally (explanation conventions agree with shap to ~1e-15).
+Alternatives considered: A lenient input mode; rebuilding a background from development data; a second copy of the
+  verification code (all rejected).
+Reason: The JSON schemas and this package are the integration boundary until the team decides the shared architecture.
+Impact: src/copath/inference/, docs/input_schema_v1.json, docs/input_features_v1.md, docs/output_schema_v1.json,
+  docs/output_schema.md, docs/integration_open_questions.md; packaging.verify refactored (same checks, no dependence on
+  development run records).
+```
+
 ### Phase 2 — implementation (11 October 2026)
 
 ```

@@ -1,0 +1,4183 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "pd-copathology-input-schema-v1.0.json",
+ "title": "PD co-pathology signal estimation: raw participant feature record, schema version 1.0",
+ "type": "object",
+ "description": "One participant's baseline features before any pipeline step. Absent or null features are handled only by the frozen pipeline. Unknown fields are ignored and counted (n_unrecognised_fields). A supplied value that is not a number is a validation error.",
+ "x-contract-source": "The v1 inference input contract reflects the raw pre-pipeline feature union of the frozen final model bundle. It is intentionally not identical to the broader modelling-tier candidate feature configuration.",
+ "x-feature-order": [
+  "age",
+  "age_at_visit",
+  "SEX",
+  "EDUCYRS",
+  "race",
+  "HISPLAT",
+  "ASHKJEW",
+  "AFICBERB",
+  "BASQUE",
+  "fampd",
+  "fampd_bin",
+  "handed",
+  "howlive",
+  "sex_orient",
+  "BMI",
+  "upsit",
+  "upsit_pctl",
+  "upsit_pctl15",
+  "moca",
+  "bjlot",
+  "DVS_JLO_MSSA",
+  "DVS_JLO_MSSAE",
+  "clockdraw",
+  "DVT_CLCKDRAW",
+  "DVZ_CLCKDRAW",
+  "hvlt_discrimination",
+  "hvlt_immediaterecall",
+  "hvlt_retention",
+  "HVLTFPRL",
+  "HVLTRDLY",
+  "HVLTREC",
+  "DVT_TOTAL_RECALL",
+  "DVT_DELAYED_RECALL",
+  "DVT_RETENTION",
+  "DVT_RECOG_DISC_INDEX",
+  "lexical",
+  "DVT_FAS",
+  "DVS_FAS",
+  "lns",
+  "DVS_LNS",
+  "MODBNT",
+  "DVS_BNT",
+  "PCTL_BNT",
+  "SDMTOTAL",
+  "DVT_SDM",
+  "DVSD_SDM",
+  "TMT_A",
+  "TMT_B",
+  "DVZ_TMTA",
+  "DVZ_TMTB",
+  "VLTANIM",
+  "DVT_SFTANIM",
+  "DVS_SFTANIM",
+  "MCI_testscores",
+  "cogstate",
+  "COG_COMPOSITE_INT",
+  "COG_COMPOSITE_EXT",
+  "PDAQ27",
+  "nqol_cogns",
+  "nqol_comms",
+  "nqol_lefs",
+  "nqol_uefs",
+  "MSEADLG",
+  "quip",
+  "quip_any",
+  "quip_gamble",
+  "quip_sex",
+  "quip_buy",
+  "quip_eat",
+  "quip_hobby",
+  "quip_pund",
+  "quip_walk",
+  "ess",
+  "rem",
+  "gds",
+  "stai",
+  "stai_state",
+  "stai_trait",
+  "scopa",
+  "scopa_gi",
+  "scopa_ur",
+  "scopa_cv",
+  "scopa_therm",
+  "scopa_pm",
+  "scopa_sex",
+  "orthostasis",
+  "hy",
+  "NHY",
+  "pigd",
+  "NP1COG",
+  "NP1HALL",
+  "NP1DPRS",
+  "NP1ANXS",
+  "NP1APAT",
+  "NP1DDS",
+  "NP1FATG",
+  "updrs1_score",
+  "updrs2_score",
+  "updrs3_score",
+  "updrs_totscore",
+  "CSFSAA",
+  "abeta",
+  "tau",
+  "ptau",
+  "asyn",
+  "hemohi",
+  "ptau217_plasma",
+  "bd_tau_plasma",
+  "Lilly_ptau217p",
+  "Lilly_ptau217p_LLOD",
+  "IU_pTau181_CSF",
+  "IU_ABeta40_CSF",
+  "IU_ABeta42_CSF",
+  "IU_GFAP_plasma_mean",
+  "IU_GFAP_plasma_std",
+  "IU_NFL_plasma_mean",
+  "IU_NFL_plasma_std",
+  "C2N_AB40",
+  "C2N_AB42",
+  "C2N_AB4240",
+  "C2N_AB_Contaminant",
+  "MTBR_TAU243",
+  "MTBR_TAU243_LLOD",
+  "MTBR_TAU243_InstErr",
+  "Roche_IL_1b_CSF",
+  "Roche_IL_6_CSF",
+  "Roche_IL_6_CSF_LLOD",
+  "Roche_YKL40_CSF",
+  "Roche_YKL40_CSF_LLOD",
+  "NFL_CSF",
+  "NFL_CSF_ULOD",
+  "nfl_serum",
+  "total_di_18_1_BMP",
+  "total_di_22_6_BMP",
+  "_2_2__di_22_6_BMP",
+  "APOE_e4",
+  "GP2_proxy_PGS",
+  "META5_proxy_PGS",
+  "MIA_LOWPUT_EXPECTED",
+  "MIA_CAUDATE_L",
+  "MIA_CAUDATE_R",
+  "MIA_CAUDATE_BILAT",
+  "MIA_PUTAMEN_L",
+  "MIA_PUTAMEN_R",
+  "MIA_PUTAMEN_BILAT",
+  "MIA_STRIATUM_L",
+  "MIA_STRIATUM_R",
+  "MIA_STRIATUM_BILAT",
+  "aseg_Left_WM_hypointensities",
+  "aseg_Brain_Stem",
+  "aseg_Left_non_WM_hypointensities",
+  "aseg_Optic_Chiasm",
+  "aseg_Right_WM_hypointensities",
+  "aseg_BrainSegVol",
+  "aseg_Right_Lateral_Ventricle",
+  "aseg_CC_Central",
+  "aseg_5th_Ventricle",
+  "aseg_Right_choroid_plexus",
+  "aseg_Right_Cerebellum_White_Matter",
+  "aseg_Left_vessel",
+  "aseg_Left_Cerebellum_Cortex",
+  "aseg_MaskVol_to_eTIV",
+  "aseg_MaskVol",
+  "aseg_TotalGrayVol",
+  "aseg_Left_choroid_plexus",
+  "aseg_Right_Inf_Lat_Vent",
+  "aseg_Left_Pallidum",
+  "aseg_Left_Thalamus",
+  "aseg_Right_VentralDC",
+  "aseg_rhCortexVol",
+  "aseg_Right_non_WM_hypointensities",
+  "aseg_BrainSegVol_to_eTIV",
+  "aseg_Right_Amygdala",
+  "aseg_Left_Amygdala",
+  "aseg_EstimatedTotalIntraCranialVol",
+  "aseg_4th_Ventricle",
+  "aseg_Left_Inf_Lat_Vent",
+  "aseg_CortexVol",
+  "aseg_Right_Pallidum",
+  "aseg_lhCortexVol",
+  "aseg_CC_Anterior",
+  "aseg_CC_Posterior",
+  "aseg_Left_Accumbens_area",
+  "aseg_Right_vessel",
+  "aseg_Right_Cerebellum_Cortex",
+  "aseg_Left_Putamen",
+  "aseg_3rd_Ventricle",
+  "aseg_non_WM_hypointensities",
+  "aseg_Right_Caudate",
+  "aseg_CC_Mid_Posterior",
+  "aseg_lhSurfaceHoles",
+  "aseg_Left_Hippocampus",
+  "aseg_Right_Hippocampus",
+  "aseg_Left_Caudate",
+  "aseg_rhCerebralWhiteMatterVol",
+  "aseg_Right_Putamen",
+  "aseg_WM_hypointensities",
+  "aseg_Right_Accumbens_area",
+  "aseg_rhSurfaceHoles",
+  "aseg_lhCerebralWhiteMatterVol",
+  "aseg_BrainSegVolNotVent",
+  "aseg_Left_Cerebellum_White_Matter",
+  "aseg_Left_VentralDC",
+  "aseg_SupraTentorialVolNotVent",
+  "aseg_CC_Mid_Anterior",
+  "aseg_SupraTentorialVol",
+  "aseg_SubCortGrayVol",
+  "aseg_Right_Thalamus",
+  "aseg_Left_Lateral_Ventricle",
+  "aseg_CSF",
+  "aseg_SurfaceHoles",
+  "aseg_CerebralWhiteMatterVol",
+  "aparc_lh_bankssts",
+  "aparc_lh_caudalanteriorcingulate",
+  "aparc_lh_caudalmiddlefrontal",
+  "aparc_lh_cuneus",
+  "aparc_lh_entorhinal",
+  "aparc_lh_fusiform",
+  "aparc_lh_inferiorparietal",
+  "aparc_lh_inferiortemporal",
+  "aparc_lh_isthmuscingulate",
+  "aparc_lh_lateraloccipital",
+  "aparc_lh_lateralorbitofrontal",
+  "aparc_lh_lingual",
+  "aparc_lh_medialorbitofrontal",
+  "aparc_lh_middletemporal",
+  "aparc_lh_parahippocampal",
+  "aparc_lh_paracentral",
+  "aparc_lh_parsopercularis",
+  "aparc_lh_parsorbitalis",
+  "aparc_lh_parstriangularis",
+  "aparc_lh_pericalcarine",
+  "aparc_lh_postcentral",
+  "aparc_lh_posteriorcingulate",
+  "aparc_lh_precentral",
+  "aparc_lh_precuneus",
+  "aparc_lh_rostralanteriorcingulate",
+  "aparc_lh_rostralmiddlefrontal",
+  "aparc_lh_superiorfrontal",
+  "aparc_lh_superiorparietal",
+  "aparc_lh_superiortemporal",
+  "aparc_lh_supramarginal",
+  "aparc_lh_frontalpole",
+  "aparc_lh_temporalpole",
+  "aparc_lh_transversetemporal",
+  "aparc_lh_insula",
+  "aparc_lh_MeanThickness",
+  "aparc_rh_bankssts",
+  "aparc_rh_caudalanteriorcingulate",
+  "aparc_rh_caudalmiddlefrontal",
+  "aparc_rh_cuneus",
+  "aparc_rh_entorhinal",
+  "aparc_rh_fusiform",
+  "aparc_rh_inferiorparietal",
+  "aparc_rh_inferiortemporal",
+  "aparc_rh_isthmuscingulate",
+  "aparc_rh_lateraloccipital",
+  "aparc_rh_lateralorbitofrontal",
+  "aparc_rh_lingual",
+  "aparc_rh_medialorbitofrontal",
+  "aparc_rh_middletemporal",
+  "aparc_rh_parahippocampal",
+  "aparc_rh_paracentral",
+  "aparc_rh_parsopercularis",
+  "aparc_rh_parsorbitalis",
+  "aparc_rh_parstriangularis",
+  "aparc_rh_pericalcarine",
+  "aparc_rh_postcentral",
+  "aparc_rh_posteriorcingulate",
+  "aparc_rh_precentral",
+  "aparc_rh_precuneus",
+  "aparc_rh_rostralanteriorcingulate",
+  "aparc_rh_rostralmiddlefrontal",
+  "aparc_rh_superiorfrontal",
+  "aparc_rh_superiorparietal",
+  "aparc_rh_superiortemporal",
+  "aparc_rh_supramarginal",
+  "aparc_rh_frontalpole",
+  "aparc_rh_temporalpole",
+  "aparc_rh_transversetemporal",
+  "aparc_rh_insula",
+  "aparc_rh_MeanThickness",
+  "gba_carrier",
+  "lrrk2_carrier",
+  "lumi_abeta42",
+  "lumi_abeta40",
+  "lumi_ptau181",
+  "lumi_ratio_4240",
+  "elecsys_ptau_abeta_ratio",
+  "sup_sbp",
+  "sup_dbp",
+  "htn_bp",
+  "htn_med_definite",
+  "htn_med_conditional",
+  "dm_med",
+  "dyslipid_med",
+  "comp_htn",
+  "comp_dm",
+  "comp_dyslip",
+  "vascular_component_count"
+ ],
+ "properties": {
+  "participant_id": {
+   "type": [
+    "string",
+    "integer",
+    "null"
+   ],
+   "description": "Caller's (pseudonymous) identifier; echoed in the output; not a model feature."
+  },
+  "cohort": {
+   "enum": [
+    "PD",
+    "HC",
+    "Prodromal",
+    "SWEDD",
+    null
+   ],
+   "description": "Optional enrolment cohort. Used only for cohort_in_training_scope; never a model feature."
+  },
+  "age": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "age_at_visit": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "SEX": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "EDUCYRS": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "race": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "HISPLAT": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "ASHKJEW": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "AFICBERB": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "BASQUE": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "fampd": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "fampd_bin": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "handed": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "howlive": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "sex_orient": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "BMI": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "demographics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "upsit": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "upsit_pctl": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "upsit_pctl15": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "moca": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "bjlot": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "DVS_JLO_MSSA": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "DVS_JLO_MSSAE": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "clockdraw": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "DVT_CLCKDRAW": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "DVZ_CLCKDRAW": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "hvlt_discrimination": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "hvlt_immediaterecall": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "hvlt_retention": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "HVLTFPRL": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "HVLTRDLY": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "HVLTREC": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "DVT_TOTAL_RECALL": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "DVT_DELAYED_RECALL": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "DVT_RETENTION": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "DVT_RECOG_DISC_INDEX": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "lexical": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "DVT_FAS": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "DVS_FAS": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "lns": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "DVS_LNS": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "MODBNT": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "DVS_BNT": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "PCTL_BNT": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "SDMTOTAL": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "DVT_SDM": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "DVSD_SDM": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "TMT_A": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "TMT_B": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "DVZ_TMTA": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "DVZ_TMTB": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "VLTANIM": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "DVT_SFTANIM": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "DVS_SFTANIM": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "MCI_testscores": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "cogstate": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "COG_COMPOSITE_INT": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "COG_COMPOSITE_EXT": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "PDAQ27": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "nqol_cogns": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "nqol_comms": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "nqol_lefs": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "motor",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "nqol_uefs": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "motor",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "MSEADLG": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "motor",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "quip": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "quip_any": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "quip_gamble": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "quip_sex": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "quip_buy": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "quip_eat": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "quip_hobby": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "quip_pund": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "quip_walk": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "ess": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "rem": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "gds": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "stai": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "stai_state": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "stai_trait": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "scopa": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "scopa_gi": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "scopa_ur": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "scopa_cv": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "scopa_therm": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "scopa_pm": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "scopa_sex": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "orthostasis": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like"
+   ]
+  },
+  "hy": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "motor",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "NHY": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "motor",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "pigd": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "motor",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "NP1COG": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "cognition",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "NP1HALL": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "NP1DPRS": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "NP1ANXS": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "NP1APAT": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "NP1DDS": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "NP1FATG": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "updrs1_score": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "non-motor clinical",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "updrs2_score": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "motor",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "updrs3_score": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "motor",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "updrs_totscore": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "motor",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "CSFSAA": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "abeta": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "tau": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "ptau": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "asyn": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "hemohi": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "ptau217_plasma": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "bd_tau_plasma": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "Lilly_ptau217p": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "Lilly_ptau217p_LLOD": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "IU_pTau181_CSF": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "IU_ABeta40_CSF": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "IU_ABeta42_CSF": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "IU_GFAP_plasma_mean": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "IU_GFAP_plasma_std": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "IU_NFL_plasma_mean": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "IU_NFL_plasma_std": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "C2N_AB40": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "C2N_AB42": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "C2N_AB4240": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "C2N_AB_Contaminant": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "MTBR_TAU243": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "MTBR_TAU243_LLOD": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "MTBR_TAU243_InstErr": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "Roche_IL_1b_CSF": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "Roche_IL_6_CSF": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "Roche_IL_6_CSF_LLOD": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "Roche_YKL40_CSF": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "Roche_YKL40_CSF_LLOD": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "NFL_CSF": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "NFL_CSF_ULOD": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "nfl_serum": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "total_di_18_1_BMP": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "total_di_22_6_BMP": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "_2_2__di_22_6_BMP": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "APOE_e4": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "genetics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "GP2_proxy_PGS": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "genetics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "META5_proxy_PGS": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "genetics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "MIA_LOWPUT_EXPECTED": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "DAT",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "MIA_CAUDATE_L": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "DAT",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "MIA_CAUDATE_R": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "DAT",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "MIA_CAUDATE_BILAT": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "DAT",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "MIA_PUTAMEN_L": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "DAT",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "MIA_PUTAMEN_R": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "DAT",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "MIA_PUTAMEN_BILAT": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "DAT",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "MIA_STRIATUM_L": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "DAT",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "MIA_STRIATUM_R": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "DAT",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "MIA_STRIATUM_BILAT": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "DAT",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_WM_hypointensities": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Brain_Stem": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_non_WM_hypointensities": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Optic_Chiasm": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_WM_hypointensities": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_BrainSegVol": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_Lateral_Ventricle": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_CC_Central": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_5th_Ventricle": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_choroid_plexus": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_Cerebellum_White_Matter": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_vessel": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_Cerebellum_Cortex": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_MaskVol_to_eTIV": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_MaskVol": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_TotalGrayVol": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_choroid_plexus": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_Inf_Lat_Vent": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_Pallidum": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_Thalamus": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_VentralDC": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_rhCortexVol": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_non_WM_hypointensities": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_BrainSegVol_to_eTIV": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_Amygdala": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_Amygdala": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_EstimatedTotalIntraCranialVol": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_4th_Ventricle": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_Inf_Lat_Vent": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_CortexVol": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_Pallidum": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_lhCortexVol": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_CC_Anterior": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_CC_Posterior": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_Accumbens_area": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_vessel": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_Cerebellum_Cortex": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_Putamen": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_3rd_Ventricle": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_non_WM_hypointensities": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_Caudate": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_CC_Mid_Posterior": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_lhSurfaceHoles": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_Hippocampus": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_Hippocampus": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_Caudate": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_rhCerebralWhiteMatterVol": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_Putamen": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_WM_hypointensities": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_Accumbens_area": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_rhSurfaceHoles": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_lhCerebralWhiteMatterVol": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_BrainSegVolNotVent": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_Cerebellum_White_Matter": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_VentralDC": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_SupraTentorialVolNotVent": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_CC_Mid_Anterior": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_SupraTentorialVol": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_SubCortGrayVol": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Right_Thalamus": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_Left_Lateral_Ventricle": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_CSF": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_SurfaceHoles": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aseg_CerebralWhiteMatterVol": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_bankssts": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_caudalanteriorcingulate": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_caudalmiddlefrontal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_cuneus": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_entorhinal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_fusiform": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_inferiorparietal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_inferiortemporal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_isthmuscingulate": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_lateraloccipital": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_lateralorbitofrontal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_lingual": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_medialorbitofrontal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_middletemporal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_parahippocampal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_paracentral": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_parsopercularis": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_parsorbitalis": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_parstriangularis": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_pericalcarine": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_postcentral": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_posteriorcingulate": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_precentral": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_precuneus": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_rostralanteriorcingulate": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_rostralmiddlefrontal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_superiorfrontal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_superiorparietal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_superiortemporal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_supramarginal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_frontalpole": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_temporalpole": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_transversetemporal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_insula": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_lh_MeanThickness": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_bankssts": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_caudalanteriorcingulate": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_caudalmiddlefrontal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_cuneus": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_entorhinal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_fusiform": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_inferiorparietal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_inferiortemporal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_isthmuscingulate": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_lateraloccipital": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_lateralorbitofrontal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_lingual": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_medialorbitofrontal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_middletemporal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_parahippocampal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_paracentral": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_parsopercularis": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_parsorbitalis": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_parstriangularis": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_pericalcarine": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_postcentral": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_posteriorcingulate": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_precentral": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_precuneus": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_rostralanteriorcingulate": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_rostralmiddlefrontal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_superiorfrontal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_superiorparietal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_superiortemporal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_supramarginal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_frontalpole": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_temporalpole": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_transversetemporal": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_insula": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "aparc_rh_MeanThickness": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "MRI",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "gba_carrier": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "genetics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "lrrk2_carrier": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "genetics",
+   "x-signals": [
+    "pd_type",
+    "ad_like",
+    "vascular_risk"
+   ]
+  },
+  "lumi_abeta42": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "lumi_abeta40": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "lumi_ptau181": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "lumi_ratio_4240": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "elecsys_ptau_abeta_ratio": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "biofluid",
+   "x-signals": [
+    "pd_type",
+    "vascular_risk"
+   ]
+  },
+  "sup_sbp": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "vascular evidence",
+   "x-signals": [
+    "pd_type",
+    "ad_like"
+   ]
+  },
+  "sup_dbp": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "vascular evidence",
+   "x-signals": [
+    "pd_type",
+    "ad_like"
+   ]
+  },
+  "htn_bp": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "vascular evidence",
+   "x-signals": [
+    "pd_type",
+    "ad_like"
+   ]
+  },
+  "htn_med_definite": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "vascular evidence",
+   "x-signals": [
+    "pd_type",
+    "ad_like"
+   ]
+  },
+  "htn_med_conditional": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "vascular evidence",
+   "x-signals": [
+    "pd_type",
+    "ad_like"
+   ]
+  },
+  "dm_med": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "vascular evidence",
+   "x-signals": [
+    "pd_type",
+    "ad_like"
+   ]
+  },
+  "dyslipid_med": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "vascular evidence",
+   "x-signals": [
+    "pd_type",
+    "ad_like"
+   ]
+  },
+  "comp_htn": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "vascular evidence",
+   "x-signals": [
+    "pd_type",
+    "ad_like"
+   ]
+  },
+  "comp_dm": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "vascular evidence",
+   "x-signals": [
+    "pd_type",
+    "ad_like"
+   ]
+  },
+  "comp_dyslip": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "vascular evidence",
+   "x-signals": [
+    "pd_type",
+    "ad_like"
+   ]
+  },
+  "vascular_component_count": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "description": "TBD — student to complete",
+   "x-modality": "vascular evidence",
+   "x-signals": [
+    "pd_type",
+    "ad_like"
+   ]
+  }
+ },
+ "additionalProperties": true
+}
