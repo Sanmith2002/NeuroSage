@@ -2,7 +2,7 @@
 
 **Project:** Explainable Co-Pathology Signal Estimation in Parkinson's Disease Using PPMI Data (J26-DS-306)
 **Branch / worktree:** `feature/pd-copathology` in `NeuroSage-pd-copathology`
-**Status at 14 Oct 2026:** Phase 3 model development, robustness, explainability and the one-time held-out final evaluation are complete. The selected models are frozen and the final-evaluation lock has been written. The component is moving to read-only reporting and frozen-model inference (JSON output contract). API, database and frontend integration are pending a team architecture decision.
+**Status at 15 Oct 2026:** The standalone component is complete for team integration. Model development, the one-time held-out evaluation, read-only held-out reporting (Phase 3b), frozen-bundle provenance packaging (Phase 4A.0) and the frozen inference package with input/output JSON contracts and CLI (Phase 4A) are finished and committed. API, database and frontend integration are pending a team architecture decision.
 **Companion document:** `docs/phase1_final_decisions_v1.md`, which holds the authoritative scientific decisions. This log records *what was done, in what order, and why*.
 **Place in repo:** `components/pd_copathology/docs/PROGRESS_LOG.md`
 
@@ -30,8 +30,10 @@
 | 14 | Phase 3 training and selection | Nested CV of 5 candidates + 2 baselines; two-stage selection; robustness, ablation, sensitivity labels, SHAP; PD missingness audit | RF / elastic-net LR / RF selected; all gates passed |
 | 15 | Pre-test review | `phase3_development_review.md` written and committed before test access; approval file created (2026-10-14) | Caveats recorded before the test |
 | 16 | Final evaluation | One-time held-out test evaluation | Held-out results consistent with development estimates; models frozen; lock written |
-| 17 | Current stage | Phase 3b read-only held-out reporting, then Phase 4A frozen-model inference + input/output JSON contracts + CLI | In progress |
-| 18 | Later (team decision) | Shared API, database, frontend and Safety Framework integration | Pending team architecture decision |
+| 17 | Phase 3b | Read-only held-out reporting (`report-final`): test curves with development overlays, dev-vs-test table, supplementary counts; privacy scan made schema-aware | Figures and tables written from saved predictions only; no new prediction pass |
+| 18 | Phase 4A.0 | Additive packaging of the frozen bundle: manifest (file, feature-list and lock hashes; library versions), explainer specs; local SHAP-convention verification on development data | `--verify` passes; max SHAP difference ≤ 1.3e-15 for all three signals |
+| 19 | Phase 4A | Frozen inference package, strict input validation, input/output JSON contracts v1.0, CLI, synthetic demo, contract check against the bundle | 222 synthetic tests pass; real-bundle smoke test on a synthetic record passes; component ready for team integration |
+| 20 | Later (team decision) | Shared API, database, frontend and Safety Framework integration | Pending team architecture decision |
 
 ---
 
@@ -66,6 +68,9 @@
 | Limit flags could leak cohort | Supporter review | Flags set to `never` as predictors |
 | Lumipulse GMM could silently re-fit | Claude Code traceability check | Hash recorded in the manifest; a normal run fails if the file is missing or changed |
 | Smoke tests could write into the tracked registry | Supporter review | Smoke runs use scratch paths; the registry is checked unchanged |
+| Privacy scan flagged genuine metrics as participant IDs (a decimal such as 0.7310 was split into the token 7310) | First real `report-final` run | Schema-aware scan: declared aggregate columns are not compared with IDs; undeclared columns stay strict; identifier-named columns always fail; no value whitelisted |
+| Final bundle lacked library versions, file hashes and an explicit SHAP specification | Phase 4A B0 source-code check | Additive packaging step (`package-final-bundle`); models untouched; elastic-net zero-reference convention verified on development data |
+| Committed input contract was generated from the 302-feature tier list instead of the 300-feature frozen bundle | Real-bundle smoke test | The frozen bundle's raw feature union is authoritative; `--check-contracts --from-bundle` verifies it locally |
 | HGB crashed on features that were all-missing or constant within a training fold | First real CV run (ValueError) | Fold-safe `DropDegenerateColumns` fitted inside each fold; pipeline version 2; fail-loud if all trials fail; old CV discarded with `reset-cv` and re-run |
 | PD model could learn from missingness patterns | Phase 3 review (missingness-only check) | Missingness audit plus low-missingness re-run: strict BSS 0.760 vs 0.768, so the PD signal does not depend on missingness |
 
@@ -156,7 +161,11 @@
 | `48aa388` | L2 LR candidate, never-flag censoring indicators, provisional lock, GMM hash traceability |
 | `9f72edf` | Fold-safe degenerate-column handling (`DropDegenerateColumns`) and Phase 3 CV restart support (`reset-cv`) |
 | `40ff1c3` | PD missingness audit and low-missingness re-run |
-| `4cf22ac` | Pre-test development review and decisions log; selection approved for held-out evaluation |
+| `4cf22ac` | Phase 3 pre-test development review; selection approved for held-out evaluation |
+| `83b53a0` | Progress log: Phase 3 results, status and wording rules |
+| `07a9ec7` | Phase 3b: read-only held-out reporting; schema-aware privacy scan |
+| `2674d58` | Phase 4A.0: frozen-bundle provenance packaging and explainer-spec verification |
+| `28b6094` | Phase 4A: frozen inference package, input/output JSON contracts v1.0 |
 
 From 14 Oct 2026, all commits are made manually by the student; the coding agent does not stage, commit or push.
 
@@ -175,8 +184,11 @@ From 14 Oct 2026, all commits are made manually by the student; the coding agent
   - only 336 healthy controls;
   - MRI covers about a third of participants;
   - no external validation.
-- **Current:** frozen inference package + input/output JSON contracts + CLI (Phase 4A), after read-only held-out reporting (Phase 3b).
+- **Done:** Phase 3b reporting, Phase 4A.0 packaging, Phase 4A inference + JSON contracts + CLI (15 Oct 2026).
+- **Next (team):** take `docs/input_schema_v1.json`, `docs/output_schema_v1.json`, `docs/output_schema.md` and `docs/integration_open_questions.md` to the team architecture discussion.
 - **Later, after the team architecture decision:** shared API, database persistence and frontend integration with the Clinical Predictive Safety Framework.
+- **Student to complete:** feature descriptions in `docs/input_features_v1.md` (currently "TBD"), from public PPMI documentation.
+- **Additional limitations to state:** input contract v1 checks presence and numeric type only (no range or categorical-code checks; out-of-range or implausible inputs are still processed by the frozen models and may produce unreliable probabilities, and implausible-input detection belongs to the Safety Framework); final-fit library versions are taken from the selected CV run record and confirmed by an exact scikit-learn match when the model files load; near-duplicate inputs (hy/NHY, age/age_at_visit, two plasma p-tau217 assays) can share attribution in explanations.
 
 ---
 
@@ -221,3 +233,21 @@ Final models are saved in `models/final/v1.0/` (git-ignored) and the final-evalu
 - "Held-out performance was consistent with development estimates", not "no overfitting occurred".
 - "MRI features contributed to individual predictions, but ablation showed little unique incremental contribution", not "MRI is essential because SHAP is high".
 - No new baseline was fitted on the held-out set after test access; held-out comparison with the prevalence reference is given by the Brier Skill Score.
+
+---
+
+## 9. Phase 3b / 4A results (15 Oct 2026)
+
+**AD-like target-adjacent biomarkers.** Plasma p-tau217 (`ptau217_plasma`, `Lilly_ptau217p`, `Lilly_ptau217p_LLOD`) and `bd_tau_plasma` were classified `near_proxy` for `ad_like_v1` before training. They are in the primary tier and excluded from the strict tier. Development CV (selected elastic-net model): primary BSS 0.185, strict-tier BSS 0.121 (drop 0.064). That is still above the prevalence reference and the highest strict-tier BSS in the AD tie set (HGB 0.100, XGB 0.091, L2-LR 0.077). The strict tier was assessed in development CV only; the held-out test evaluated the primary model.
+
+**Explanation convention (verified on development data, 15 Oct 2026):**
+- PD-type and vascular (RF): TreeExplainer, tree-path-dependent, no background; probability space of the uncalibrated model. Base value + SHAP reproduces the model output (max difference 9.4e-16 and 1.3e-15).
+- AD-like (elastic-net): contribution = coefficient × scaled value, base value = intercept, uncalibrated log-odds; equivalent to LinearExplainer with the full training background (max difference 4.4e-16; max |mean scaled background| 3.4e-15).
+- SHAP explains the uncalibrated score, not the calibrated probability. A per-record additivity guard (1e-6) runs at inference.
+
+**Inference package:**
+- Loads only after the frozen bundle passes verification (file, feature-list and lock hashes; exact scikit-learn version; version warnings treated as errors). No fallback.
+- Output JSON v1.0: three calibrated research-proxy probabilities, up to 5 observed top features per signal, `cohort_in_training_scope`, completeness (overall, per modality, per signal) and a fixed disclaimer. No thresholds, class decisions, diagnoses or TRUST/CAUTION/DEFER/OOD fields.
+- Input contract v1.0: the frozen bundle's 300 raw pre-pipeline features; strict numeric validation; `--check-contracts --from-bundle` passes.
+- Real-bundle smoke test (synthetic record `SYNTHETIC_DEMO_001` only): bundle verified, three signals produced, repeat runs identical, cohort scope correct (PD → true for all; Prodromal → false for PD-type only). The synthetic values are deliberately unrealistic, so its probabilities have no clinical meaning.
+- 222 synthetic tests pass.
