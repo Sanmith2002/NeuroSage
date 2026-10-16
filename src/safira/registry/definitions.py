@@ -38,7 +38,12 @@ def _text(value: object, field: str, *, exact: bool = False) -> None:
 def _keys(value: object, required: set[str], field: str, optional=()) -> None:
     if not isinstance(value, Mapping):
         _invalid(field)
-    if not required <= value.keys() or not value.keys() <= required | set(optional):
+    missing = required - value.keys()
+    if missing:
+        # Missing names come from the fixed schema; unknown submitted names may
+        # themselves contain restricted content and must never be echoed.
+        _invalid(f"{field}.{sorted(missing)[0]}")
+    if not value.keys() <= required | set(optional):
         _invalid(field)
 
 

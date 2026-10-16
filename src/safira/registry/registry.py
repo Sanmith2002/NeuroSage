@@ -51,7 +51,9 @@ def _checked_definition(definition: RegisteredModelVersion) -> RegisteredModelVe
     return RegisteredModelVersion.from_dict(definition.to_dict())
 
 
-def _validate_adapter(definition: RegisteredModelVersion, adapter: ModelAdapter) -> None:
+def _validate_adapter(
+    definition: RegisteredModelVersion, adapter: ModelAdapter, *, binding: bool = False
+) -> None:
     if not isinstance(adapter, ModelAdapter):
         raise IncompatibleAdapterError("adapter must implement Safira's existing ModelAdapter.")
     try:
@@ -61,22 +63,29 @@ def _validate_adapter(definition: RegisteredModelVersion, adapter: ModelAdapter)
         actual = capabilities.to_dict()
         if any(type(flag) is not bool for flag in actual.values()):
             raise TypeError
-        if actual != definition.adapter.capabilities.to_dict():
-            raise TypeError
     except Exception:
         raise IncompatibleAdapterError(
-            "Adapter capabilities must match the registered Boolean capability snapshot."
+            "Adapter capabilities must be a valid Boolean capability snapshot."
         ) from None
+    if actual != definition.adapter.capabilities.to_dict():
+        error_type = BindingMismatchError if binding else IncompatibleAdapterError
+        raise error_type("Adapter capabilities differ from the registered exact version.")
     required = ["predict"] + [
         method for capability, method in _CAPABILITY_METHODS.items() if actual[capability]
     ]
     for method in required:
-        implementation = getattr(type(adapter), method, None)
-        if (
-            implementation is getattr(ModelAdapter, method)
-            or not callable(implementation)
-            or not callable(getattr(adapter, method, None))
-        ):
+        try:
+            implementation = getattr(type(adapter), method, None)
+            concrete = (
+                implementation is not getattr(ModelAdapter, method)
+                and callable(implementation)
+                and callable(getattr(adapter, method, None))
+            )
+        except Exception:
+            raise IncompatibleAdapterError(
+                f"Adapter method {method} could not be inspected safely."
+            ) from None
+        if not concrete:
             raise IncompatibleAdapterError(f"Adapter must concretely implement {method}.")
     if any(label.value_source == "predict_probability" for label in definition.labels):
         if actual["prediction_probability"] is not True:
@@ -85,8 +94,8 @@ def _validate_adapter(definition: RegisteredModelVersion, adapter: ModelAdapter)
             )
 
 
-def _verify_pair(definition, classifier, adapter, provider) -> None:
-    _validate_adapter(definition, adapter)
+def _verify_pair(definition, classifier, adapter, provider, *, binding=False) -> None:
+    _validate_adapter(definition, adapter, binding=binding)
     verify_identity(
         provider, classifier, adapter,
         expected_classifier_sha256=definition.classifier_artifact["sha256"],
@@ -146,7 +155,7 @@ class ModelRegistry:
         candidate = _checked_definition(definition)
         if candidate != stored:
             raise BindingMismatchError("Attachment declarations differ from the registered exact version.")
-        _verify_pair(stored, classifier, adapter, identity_provider)
+        _verify_pair(stored, classifier, adapter, identity_provider, binding=True)
         usable = UsableRegistration(stored, classifier, adapter)
         self._bindings[(model_id, model_version)] = usable
         return usable
@@ -159,7 +168,7 @@ class ModelRegistry:
             raise UnattachedModelError("Reattach the exact classifier-adapter pair before usable access.")
         if usable.metadata != metadata:
             raise BindingMismatchError("Active binding metadata differs from the stored exact version.")
-        _validate_adapter(metadata, usable.adapter)
+        _validate_adapter(metadata, usable.adapter, binding=True)
         return usable
 
     def close(self) -> None:

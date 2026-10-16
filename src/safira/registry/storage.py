@@ -2,8 +2,8 @@
 
 The definitions layer must supply a validator; this is not a public arbitrary
 JSON store. The validator raises for anything outside its structural schema,
-including observations or restricted fields. Full registration semantics and
-live bindings belong to later phases. No executable objects are serialized.
+including observations or restricted fields. Registration semantics and live
+bindings belong to the registry layer. No executable objects are serialized.
 """
 
 from collections.abc import Callable
@@ -212,6 +212,8 @@ class MetadataStore:
         except sqlite3.Error:
             raise RegistryStorageError("Catalog metadata could not be read.") from None
         try:
+            if type(row[0]) is not str:
+                raise ValueError("Stored metadata must be JSON text, not a binary payload.")
             record = json.loads(row[0], object_pairs_hook=_json_object)
             self._validate_record(model_id, model_version, record)
         except Exception:
