@@ -1,0 +1,40 @@
+# Target card: PD-type signal, biological (SAA) sensitivity definition — version 1
+target_id: pd_type_saa
+version: v1
+status: frozen_pending_supervisor_signoff
+construct: >
+  Research proxy for neuronal alpha-synuclein disease biology, defined by the
+  CSF alpha-synuclein seed amplification assay (SAA) result at baseline, in
+  every cohort. Sensitivity definition for pd_type_v1. Not a diagnosis.
+
+source:
+  table: SAA_Biospecimen_Analysis_Results
+  visit: BL
+  columns:
+    event: CLINICAL_EVENT
+    status: SAA_Status      # Positive / Negative / Inconclusive
+
+preprocessing:
+  technical_value_handling: >
+    All BL results of a participant are considered together. If they do not
+    all carry the same status the participant is "Conflicting" and masked;
+    conflicts are never resolved by picking one result.
+
+rule:
+  positive: "every BL SAA result is Positive"
+  negative: "every BL SAA result is Negative"
+  masked: "Inconclusive, conflicting statuses at BL, or no SAA result at BL"
+  positive_status: Positive
+  negative_status: Negative
+  citation: >
+    PPMI SAA biospecimen results (Amprion assays, projects 155 and 237);
+    docs/phase1_final_decisions_v1.md section 5.2.
+
+eligible_population: "All baseline-universe cohorts with an unambiguous SAA result at BL (expected about 3,470)"
+
+sensitivity_variants: []
+
+leakage:
+  defining_features: [saa_status_bl, CSFSAA, CSFSAA_assay, asyn]
+  never_features: "see configs/leakage_matrix.csv"
+  strict_tier_also_exclude: "DAT SBRs, MDS-UPDRS Part III, Hoehn & Yahr"

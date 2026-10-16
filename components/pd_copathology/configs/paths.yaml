@@ -1,0 +1,22 @@
+# Paths are relative to components/pd_copathology/.
+# Everything under data/ is local-only and ignored by Git.
+# Raw PPMI data is not in the repository: it is read (read-only) from the
+# directory named by the PPMI_DATA_ROOT environment variable. data/raw/ is
+# intentionally unused and stays empty.
+data:
+  raw_env_var: PPMI_DATA_ROOT
+  interim: data/interim
+  processed: data/processed
+  splits: data/splits
+
+reports:
+  audit: reports/audit
+  evaluation: reports/evaluation
+  figures: reports/figures
+  explainability: reports/explainability
+
+models:
+  final: models/final
+
+experiments:
+  registry: experiments/registry.csv

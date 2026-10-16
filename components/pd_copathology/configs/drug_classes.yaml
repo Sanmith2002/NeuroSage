@@ -1,0 +1,148 @@
+# Frozen drug-class lists for the vascular-risk components (v2, Phase 2).
+#
+# Source of truth for docs/phase1_final_decisions_v1.md section 5.2. Each
+# component has three explicit lists:
+#   include      counted when ongoing at baseline
+#   conditional  counted when ongoing at baseline AND the record has a
+#                hypertension indication (text or code, see below)
+#   exclude      never counted, whatever the indication
+# Each entry is a generic name followed by the spellings / brand names that
+# count as that drug. Names are matched case-insensitively on whole words in
+# the columns listed under match_columns.
+#
+# The Phase 1.5 medication audit reads the same lists (include = candidate
+# class; conditional and exclude = flagged drugs).
+version: 2
+match_columns: [CMTRT, WHODRUG]
+
+hypertension_indication:
+  codes: ["14"]                                  # CMINDC 14 = Hypertension (Code List)
+  text: "hypertens|high blood pressure|\\bhtn\\b"
+  text_exclude: "pulmonary|ocular|intraocular|portal"   # other conditions that contain the word
+
+components:
+  htn:
+    include:
+      ACE inhibitor:
+        lisinopril: [lisinopril, zestril, prinivil]
+        enalapril: [enalapril, vasotec]
+        ramipril: [ramipril, altace]
+        benazepril: [benazepril, lotensin]
+        captopril: [captopril]
+        perindopril: [perindopril]
+        quinapril: [quinapril]
+        fosinopril: [fosinopril]
+        trandolapril: [trandolapril]
+      ARB:
+        losartan: [losartan, cozaar]
+        valsartan: [valsartan, diovan]
+        candesartan: [candesartan, atacand]
+        irbesartan: [irbesartan, avapro]
+        olmesartan: [olmesartan, benicar]
+        telmisartan: [telmisartan, micardis]
+        azilsartan: [azilsartan]
+      calcium-channel blocker:
+        amlodipine: [amlodipine, norvasc]
+        nifedipine: [nifedipine]
+        felodipine: [felodipine]
+        lercanidipine: [lercanidipine]
+        nicardipine: [nicardipine]
+        diltiazem: [diltiazem, cardizem]
+        verapamil: [verapamil]
+      thiazide or thiazide-like diuretic:
+        hydrochlorothiazide: [hydrochlorothiazide, hctz]
+        chlorthalidone: [chlorthalidone, chlortalidone]
+        indapamide: [indapamide]
+      other definite antihypertensive:
+        spironolactone: [spironolactone, aldactone]
+        triamterene: [triamterene]
+        hydralazine: [hydralazine]
+        eplerenone: [eplerenone, inspra]
+        methyldopa: [methyldopa, aldomet]
+        aliskiren: [aliskiren, tekturna]
+    conditional:
+      "beta-blocker (ambiguous: tremor, cardiac or blood pressure)":
+        propranolol: [propranolol, inderal]
+        metoprolol: [metoprolol, lopressor, toprol]
+        atenolol: [atenolol, tenormin]
+        bisoprolol: [bisoprolol]
+        carvedilol: [carvedilol, coreg]
+        nebivolol: [nebivolol, bystolic]
+        nadolol: [nadolol]
+        labetalol: [labetalol]
+        sotalol: [sotalol]
+      "alpha-blocker (ambiguous: prostate/urinary or blood pressure)":
+        doxazosin: [doxazosin, cardura]
+        terazosin: [terazosin, hytrin]
+        alfuzosin: [alfuzosin, uroxatral]
+        prazosin: [prazosin]
+      "loop diuretic (ambiguous: oedema, heart failure or blood pressure)":
+        furosemide: [furosemide, lasix]
+        torsemide: [torsemide, torasemide]
+        bumetanide: [bumetanide]
+      "clonidine (ambiguous)":
+        clonidine: [clonidine, catapres]
+    exclude:
+      "alpha-blocker, prostate-selective (never counted)":
+        tamsulosin: [tamsulosin, flomax]
+        silodosin: [silodosin, rapaflo]
+      "blood-pressure-raising drug (never counted; treats hypotension)":
+        midodrine: [midodrine, proamatine]
+        fludrocortisone: [fludrocortisone, florinef]
+        droxidopa: [droxidopa, northera]
+  dm:
+    include:
+      antidiabetic:
+        metformin: [metformin, glucophage]
+        insulin: [insulin, lantus, humalog, novolog, levemir, basaglar, tresiba]
+        glipizide: [glipizide]
+        glimepiride: [glimepiride]
+        glyburide: [glyburide, glibenclamide]
+        gliclazide: [gliclazide]
+        sitagliptin: [sitagliptin, januvia]
+        linagliptin: [linagliptin, tradjenta]
+        saxagliptin: [saxagliptin]
+        empagliflozin: [empagliflozin, jardiance]
+        dapagliflozin: [dapagliflozin, farxiga]
+        canagliflozin: [canagliflozin, invokana]
+        liraglutide: [liraglutide, victoza]
+        semaglutide: [semaglutide, ozempic, rybelsus]
+        dulaglutide: [dulaglutide, trulicity]
+        exenatide: [exenatide]
+        pioglitazone: [pioglitazone, actos]
+        repaglinide: [repaglinide]
+    conditional: {}
+    exclude: {}
+  dyslip:
+    include:
+      lipid-lowering:
+        atorvastatin: [atorvastatin, lipitor]
+        simvastatin: [simvastatin, zocor]
+        rosuvastatin: [rosuvastatin, crestor]
+        pravastatin: [pravastatin, pravachol]
+        lovastatin: [lovastatin]
+        fluvastatin: [fluvastatin]
+        pitavastatin: [pitavastatin, livalo]
+        ezetimibe: [ezetimibe, zetia]
+        fenofibrate: [fenofibrate, tricor]
+        gemfibrozil: [gemfibrozil]
+        bempedoic acid: [bempedoic]
+        evolocumab: [evolocumab, repatha]
+        alirocumab: [alirocumab, praluent]
+        colesevelam: [colesevelam]
+        cholestyramine: [cholestyramine, colestyramine]
+    conditional: {}
+    exclude: {}
+
+# Indication-text categories used only by the Phase 1.5 medication audit. The
+# first matching pattern wins, so orthostatic hypotension is tested before
+# hypertension.
+indication_categories:
+  orthostatic hypotension: "orthosta|hypotens|low blood pressure|low bp|\\bnoh\\b|dizz|syncop|faint"
+  tremor: "tremor"
+  prostate/urinary: "prostat|\\bbph\\b|urin|bladder|nocturia|voiding"
+  hypertension: "hypertens|high blood pressure|blood pressure|\\bhtn\\b|\\bbp\\b"
+  cardiac/arrhythmia: "heart|cardiac|atrial|arrhythm|angina|coronary|palpitat|tachycard|\\bafib\\b|\\bchf\\b|myocard"
+  oedema: "edema|oedema|swelling|fluid"
+  migraine/headache: "migraine|headache"
+  anxiety: "anxiet|panic|stage fright"

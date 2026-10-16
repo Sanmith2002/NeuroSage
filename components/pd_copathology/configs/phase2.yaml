@@ -1,0 +1,71 @@
+# Phase 2: analytic cohort, labels and frozen split.
+# Scientific decisions live in docs/phase1_final_decisions_v1.md and targets/*.yaml;
+# this file only says where things are in the PPMI download.
+version: 1
+seed: 20261011
+
+universe:
+  curated_table: ["PPMI_Curated_Data_Cut_Public*"]
+  event_column: EVENT_ID
+  baseline_event: BL
+  cohort_column: COHORT
+  cohort_codes: {"1": PD, "2": HC, "3": SWEDD, "4": Prodromal}
+  baseline_date_column: visit_date
+  # Drift guard: the frozen baseline universe. A different count stops the build.
+  expected_counts: {ALL: 5019, PD: 1684, HC: 336, Prodromal: 2935, SWEDD: 64}
+
+# Pilot and Deprecated results are refused by name, whatever a pattern asks for.
+forbidden_tables: ["Pilot_*", "Deprecated_*"]
+
+sources:
+  fs7_aseg: {table: ["FS7_ASEG_VOL*"], event_column: EVENT_ID, prefix: aseg_}
+  fs7_aparc: {table: ["FS7_APARC_CTH*"], event_column: EVENT_ID, prefix: aparc_}
+  genetics:
+    table: ["iu_genetic_consensus*"]
+    carrier_columns: {GBA: gba_carrier, LRRK2: lrrk2_carrier}
+    non_carrier_values: ["0"]
+    missing_values: ["", "NA", "NAN"]
+  saa:
+    table: ["SAA_Biospecimen_Analysis_Results*"]
+    event_column: CLINICAL_EVENT
+    status_column: SAA_Status
+  lumipulse:
+    table: ["Current_Biospecimen_Analysis_Results*"]
+    exclude: ["*Summary_Table*"]
+    project_column: PROJECTID
+    project: "283"
+    event_column: CLINICAL_EVENT
+    matrix_column: TYPE
+    matrix_regex: "(?i)csf|cerebrospinal"
+    test_column: TESTNAME
+    value_column: TESTVALUE
+    tests: {ABeta42: lumi_abeta42, ABeta40: lumi_abeta40, pTau181: lumi_ptau181}
+  vital_signs:
+    table: ["Vital_Signs*"]
+    event_column: EVENT_ID
+    screening_event: SC
+    sbp: SYSSUP
+    dbp: DIASUP
+  medications:
+    table: ["Concomitant_Medication_Log*"]
+    name_columns: [CMTRT, WHODRUG]
+    start: STARTDT
+    stop: STOPDT
+    indication_code: CMINDC
+    indication_text: CMINDC_TEXT
+
+split:
+  test_fraction: 0.2
+  n_folds: 5
+  min_stratum: 10        # indicators rarer than this are merged or dropped, never left as singletons
+
+lumipulse_gmm:
+  n_init: 5
+  min_development_n: 30
+
+# Columns used by the aggregate construct checks (never to redefine a label).
+construct_check:
+  moca: moca
+  apoe_e4: APOE_e4
+  age: age
+  wm_hypointensities: aseg_WM_hypointensities

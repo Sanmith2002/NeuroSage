@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "copath"
+version = "0.0.1"
+description = "Explainable co-pathology signal estimation in Parkinson's disease using PPMI data."
+readme = "README.md"
+requires-python = ">=3.11"
+
+# Audit, cohort building and the Phase 3 training harness. No MLflow: runs are
+# tracked in experiments/registry.csv.
+dependencies = [
+    "pandas",
+    "numpy",
+    "pyarrow",
+    "pyyaml",
+    "scikit-learn>=1.8",
+    "scipy",
+    "joblib",
+    "xgboost",
+    "optuna",
+    "shap",
+    "matplotlib",
+    "openpyxl",
+    "python-dotenv",
+    "jsonschema",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "nbstripout",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

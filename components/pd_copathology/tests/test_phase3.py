@@ -1,0 +1,1514 @@
+"""Tests for the Phase 3 training harness. Synthetic data only; no test reads PPMI data."""
+
+from __future__ import annotations
+
+import csv
+import json
+import shutil
+import time
+
+import numpy as np
+import pandas as pd
+import pytest
+import yaml
+
+from copath.data import split
+from copath.evaluation import metrics, selection
+from copath.explain import shap_explainer
+from copath.features import leakage_guard
+from copath.models import baselines, candidates
+from copath.models.preprocessing import DropDegenerateColumns
+from copath.phase2 import registry_has_runs, run_phase2
+from copath.phase3 import commands, final, missingness, reset
+from copath.phase3.__main__ import main
+from copath.phase3.core import Paths, Phase3Error, PrivacyCheckError, load_context, prepare, privacy_check, sha256, write_csv
+from copath.targets import builders
+from copath.training import registry, train, tuning
+
+from .conftest_phase2 import isolated_paths
+from .conftest_phase3 import phase3_paths
+from .fixtures import build_phase2_fixtures as fx
+
+FAST = {"candidates": ["lr_l2", "lr_enet", "hgb"], "hgb": {"max_iter": 20},
+        "robustness": {"n_seeds": 2, "top_k": 10, "shap_rows_per_fold": 20},
+        "ablation": {"modalities": ["DAT", "cognition", "vascular evidence"],
+                     "clinical_demographics": ["cognition", "motor", "non-motor clinical", "demographics"]}}
+MATRIX = leakage_guard.load_matrix()
+SPEC = {"gates": {"slope_min": 0.7, "slope_max": 1.3}, "tolerances": {"slope": 0.05, "jaccard": 0.05, "strict_drop": 0.01},
+        "simplicity": ["lr_l2", "lr_enet", "hgb", "rf", "xgb"]}
+
+
+@pytest.fixture(scope="session")
+def phase2(tmp_path_factory):
+    work = tmp_path_factory.mktemp("phase3_input")
+    paths = isolated_paths(work)
+    run_phase2(fx.build(work / "download"), paths)
+    return paths
+
+
+def _paths(work, phase2, **changes):
+    paths = phase3_paths(work, phase2, **{**FAST, **changes})
+    shutil.copytree(phase2.processed, paths.processed)
+    return paths
+
+
+@pytest.fixture(scope="session")
+def pipe(phase2, tmp_path_factory):
+    """Commands 1-6 once, on the synthetic Phase 2 output."""
+    paths = _paths(tmp_path_factory.mktemp("phase3_run"), phase2)
+    for step in (commands.cmd_cv, commands.cmd_select_preliminary, commands.cmd_robustness, commands.cmd_select_final,
+                 commands.cmd_extras, commands.cmd_explain):
+        step(load_context(paths))
+    return paths
+
+
+def _report(paths, name):
+    return pd.read_csv(paths.reports / name, dtype=str, keep_default_na=False)
+
+
+def _rows(paths):
+    return registry.read(paths.registry)
+
+
+def _test_ids(paths):
+    return set(pd.read_csv(paths.splits / "split_v1_test_ids.csv", dtype=str)["PATNO"])
+
+
+# ---------------------------------------------------------------- pipeline
+
+def test_commands_1_to_6_write_the_expected_reports(pipe):
+    names = {p.name for p in pipe.reports.iterdir() if p.is_file()}
+    assert {"baseline_results.csv", "candidate_results.csv", "leakage_checks.csv", "selection_preliminary.md",
+            "robustness_tieset.csv", "shap_stability_tieset.csv", "selection_final.md", "modality_ablation.csv",
+            "sensitivity_labels.csv", "calibration_comparison.csv", "shap_plausibility.csv", "shap_summary.md",
+            "extras_notes.md"} <= names
+    for label in builders.PRIMARY_LABELS:
+        assert {f"shap_global_{label}.csv", f"shap_modality_{label}.csv", f"shap_dependence_{label}.csv"} <= names
+    assert "final_test_results.csv" not in names and not pipe.lock.exists() and not pipe.approval.exists()
+    assert {p.suffix for p in (pipe.reports / "figures").iterdir()} == {".png"}
+    results = _report(pipe, "candidate_results.csv")
+    assert set(results["model"]) == {"lr_l2", "lr_enet", "hgb"} and set(results["tier"]) == {"primary"}
+    one = results[(results["label"] == "ad_like_v1") & (results["model"] == "lr_enet")]
+    assert {"pooled", "mean", "sd", "se", "fold 0", "fold 4"} <= set(one["scope"])
+    assert 0.5 < float(one[one["scope"] == "pooled"]["auroc"].iloc[0]) <= 1
+    system = results[results["label"] == "ALL (macro over labels)"]
+    assert len(system) == 3 and (system["hamming_loss"] != "").all() and (system["n_all_eligible"] != "").all()
+    assert set(_report(pipe, "baseline_results.csv")["model"]) == {"b0a", "b0b"}
+    prevalence = _report(pipe, "baseline_results.csv").query("model == 'b0a' and scope == 'pooled'")
+    assert (prevalence["bss"].astype(float).abs() < 0.02).all()  # the prevalence baseline has no skill by construction
+    leakage = _report(pipe, "leakage_checks.csv")
+    assert set(leakage["check"]) == {"missingness-only model (AUROC)", "age + sex floor (AUPRC)"}
+    calibration = _report(pipe, "calibration_comparison.csv")
+    assert set(calibration["calibration"]) == {"sigmoid (selected)", "isotonic", "none"} and len(calibration) == 9
+    sensitivity = _report(pipe, "sensitivity_labels.csv")
+    assert {"pd_type_saa_v1", "ad_like_lumipulse_v1", "ad_like_v1_cut028", "ad_like_v1_cut022", "ad_like_v1_uncensored",
+            "vascular_v2"} <= set(sensitivity["label"])
+    assert sensitivity["analysis"].str.contains("medication-log record").sum() == 2
+    ablation = _report(pipe, "modality_ablation.csv")
+    assert "clinical + demographics only" in set(ablation["analysis"])
+    vascular = ablation[(ablation["label"] == "vascular_v1") & (ablation["analysis"] == "without vascular evidence")]
+    assert vascular["status"].iloc[0].startswith("not run")  # every vascular-evidence column defines that label
+    notes = (pipe.reports / "extras_notes.md").read_text(encoding="utf-8")
+    assert "Cognition does not strongly separate the biomarker groups at baseline" in notes
+    summary = (pipe.reports / "shap_summary.md").read_text(encoding="utf-8")
+    assert "uncalibrated" in summary and "monotonic" in summary and "SHAP / model-output space:" in summary
+
+
+def test_each_candidate_family_gets_cv_runs_for_every_label(pipe):
+    rows = [r for r in _rows(pipe) if r["stage"] == "cv"]
+    for label in builders.PRIMARY_LABELS:
+        assert {r["model"] for r in rows if r["label"] == label} == {"b0a", "b0b", "missingness", "lr_l2", "lr_enet", "hgb"}
+    details = registry.load_details(pipe.runs, "cv-ad_like_v1-primary-lr_l2-s20261011")
+    assert all(set(f["params"]) == {"C", "class_weight"} for f in details["folds"])
+
+
+def test_registry_has_one_row_per_run_with_hashes(pipe):
+    rows = _rows(pipe)
+    assert len({r["run_id"] for r in rows}) == len(rows) and {r["stage"] for r in rows} == {"cv", "robustness", "extras"}
+    with open(pipe.registry, newline="", encoding="utf-8") as fh:
+        assert next(csv.reader(fh)) == registry.COLUMNS
+    for row in rows:
+        assert all(len(row[h]) == 64 for h in registry.HASHES) and row["started_at"] and row["finished_at"]
+        assert (pipe.runs / f"{row['run_id']}.json").is_file()
+    assert registry_has_runs(pipe.registry)  # so `phase2 --refreeze` is refused from now on
+
+
+def test_cv_uses_the_primary_tier_only_and_tiers_are_respected(pipe):
+    rows = _rows(pipe)
+    assert {r["tier"] for r in rows if r["stage"] == "cv"} == {"primary"}
+    assert {r["tier"] for r in rows if r["stage"] == "robustness"} == {"primary", "strict"}
+    for row in rows:
+        details = registry.load_details(pipe.runs, row["run_id"])
+        parent = builders.variant_parents(builders.load_cards(pipe.targets)).get(row["label"], row["label"])
+        allowed = set(leakage_guard.tier_features(MATRIX, parent, row["tier"]))
+        assert set(details.get("features", [])) <= allowed, row["run_id"]
+        assert not any(f.startswith("label_") or f in ("PATNO", "fold", "cohort", "COHORT") for f in details.get("features", []))
+    strict = registry.load_details(pipe.runs, [r["run_id"] for r in rows if r["tier"] == "strict" and r["label"] == "pd_type_v1"][0])
+    assert not set(strict["features"]) & {"updrs3_score", "hy", "MIA_PUTAMEN_L", "CSFSAA", "asyn"}
+    primary = registry.load_details(pipe.runs, "cv-pd_type_v1-primary-lr_enet-s20261011")
+    assert {"updrs3_score", "CSFSAA"} <= set(primary["features"]) and "saa_status_bl" not in primary["features"]
+    assert primary["nonnumeric_tier_features_not_used"] == ["saa_status_bl"]  # a text near-proxy: reported, not used
+    with pytest.raises(leakage_guard.LeakageError):
+        prepare(load_context(pipe), "ad_like_v1", "primary", features=["age", "abeta"])
+
+
+def test_masked_participants_are_never_trained_on_or_scored(pipe):
+    ctx = load_context(pipe)
+    for row in _rows(pipe):
+        if row["status"] != "ok":
+            continue
+        column = builders.label_column(row["label"])
+        eligible = set(ctx.frame.loc[ctx.frame[column].notna(), "PATNO"].astype(str))
+        oof = pd.read_parquet(pipe.oof / f"{row['run_id']}.parquet")
+        assert set(oof["PATNO"]) <= eligible and oof["PATNO"].is_unique, row["run_id"]
+        if row["stage"] == "cv":
+            assert set(oof["PATNO"]) == eligible  # every eligible participant is predicted exactly once, out of fold
+    data = prepare(ctx, "pd_type_v1", "primary")
+    masked = set(ctx.frame.loc[ctx.frame["label_pd_type_v1"].isna(), "PATNO"].astype(str))
+    assert masked and not set(data["ids"]) & masked and set(np.unique(data["y"])) == {0, 1}
+
+
+def test_no_test_set_access_before_an_approved_final(pipe, monkeypatch):
+    held_out = _test_ids(pipe)
+    assert not set(load_context(pipe).frame["PATNO"].astype(str)) & held_out
+    for path in list(pipe.oof.glob("*.parquet")) + list(pipe.shap.glob("*.parquet")):
+        assert not set(pd.read_parquet(path)["PATNO"].astype(str)) & held_out, path.name
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("the test set was requested")
+
+    monkeypatch.delenv(split.FINAL_EVALUATION_ENV, raising=False)
+    with pytest.raises(split.TestSetAccessError):
+        split.load_analytic(pipe.processed, pipe.splits, "test")  # the Phase 2 guard still holds
+    monkeypatch.setattr(split, "_require_final_evaluation", forbidden)
+    monkeypatch.setattr(split, "load_ids", forbidden)
+    commands.cmd_cv(load_context(pipe))  # resumes from the registry; never asks for test identifiers or rows
+    commands.cmd_select_preliminary(load_context(pipe))
+
+
+def test_resume_skips_registered_runs_and_cv_is_deterministic(pipe, phase2, tmp_path):
+    before = len(_rows(pipe))
+    commands.cmd_cv(load_context(pipe))
+    assert len(_rows(pipe)) == before  # nothing is run twice
+    again = _paths(tmp_path / "again", phase2)
+    commands.cmd_cv(load_context(again), labels=["ad_like_v1"], models=["lr_l2", "lr_enet", "hgb", "b0b"])
+    assert {r["run_id"] for r in _rows(again)} == {f"cv-ad_like_v1-primary-{m}-s20261011" for m in ("lr_l2", "lr_enet", "hgb", "b0b")}
+    for model in ("lr_l2", "lr_enet", "hgb"):
+        name = f"cv-ad_like_v1-primary-{model}-s20261011.parquet"
+        pd.testing.assert_frame_equal(pd.read_parquet(again.oof / name), pd.read_parquet(pipe.oof / name))
+        assert registry.load_details(again.runs, name[:-8])["folds"][0]["params"] == registry.load_details(pipe.runs, name[:-8])["folds"][0]["params"]
+    cfg = yaml.safe_load(again.config.read_text(encoding="utf-8"))
+    cfg["seed"] += 1
+    again.config.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    assert registry.find(again.registry, "cv-ad_like_v1-primary-lr_enet-s20261011", load_context(again).hashes) is None  # other config: not reused
+
+
+def test_select_final_refuses_without_robustness_results(pipe, phase2, tmp_path):
+    hidden = pipe.runs / "robustness-ad_like_v1-strict-lr_enet-s20261011.json"
+    tie_set = json.loads((pipe.runs / "selection_preliminary.json").read_text(encoding="utf-8"))["labels"]["ad_like_v1"]["tie_set"]
+    if "lr_enet" not in tie_set:
+        hidden = pipe.runs / f"robustness-ad_like_v1-strict-{tie_set[0]}-s20261011.json"
+    moved = tmp_path / hidden.name
+    shutil.move(hidden, moved)
+    try:
+        with pytest.raises(Phase3Error, match="robustness results are missing"):
+            commands.cmd_select_final(load_context(pipe))
+    finally:
+        shutil.move(moved, hidden)
+    fresh = _paths(tmp_path / "fresh", phase2)
+    with pytest.raises(Phase3Error, match="preliminary"):
+        commands.cmd_robustness(load_context(fresh))
+    with pytest.raises(Phase3Error, match="selected_models_v1.yaml"):
+        commands.cmd_extras(load_context(fresh))
+
+
+def test_selection_outputs_follow_the_protocol(pipe):
+    selected = yaml.safe_load(pipe.selected.read_text(encoding="utf-8"))
+    stage1 = json.loads((pipe.runs / "selection_preliminary.json").read_text(encoding="utf-8"))["labels"]
+    assert set(selected["labels"]) == set(builders.PRIMARY_LABELS)
+    for label, choice in selected["labels"].items():
+        assert choice["model"] in stage1[label]["tie_set"] and choice["tier"] == "primary"
+        assert choice["gates_passed"] == stage1[label]["gates_passed"] and choice["cv_run_id"].startswith("cv-")
+        assert bool(choice["failed_gates"]) == (not choice["gates_passed"])
+    text = (pipe.reports / "selection_final.md").read_text(encoding="utf-8")
+    assert sha256(pipe.selected) in text and "Reasoning:" in text
+    preliminary = (pipe.reports / "selection_preliminary.md").read_text(encoding="utf-8")
+    assert "Tie set (within 1 SE)" in preliminary and "missingness-only AUROC" in preliminary
+    stability = _report(pipe, "shap_stability_tieset.csv")
+    primary = stability[stability["tier"] == "primary"]
+    assert set(primary["n_rankings"]) == {"10"} and primary["shap_space"].str.contains("log-odds|probability").all()
+    robustness = _report(pipe, "robustness_tieset.csv")
+    assert set(robustness["tier"]) == {"primary", "strict"} and len(set(robustness["seed"])) == 2
+
+
+# ------------------------------------------------------------ final (locked)
+
+def test_final_is_locked_until_a_human_approves_then_runs_once(pipe, phase2, tmp_path, monkeypatch):
+    monkeypatch.delenv(split.FINAL_EVALUATION_ENV, raising=False)
+    paths = phase3_paths(tmp_path / "final", phase2, **FAST)
+    for source, target in ((pipe.processed, paths.processed), (pipe.runs, paths.runs), (pipe.frozen, paths.frozen)):
+        shutil.copytree(source, target)
+    shutil.copy(pipe.registry, paths.registry)
+    paths.config.write_text(pipe.config.read_text(encoding="utf-8"), encoding="utf-8")
+
+    locked, real_load = {"on": True}, final.load_context
+
+    def loaded(*args, **kwargs):
+        assert not locked["on"], "data was loaded while the final evaluation was locked"
+        return real_load(*args, **kwargs)
+
+    monkeypatch.setattr(final, "load_context", loaded)
+    for flag in (False, True):  # no flag; flag but no approval file
+        with pytest.raises(final.FinalLockError):
+            final.cmd_final(paths, final_flag=flag)
+    approval = {"approved": False, "reviewer": "Synthetic Reviewer", "date": "2031-01-01", "selected_models_sha256": sha256(paths.selected)}
+    for change in ({}, {"approved": True, "selected_models_sha256": "0" * 64}, {"approved": True, "reviewer": ""}, {"approved": "yes"}):
+        paths.approval.write_text(yaml.safe_dump({**approval, **change}), encoding="utf-8")
+        with pytest.raises(final.FinalLockError):
+            final.cmd_final(paths, final_flag=True)
+        with pytest.raises(final.FinalLockError):
+            final.cmd_final(paths, final_flag=False)
+    assert not paths.lock.exists() and not (paths.reports / "final_test_results.csv").exists()
+    locked["on"] = False
+
+    provisional = yaml.safe_load(paths.selected.read_text(encoding="utf-8"))["provisional_labels"]
+    assert provisional  # the synthetic selection is provisional for at least one label
+    paths.approval.write_text(yaml.safe_dump({**approval, "approved": True}), encoding="utf-8")
+    with pytest.raises(final.FinalLockError, match="PROVISIONAL"):
+        final.cmd_final(paths, final_flag=True)  # a valid approval alone does not unlock a provisional selection
+    assert not paths.lock.exists()
+    paths.approval.write_text(yaml.safe_dump({**approval, "approved": True, "acknowledge_provisional": provisional}), encoding="utf-8")
+    final.cmd_final(paths, final_flag=True)
+    assert split.FINAL_EVALUATION_ENV not in __import__("os").environ  # the switch is not left on
+    results = _report(paths, "final_test_results.csv")
+    assert set(builders.PRIMARY_LABELS) <= set(results["label"]) and {"value", "ci_low", "ci_high", "n_bootstrap"} <= set(results.columns)
+    auroc = results[(results["metric"] == "auroc") & (results["label"] == "ad_like_v1")].iloc[0]
+    assert float(auroc["ci_low"]) <= float(auroc["value"]) <= float(auroc["ci_high"])
+    assert {"hamming_loss", "macro_f1_all_eligible"} <= set(results[results["label"].str.startswith("ALL (eligible")]["metric"])
+    held_out = _test_ids(paths)
+    for label in builders.PRIMARY_LABELS:
+        folder = paths.models / "v1.0" / label
+        assert {p.name for p in folder.iterdir()} == {"pipeline.joblib", "calibrator.joblib", "features.json", "config.json",
+                                                      "metrics.json", "model_card.md"}
+        assert len(json.loads((folder / "config.json").read_text(encoding="utf-8"))["label_card_sha256"]) == 64
+        predictions = pd.read_parquet(paths.processed / "final" / f"test_predictions_{label}.parquet")
+        assert set(predictions["PATNO"]) <= held_out and len(predictions)
+    for path in paths.reports.rglob("*"):
+        if path.suffix in (".csv", ".md"):
+            assert not any(pid in path.read_text(encoding="utf-8") for pid in held_out), path.name
+    lock = json.loads(paths.lock.read_text(encoding="utf-8"))
+    assert lock["locked"] and len(lock["runs"]) == 1 and lock["runs"][0]["reviewer"] == "Synthetic Reviewer"
+    assert {r["stage"] for r in _rows(paths)} >= {"final"}
+    with pytest.raises(final.FinalLockError, match="already run"):
+        final.cmd_final(paths, final_flag=True)  # a second run is refused
+    with pytest.raises(final.FinalLockError):
+        final.cmd_final(paths, final_flag=True, force=True, reason="  ")  # forcing needs a written reason
+    assert final.check_unlocked(paths, True, force=True, reason="synthetic rerun")["approved"] is True
+    with pytest.raises(Phase3Error, match="already run"):
+        commands.cmd_select_final(load_context(paths))  # the selection cannot change after the final evaluation
+
+
+def _provisional_setup(pipe, tmp_path, phase2):
+    paths = phase3_paths(tmp_path / "prov", phase2, **FAST)
+    for source, target in ((pipe.processed, paths.processed), (pipe.runs, paths.runs), (pipe.frozen, paths.frozen)):
+        shutil.copytree(source, target)
+    shutil.copy(pipe.registry, paths.registry)
+    paths.config.write_text(pipe.config.read_text(encoding="utf-8"), encoding="utf-8")
+    return paths
+
+
+def test_provisional_labels_keep_final_locked_until_acknowledged(pipe, phase2, tmp_path, monkeypatch):
+    monkeypatch.delenv(split.FINAL_EVALUATION_ENV, raising=False)
+    paths = _provisional_setup(pipe, tmp_path, phase2)
+    selection_file = yaml.safe_load(paths.selected.read_text(encoding="utf-8"))
+    for choice in selection_file["labels"].values():
+        choice["gates_passed"], choice["failed_gates"] = True, []
+    selection_file["labels"]["ad_like_v1"].update(gates_passed=False, failed_gates=["G1 calibration slope"])
+    selection_file["labels"]["vascular_v1"].update(gates_passed=False, failed_gates=["G3 beats age + sex (AUPRC)"])
+    selection_file["provisional_labels"] = ["ad_like_v1", "vascular_v1"]
+    paths.selected.write_text(yaml.safe_dump(selection_file, sort_keys=False), encoding="utf-8")
+    base = {"approved": True, "reviewer": "Synthetic Reviewer", "date": "2031-01-01", "selected_models_sha256": sha256(paths.selected)}
+    for acknowledge, text in ((None, "ad_like_v1, vascular_v1"), ([], "ad_like_v1, vascular_v1"), (["ad_like_v1"], "vascular_v1"),
+                              (["vascular_v1"], "ad_like_v1")):
+        paths.approval.write_text(yaml.safe_dump({**base, **({} if acknowledge is None else {"acknowledge_provisional": acknowledge})}),
+                                  encoding="utf-8")
+        with pytest.raises(final.FinalLockError, match="PROVISIONAL") as caught:
+            final.check_unlocked(paths, True)
+        assert text in str(caught.value)
+    for bad, text in (("ad_like_v1", "must be a list"), (["ad_like_v1", "vascular_v1", "not_a_label"], "not in the selection")):
+        paths.approval.write_text(yaml.safe_dump({**base, "acknowledge_provisional": bad}), encoding="utf-8")
+        with pytest.raises(final.FinalLockError, match=text):
+            final.check_unlocked(paths, True)
+    paths.approval.write_text(yaml.safe_dump({**base, "acknowledge_provisional": ["vascular_v1", "ad_like_v1"]}), encoding="utf-8")
+    assert final.check_unlocked(paths, True)["approved"] is True  # every provisional label acknowledged
+    selection_file["labels"]["ad_like_v1"].update(gates_passed=True, failed_gates=[])
+    selection_file["labels"]["vascular_v1"].update(gates_passed=True, failed_gates=[])
+    selection_file["provisional_labels"] = []
+    paths.selected.write_text(yaml.safe_dump(selection_file, sort_keys=False), encoding="utf-8")
+    paths.approval.write_text(yaml.safe_dump({**base, "selected_models_sha256": sha256(paths.selected)}), encoding="utf-8")
+    assert final.check_unlocked(paths, True)["approved"] is True  # no provisional label: the acknowledgement is not required
+
+
+def test_selection_final_explains_why_a_label_is_provisional(pipe, phase2, tmp_path):
+    selected = yaml.safe_load(pipe.selected.read_text(encoding="utf-8"))
+    assert selected["provisional_labels"] == sorted(l for l, c in selected["labels"].items() if not c["gates_passed"])
+    assert selected["provisional_labels"], "the synthetic data are expected to leave at least one label provisional"
+    text = (pipe.reports / "selection_final.md").read_text(encoding="utf-8")
+    for label in selected["provisional_labels"]:
+        assert f"Why `{label}` is PROVISIONAL" in text and "acknowledge_provisional" in text
+    assert "Calibration slope (gate: 0.7 to 1.3)" in text and "Gates failed, by number of candidates" in text
+    assert "Provisional labels:" in text
+    for label, choice in selected["labels"].items():
+        if choice["gates_passed"]:
+            assert f"Why `{label}` is PROVISIONAL" not in text
+
+
+def test_cli_final_is_locked_without_loading_anything(monkeypatch, capsys, tmp_path):
+    from copath.phase3.core import Paths
+
+    monkeypatch.setattr(final, "load_context", lambda *a, **k: (_ for _ in ()).throw(AssertionError("data was loaded")))
+    monkeypatch.setattr(final, "Paths", lambda: Paths(frozen=tmp_path / "frozen"))
+    assert main(["final"]) == 5 and "LOCKED" in capsys.readouterr().err
+    assert main(["final", "--final"]) == 5  # no selection and no approval file: still locked
+    assert not Paths().approval.exists() or Paths().selected.exists()  # this software never writes an approval file
+
+
+# ------------------------------------------------------- nested CV mechanics
+
+def _toy(n=240, seed=0):
+    rng = np.random.default_rng(seed)
+    X = pd.DataFrame(rng.normal(size=(n, 6)), columns=["age", "SEX", "a", "b", "c", "d"], index=[f"row{i}" for i in range(n)])
+    y = (X["a"] + 0.8 * X["b"] + rng.normal(scale=0.3, size=n) > 0).astype(int).to_numpy()
+    X.loc[X.index[::7], "c"] = np.nan
+    X.loc[X.index[::5], "a"] = np.nan
+    return X, y, np.arange(n) % 5
+
+
+CFG = {"tuning": {"inner_folds": 3, "trials": {"lr_l2": 2, "lr_enet": 2, "rf": 2, "xgb": 2, "hgb": 2}}, "calibration": {"method": "sigmoid", "cv": 3},
+       "hgb": {"max_iter": 20}, "n_jobs": 2}
+
+
+def test_preprocessing_and_tuning_only_see_training_rows(monkeypatch):
+    X, y, folds = _toy()
+    seen = []
+    real = tuning.tune
+
+    def spy(model, X_train, y_train, seed, cfg):
+        seen.append(set(X_train.index))
+        return real(model, X_train, y_train, seed, cfg)
+
+    monkeypatch.setattr(tuning, "tune", spy)
+    out = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr_enet", 1, CFG, keep_models=True)
+    assert len(seen) == 5
+    for k in range(5):
+        test_rows, train_rows = set(X.index[folds == k]), X[folds != k]
+        assert not seen[k] & test_rows and seen[k] == set(train_rows.index)  # tuning never sees the outer-test fold
+        pipeline = out["models"][k]
+        np.testing.assert_allclose(pipeline.named_steps["impute"].statistics_, train_rows.median().to_numpy())
+        imputed = train_rows.fillna(train_rows.median())
+        np.testing.assert_allclose(pipeline.named_steps["scale"].mean_, imputed.mean().to_numpy())
+        assert not np.allclose(pipeline.named_steps["impute"].statistics_, X.median().to_numpy())  # not the whole-data medians
+    oof = out["oof"]
+    assert len(oof) == len(X) and oof["PATNO"].is_unique and set(oof.columns) >= {"p_cal", "p_uncal", "p_prev", "threshold", "pred"}
+    for k, part in oof.groupby("fold"):
+        assert part["p_prev"].nunique() == 1 and part["p_prev"].iloc[0] == pytest.approx(y[folds != k].mean())
+        assert part["threshold"].nunique() == 1  # chosen once inside the outer-training set, applied to the test fold
+    fixed = {k: out["folds"][k]["params"] for k in range(5)}
+    monkeypatch.setattr(tuning, "tune", lambda *a, **k: (_ for _ in ()).throw(AssertionError("re-tuned")))
+    again = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr_enet", 1, CFG, fold_params=fixed)  # reuse: no re-tuning
+    pd.testing.assert_frame_equal(again["oof"], oof)
+
+
+def test_every_model_family_trains_and_shap_space_is_verified_not_assumed():
+    X, y, folds = _toy(n=400)
+    train_rows, test_rows = folds != 0, folds == 0
+    spaces, cfg = {}, {**CFG, "tuning": {"inner_folds": 3, "trials": {"lr_l2": 6, "lr_enet": 6, "rf": 4, "xgb": 6, "hgb": 6}}}
+    for model in ("lr_l2", "lr_enet", "rf", "xgb", "hgb"):
+        out = train.fit_predict(model, X[train_rows], y[train_rows], X[test_rows], 3, cfg)
+        assert out["p_cal"].shape == (test_rows.sum(),) and 0 < out["threshold"] < 1 and "class_weight" in out["params"]
+        assert metrics.label_metrics(y[test_rows], out["p_cal"], np.full(test_rows.sum(), out["prevalence"]),
+                                     out["p_cal"] >= out["threshold"])["auroc"] > 0.7
+        steps = [name for name, _ in out["model"].steps]
+        assert steps == {"lr_l2": ["drop", "impute", "scale", "model"], "lr_enet": ["drop", "impute", "scale", "model"],
+                         "rf": ["drop", "impute", "model"]}.get(model, ["drop", "model"])
+        shap = shap_explainer.explain(model, out["model"], X[train_rows], X[test_rows])
+        assert shap["values"].shape == (test_rows.sum(), X.shape[1]) and shap["additivity_error"] < 1e-2
+        spaces[model] = shap["space"]
+        top = shap_explainer.mean_abs(shap["values"], list(X.columns)).sort_values(ascending=False).index[:2]
+        assert top[0] in ("a", "b") and set(top) & {"a", "b"}  # the informative features lead the ranking
+    assert spaces["rf"].startswith("probability")  # a random forest is NOT explained in log-odds
+    assert all(spaces[m].startswith("log-odds") for m in ("lr_l2", "lr_enet", "xgb", "hgb"))
+    for name in ("b0a", "b0b", "missingness"):
+        out = train.fit_predict(name, X[train_rows], y[train_rows], X[test_rows], 3, CFG)
+        assert out["params"] == {} and np.allclose(out["p_cal"], out["p_uncal"])  # baselines: not tuned, not calibrated
+    constant = train.fit_predict("b0a", X[train_rows], y[train_rows], X[test_rows], 3, CFG)
+    assert np.allclose(constant["p_cal"], y[train_rows].mean())
+    with pytest.raises(train.FoldError):
+        train.fit_predict("lr_enet", X[train_rows].head(8), np.array([1, 0, 0, 0, 0, 0, 0, 0]), X[test_rows], 3, CFG)
+    failed = train.outer_cv(X.head(40), np.r_[np.ones(3), np.zeros(37)].astype(int), folds[:40], X.index[:40].to_numpy(), "hgb", 1, CFG)
+    assert all(r["failed"] and r["error"] == "FoldError" for r in failed["folds"]) and failed["oof"].empty
+
+
+def test_lr_l2_is_a_plain_l2_logistic_regression_tuned_on_c_and_class_weight_only():
+    X, y, folds = _toy(n=400)
+    pipeline = candidates.build("lr_l2", {"C": 0.5, "class_weight": "balanced"}, y, 1, CFG)
+    assert [name for name, _ in pipeline.steps] == ["drop", "impute", "scale", "model"]  # the same fold-safe pipeline as lr_enet
+    estimator = pipeline.named_steps["model"]
+    assert estimator.C == 0.5 and estimator.class_weight == "balanced" and getattr(estimator, "l1_ratio", None) in (None, 0, 0.0)
+    assert candidates.build("lr_l2", {"C": 1.0, "class_weight": "none"}, y, 1, CFG).named_steps["model"].class_weight is None
+    fitted = pipeline.fit(X[folds != 0], y[folds != 0])
+    assert (fitted.named_steps["model"].coef_ != 0).all()  # no sparsity: every feature keeps a coefficient (no L1 term)
+    assert candidates.build("lr_enet", {"C": 1.0, "l1_ratio": 0.5, "class_weight": "none"}, y, 1, CFG).named_steps["model"].solver == "saga"
+    assert "lr_l2" not in baselines.BASELINES and set(baselines.BASELINES) == {"b0a", "b0b"}  # baselines are not candidates
+    out = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr_l2", 1, CFG)
+    assert len(out["oof"]) == len(X) and all(set(r["params"]) == {"C", "class_weight"} for r in out["folds"])
+
+
+def test_search_spaces_match_the_specification():
+    import optuna
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    for model, expected in (("lr_l2", {"C"}), ("lr_enet", {"C", "l1_ratio"}), ("rf", {"n_estimators", "max_depth", "min_samples_leaf", "max_features"}),
+                            ("xgb", {"learning_rate", "max_depth", "min_child_weight", "subsample", "colsample_bytree",
+                                     "reg_alpha", "reg_lambda", "n_estimators"}),
+                            ("hgb", {"learning_rate", "max_depth", "max_leaf_nodes", "l2_regularization", "min_samples_leaf"})):
+        study = optuna.create_study(sampler=optuna.samplers.TPESampler(seed=1))
+        drawn = [candidates.suggest(study.ask(), model) for _ in range(40)]
+        assert set(drawn[0]) == expected | {"class_weight"} and {d["class_weight"] for d in drawn} == {"none", "balanced"}
+    cfg = yaml.safe_load(load_cfg().read_text(encoding="utf-8"))
+    assert cfg["tuning"] == {"inner_folds": 3, "trials": {"lr_l2": 15, "lr_enet": 15, "rf": 25, "xgb": 25, "hgb": 25}}
+    assert cfg["candidates"] == ["lr_l2", "lr_enet", "rf", "xgb", "hgb"] and cfg["selection"]["simplicity"] == [
+        "lr_l2", "lr_enet", "hgb", "rf", "xgb"]
+    assert candidates.CANDIDATES == tuple(cfg["candidates"]) and candidates.SIMPLICITY == tuple(cfg["selection"]["simplicity"])
+    assert cfg["calibration"] == {"method": "sigmoid", "cv": 3} and cfg["main_tier"] == "primary"
+    assert cfg["labels"] == builders.PRIMARY_LABELS and cfg["final"]["n_bootstrap"] == 1000 and cfg["robustness"]["n_seeds"] == 3
+
+
+def load_cfg():
+    from copath.phase3.core import Paths
+
+    return Paths().config
+
+
+# ------------------------------------------------------------------ metrics
+
+def test_metrics():
+    rng = np.random.default_rng(0)
+    p = rng.uniform(0.02, 0.98, 20000)
+    y = (rng.uniform(size=p.size) < p).astype(int)
+    prevalence = np.full(p.size, y.mean())
+    good = metrics.label_metrics(y, p, prevalence, p >= 0.5)
+    assert good["cal_slope"] == pytest.approx(1, abs=0.06) and good["cal_intercept"] == pytest.approx(0, abs=0.06)
+    assert good["ece"] < 0.02 and good["bss"] > 0.2 and good["auroc"] > 0.8
+    assert metrics.label_metrics(y, prevalence, prevalence, np.ones_like(y))["bss"] == pytest.approx(0)
+    overconfident = metrics.label_metrics(y, 1 / (1 + np.exp(-3 * metrics.logit(p))), prevalence, p >= 0.5)
+    assert overconfident["cal_slope"] == pytest.approx(1 / 3, abs=0.05) and overconfident["ece"] > good["ece"]
+    assert np.isnan(metrics.calibration_slope_intercept(y, prevalence)[0])  # a constant prediction has no slope
+    threshold = metrics.best_f1_threshold(np.array([0, 0, 1, 1, 1]), np.array([0.1, 0.4, 0.35, 0.8, 0.9]))
+    assert threshold == pytest.approx(0.35)
+    assert metrics.threshold_metrics([1, 1, 0, 0], [1, 0, 1, 0]) == {"f1": 0.5, "precision": 0.5, "recall": 0.5}
+    oof = pd.DataFrame({"fold": np.arange(p.size) % 5, "y": y, "p_cal": p, "p_prev": prevalence, "pred": (p >= 0.5).astype(int)})
+    summary = metrics.summarise(oof)
+    assert set(summary) == {"pooled", "folds", "mean", "sd", "se"} and len(summary["folds"]) == 5
+    assert summary["se"]["bss"] == pytest.approx(summary["sd"]["bss"] / np.sqrt(5))
+    a = pd.DataFrame({"PATNO": list("abcdef"), "fold": [0, 0, 0, 1, 1, 1], "y": [1, 0, 1, 0, 1, 0], "pred": [1, 0, 0, 0, 1, 0]})
+    b = pd.DataFrame({"PATNO": list("abcdxy"), "fold": [0, 0, 0, 1, 2, 2], "y": [1, 1, 0, 0, 1, 1], "pred": [1, 1, 0, 1, 1, 1]})
+    multi = metrics.multilabel({"one": a, "two": b})
+    assert multi["n_all_eligible"] == 4 and multi["hamming_loss"] == pytest.approx(2 / 8)  # only those eligible for both
+    ci = metrics.bootstrap_ci(lambda i: {"mean": float(y[i].mean())}, len(y), 200, 1)
+    assert ci["mean"][0] < y.mean() < ci["mean"][1]
+    jaccard = shap_explainer.stability([pd.Series({"a": 3, "b": 2, "c": 1}), pd.Series({"a": 3, "b": 1, "c": 2})], top_k=2)
+    assert jaccard["mean_jaccard"] == pytest.approx(1 / 3) and jaccard["n_rankings"] == 2
+    bins = shap_explainer.dependence(pd.Series(np.arange(100.0)), np.arange(100.0), bins=10)
+    assert len(bins) == 10 and (bins["n_in_bin"] == 10).all() and set(bins.columns) == {"bin", "n_in_bin", "mean_feature_value", "mean_shap"}
+    assert shap_explainer.dependence(pd.Series([0.0] * 3 + [1.0] * 20), np.ones(23)).shape[0] == 1  # a bin of 3 is dropped
+
+
+# ----------------------------------------------------------- selection rules
+
+def _result(score, se=0.01, slope=1.0, brier=0.10, auprc=0.6, failed=0):
+    return {"pooled": {"cal_slope": slope, "brier": brier, "auprc": auprc, "bss": score}, "mean": {"bss": score},
+            "se": {"bss": se}, "n_failed_folds": failed}
+
+
+B0A, B0B = {"pooled": {"brier": 0.20}}, {"pooled": {"auprc": 0.40}}
+
+
+def test_gates_one_se_rule_and_reporting_of_failed_models():
+    results = {"lr_enet": _result(0.300), "hgb": _result(0.305, se=0.02), "rf": _result(0.280), "xgb": _result(0.400, slope=1.5)}
+    out = selection.preliminary(results, B0A, B0B, SPEC)
+    assert out["best"] == "hgb" and out["tie_set"] == ["hgb", "lr_enet"] and out["gates_passed"]  # rf is more than 1 SE below
+    assert "xgb" in out["table"] and out["table"]["xgb"]["gates"]["G1 calibration slope"] is False  # reported, not hidden
+    for bad, gate in ((_result(0.5, slope=0.69), 0), (_result(0.5, brier=0.21), 1), (_result(0.5, auprc=0.40), 2),
+                      (_result(0.5, failed=1), 3), (_result(0.5, slope=float("nan")), 0)):
+        assert selection.gates(bad, B0A, B0B, SPEC)[selection.GATES[gate]] is False
+    assert all(selection.gates(_result(0.5, slope=1.3), B0A, B0B, SPEC).values())  # the bounds are inclusive
+
+
+def test_provisional_fallback_when_no_model_passes_every_gate():
+    results = {"lr_enet": _result(0.30, slope=2.0), "hgb": _result(0.35, slope=2.0, auprc=0.3), "rf": _result(0.9, failed=2)}
+    out = selection.preliminary(results, B0A, B0B, SPEC)
+    assert out["provisional"] and not out["gates_passed"] and out["tie_set"] == ["lr_enet"]  # fewest failed gates; never a failed fold
+    nothing = selection.preliminary({"lr_enet": _result(0.3, failed=1)}, B0A, B0B, SPEC)
+    assert nothing["best"] is None and nothing["tie_set"] == []
+
+
+def test_tie_breakers_are_applied_in_the_protocol_order():
+    def evidence(slope, jaccard, drop):
+        return {"slope_distance": slope, "jaccard": jaccard, "strict_drop": drop}
+
+    assert selection.final_choice(["xgb"], {"xgb": evidence(0.9, 0.1, 0.9)}, SPEC)[0] == "xgb"
+    chosen, why = selection.final_choice(["xgb", "lr_enet"], {"xgb": evidence(0.02, 0.2, 0.5), "lr_enet": evidence(0.20, 0.9, 0.0)}, SPEC)
+    assert chosen == "xgb" and len(why) == 1 and why[0].startswith("(a)")  # (a) decides alone
+    tied = {"xgb": evidence(0.02, 0.80, 0.5), "rf": evidence(0.05, 0.60, 0.0), "lr_enet": evidence(0.30, 0.99, 0.0)}
+    chosen, why = selection.final_choice(["xgb", "rf", "lr_enet"], tied, SPEC)
+    assert chosen == "xgb" and [w[:3] for w in why] == ["(a)", "(b)"]  # lr leaves at (a); (b) separates xgb and rf
+    tied = {"xgb": evidence(0.02, 0.80, 0.005), "rf": evidence(0.05, 0.78, 0.100), "hgb": evidence(0.04, 0.79, 0.006)}
+    chosen, why = selection.final_choice(["xgb", "rf", "hgb"], tied, SPEC)
+    assert chosen == "hgb" and [w[:3] for w in why] == ["(a)", "(b)", "(c)", "(d)"]  # rf leaves at (c); simplicity decides
+    same = {m: evidence(0.1, 0.5, 0.0) for m in ("xgb", "rf", "hgb", "lr_enet", "lr_l2")}
+    assert selection.final_choice(["xgb", "rf", "hgb", "lr_enet", "lr_l2"], same, SPEC)[0] == "lr_l2"  # simplest of all
+    assert selection.final_choice(["xgb", "rf", "hgb", "lr_enet"], same, SPEC)[0] == "lr_enet"
+    assert selection.final_choice(["xgb", "rf", "hgb"], same, SPEC)[0] == "hgb"
+    assert selection.final_choice(["xgb", "rf"], same, SPEC)[0] == "rf"
+
+
+# ------------------------------------------------------------------ privacy
+
+def test_reports_are_aggregate_and_checked_for_identifiers(pipe, phase2, tmp_path):
+    ids = set(fx.UNIVERSE_IDS)
+    for path in pipe.reports.rglob("*"):
+        if path.suffix in (".csv", ".md", ".json"):
+            text = path.read_text(encoding="utf-8")
+            assert not any(pid in text for pid in ids), path.name
+            assert "PATNO" not in text, path.name
+    for name in ("candidate_results.csv", "sensitivity_labels.csv", "robustness_tieset.csv"):
+        counts = _report(pipe, name)["n_eligible"]
+        assert not counts.isin(["1", "2", "3", "4"]).any()
+    for label in builders.PRIMARY_LABELS:
+        bins = _report(pipe, f"shap_dependence_{label}.csv")
+        assert (bins["n_in_bin"].astype(int) >= 5).all()  # binned means only, never a small bin
+    for path in (pipe.oof, pipe.shap):
+        assert pipe.processed in path.parents  # participant-level outputs live under the git-ignored data/processed
+    paths = _paths(tmp_path / "leak", phase2)
+    ctx = load_context(paths)
+    kept = write_csv(ctx, [{"label": "x", "n_eligible": 480, "auroc": 0.7701}], "fine.csv")
+    privacy_check(ctx)  # numbers in count and metric columns are not identifiers
+    leaked = write_csv(ctx, [{"label": "x", "note": f"participant {ctx.frame['PATNO'].iloc[0]}"}], "leak.csv")
+    with pytest.raises(PrivacyCheckError) as caught:
+        privacy_check(ctx)
+    assert str(ctx.frame["PATNO"].iloc[0]) not in str(caught.value) and not leaked.exists() and not kept.exists()
+
+
+# ------------------------------------------- degenerate columns, failed trials, reset-cv
+
+def _degenerate_toy(n=300):
+    """The toy data plus an all-missing column, a constant column and one that is constant outside outer fold 0 only."""
+    X, y, folds = _toy(n=n)
+    X["allnan"] = np.nan
+    X["const"] = 1.0
+    X["late"] = np.where(folds == 0, np.arange(n) % 3, 0.0)  # constant in the training rows of folds 1-4, varying in fold 0
+    return X, y, folds
+
+
+@pytest.mark.parametrize("model", ["lr_l2", "lr_enet", "rf", "xgb", "hgb"])
+def test_every_family_trains_with_all_nan_and_constant_columns_and_logs_the_dropped_ones(model):
+    X, y, folds = _degenerate_toy()
+    out = train.outer_cv(X, y, folds, X.index.to_numpy(), model, 2, CFG, keep_models=True)
+    assert not any(r["failed"] for r in out["folds"]) and len(out["oof"]) == len(X)
+    for r in out["folds"]:
+        assert {"allnan", "const"} <= set(r["dropped_features"]) and r["n_dropped"] == len(r["dropped_features"])
+        # "late" varies only in fold 0: it is constant in the training rows of outer fold 0 (dropped) and varies in the other folds' (kept)
+        assert ("late" in r["dropped_features"]) == (r["fold"] == 0)
+        assert all(isinstance(name, str) for name in r["dropped_features"])  # names only, no values
+    assert out["models"][0].named_steps["drop"].dropped_ == out["folds"][0]["dropped_features"]
+
+
+def test_the_transformer_is_fitted_on_training_rows_only_and_keeps_the_same_columns_afterwards():
+    X, _, folds = _degenerate_toy()
+    train_rows, valid_rows = X[folds == 1], X[folds == 0]  # "late" varies in the validation rows, not in the training rows
+    assert valid_rows["late"].nunique() > 1 and train_rows["late"].nunique() == 1
+    step = DropDegenerateColumns().fit(train_rows)
+    assert set(step.dropped_) == {"allnan", "const", "late"}
+    out = step.transform(valid_rows)  # still dropped although it varies here
+    assert list(out.columns) == step.kept_ == [c for c in X.columns if c not in step.dropped_]
+    reordered = step.transform(valid_rows[list(reversed(valid_rows.columns))])
+    assert list(reordered.columns) == step.kept_  # by name
+    again = DropDegenerateColumns().fit(valid_rows)
+    assert "late" in again.kept_ and set(again.dropped_) == {"allnan", "const", "a"}  # ("a" is all missing in fold 0 of the toy data) another training set, another decision
+    assert step.transform(valid_rows.to_numpy()).shape[1] == len(step.kept_)  # arrays work too
+
+
+def test_shap_values_are_mapped_back_to_the_original_features_with_zero_for_dropped_columns():
+    X, y, folds = _degenerate_toy(n=400)
+    train_rows, test_rows = folds == 1, folds == 0
+    for model in ("lr_l2", "rf", "xgb", "hgb"):
+        out = train.fit_predict(model, X[train_rows], y[train_rows], X[test_rows], 3, CFG)
+        assert {"allnan", "const", "late"} <= set(out["dropped"])
+        shap = shap_explainer.explain(model, out["model"], X[train_rows], X[test_rows])
+        assert shap["values"].shape == (test_rows.sum(), X.shape[1]) and shap["additivity_error"] < 1e-2
+        importance = shap_explainer.mean_abs(shap["values"], list(X.columns))
+        assert (importance[["allnan", "const", "late"]] == 0).all()
+        assert importance.drop(["allnan", "const", "late"]).idxmax() in ("a", "b")
+
+
+def test_a_failing_trial_is_counted_and_the_study_goes_on(monkeypatch):
+    X, y, _ = _toy()
+    real = candidates.build
+
+    def build(model, params, y_train, seed, cfg=None):
+        if params["class_weight"] == "balanced":
+            raise ValueError("synthetic failure")
+        return real(model, params, y_train, seed, cfg)
+
+    monkeypatch.setattr(candidates, "build", build)
+    out = tuning.tune("lr_l2", X, y, 1, {"tuning": {"inner_folds": 3, "trials": {"lr_l2": 12}}})
+    assert 0 < out["n_failed_trials"] < 12 and out["trial_failures"] == {"ValueError": out["n_failed_trials"]}
+    assert out["params"]["class_weight"] == "none"
+
+
+def test_when_every_trial_fails_the_run_is_registered_as_failed_and_writes_no_metrics(phase2, tmp_path, monkeypatch, capsys):
+    paths = _paths(tmp_path, phase2)
+    ctx = load_context(paths)
+    real = candidates.build
+
+    def build(model, params, y_train, seed, cfg=None):
+        if model == "hgb":
+            raise ValueError("window shape cannot be larger than input array shape")
+        return real(model, params, y_train, seed, cfg)
+
+    monkeypatch.setattr(candidates, "build", build)
+    label = builders.PRIMARY_LABELS[0]
+    failed = commands.cmd_cv(ctx, [label], ["hgb", "lr_l2"])  # the other model is still run
+    assert failed == [f"cv-{label}-primary-hgb-s{ctx.seed}"]
+    log = capsys.readouterr().err
+    assert f"ERROR {failed[0]} FAILED: label {label}, tier primary, model hgb" in log
+    assert "all 2 Optuna trials failed for model hgb" in log and "ValueError x2" in log
+    assert "window shape" not in log  # exception text is never logged, only its type
+    rows = {r["run_id"]: r for r in _rows(paths)}
+    bad, good = rows[failed[0]], rows[f"cv-{label}-primary-lr_l2-s{ctx.seed}"]
+    assert bad["status"] == "failed" and bad["n_failed_folds"] == "5" and all(bad[m] == "" for m in registry.METRICS)
+    assert good["status"] == "ok" and good["auroc"] != ""
+    details = registry.load_details(paths.runs, failed[0])
+    assert "summary" not in details and not (paths.oof / f"{failed[0]}.parquet").exists()
+    assert (paths.oof / f"{good['run_id']}.parquet").is_file()
+    monkeypatch.setattr(candidates, "build", real)  # a failed run is retried (not skipped) the next time
+    assert commands.cmd_cv(load_context(paths), [label], ["hgb"]) == []
+    assert {r["run_id"]: r["status"] for r in _rows(paths)}[failed[0]] == "ok"
+
+
+def test_the_command_line_exits_with_4_when_a_cv_run_failed(phase2, tmp_path, monkeypatch):
+    from copath.phase3 import __main__ as cli
+
+    paths = _paths(tmp_path, phase2)
+    monkeypatch.setattr(cli, "load_context", lambda: load_context(paths))
+    monkeypatch.setattr(cli.commands, "cmd_cv", lambda ctx, labels, models: ["cv-x"])
+    assert main(["cv"]) == 4
+
+
+def test_dropped_features_are_reported_by_name_only(pipe):
+    table = _report(pipe, "dropped_features.csv")
+    assert list(table.columns) == ["label", "tier", "model", "fold", "n_dropped", "features"]
+    assert set(table["label"]) == set(builders.PRIMARY_LABELS) and set(table["model"]) == {"lr_l2", "lr_enet", "hgb"}
+    assert len(table) == 3 * 3 * 5
+    for _, row in table.iterrows():
+        listed = [f for f in row["features"].split("; ") if f]
+        assert len(listed) == int(row["n_dropped"]) and all(not f.replace(".", "").replace("-", "").isdigit() for f in listed)
+    details = registry.load_details(pipe.runs, f"cv-{builders.PRIMARY_LABELS[0]}-primary-lr_l2-s{load_context(pipe).seed}")
+    assert all("dropped_features" in r and "n_failed_trials" in r for r in details["folds"])
+    assert set(details["library_versions"]) >= {"scikit-learn", "numpy"}
+
+
+def _cv_only(phase2, work):
+    paths = _paths(work, phase2)
+    commands.cmd_cv(load_context(paths), [builders.PRIMARY_LABELS[0]], ["b0a", "lr_l2"])
+    return paths
+
+
+def _snapshot(*folders):
+    return {str(p): sha256(p) for folder in folders for p in sorted(folder.rglob("*")) if p.is_file()}
+
+
+def test_reset_cv_removes_only_cv_outputs_and_leaves_phase2_and_the_split_alone(phase2, tmp_path):
+    paths = _cv_only(phase2, tmp_path)
+    assert (paths.reports / "dropped_features.csv").is_file() and any(paths.oof.iterdir()) and any(paths.runs.glob("cv-*.json"))
+    untouched = _snapshot(paths.splits, paths.processed, phase2.reports)
+    untouched = {k: v for k, v in untouched.items() if "oof" not in k}  # the oof folder is what gets removed
+    with pytest.raises(Phase3Error, match="--confirm"):
+        reset.cmd_reset_cv(paths, confirm=False, log=lambda m: None)
+    assert registry.read(paths.registry) and any(paths.oof.iterdir())  # nothing is removed without --confirm
+    found = reset.cmd_reset_cv(paths, confirm=True, log=lambda m: None)
+    assert found["registry_rows"] == 2 and found["files"]
+    assert registry.read(paths.registry) == [] and paths.registry.read_text(encoding="utf-8").strip().split(",") == registry.COLUMNS
+    assert not list(paths.runs.glob("cv-*.json")) and not any(paths.oof.iterdir())
+    for name in ("baseline_results.csv", "candidate_results.csv", "leakage_checks.csv", "dropped_features.csv"):
+        assert not (paths.reports / name).exists()
+    assert not list((paths.reports / "figures").glob("cv_curves_*.png"))
+    now = {k: v for k, v in _snapshot(paths.splits, paths.processed, phase2.reports).items() if "oof" not in k}
+    assert now == untouched  # Phase 2 outputs, the split and the Lumipulse threshold are byte-for-byte the same
+    commands.cmd_cv(load_context(paths), [builders.PRIMARY_LABELS[0]], ["b0a"])  # and cv can be started again
+    assert [r["status"] for r in registry.read(paths.registry)] == ["ok"]
+
+
+def test_reset_cv_keeps_other_rows_but_refuses_when_derived_or_final_results_exist(phase2, tmp_path):
+    paths = _cv_only(phase2, tmp_path)
+    cv_rows = registry.read(paths.registry)
+    registry.append(paths.registry, {"run_id": "robustness-x", "stage": "robustness", "label": "x", "status": "ok"})
+    with pytest.raises(Phase3Error, match="derived from the cv runs"):
+        reset.cmd_reset_cv(paths, confirm=True, log=lambda m: None)
+    assert len(registry.read(paths.registry)) == len(cv_rows) + 1 and any(paths.oof.iterdir())  # nothing changed
+    paths.registry.write_text(",".join(registry.COLUMNS) + "\n", encoding="utf-8")  # back to the cv rows only
+    for row in cv_rows:
+        registry.append(paths.registry, row)
+    paths.frozen.mkdir(parents=True, exist_ok=True)
+    paths.lock.write_text("{}", encoding="utf-8")
+    with pytest.raises(Phase3Error, match="refused: the final evaluation has run"):
+        reset.cmd_reset_cv(paths, confirm=True, log=lambda m: None)
+    assert registry.read(paths.registry) == cv_rows and any(paths.oof.iterdir())
+    paths.lock.unlink()
+    registry.append(paths.registry, {"run_id": "final-x", "stage": "final", "label": "x", "status": "ok"})
+    with pytest.raises(Phase3Error, match="refused: the final evaluation has run"):
+        reset.cmd_reset_cv(paths, confirm=True, log=lambda m: None)
+    assert len(registry.read(paths.registry)) == len(cv_rows) + 1 and any(paths.oof.iterdir())
+
+
+def test_reset_cv_command_line_and_the_pipeline_version_in_the_configuration(phase2, tmp_path, monkeypatch):
+    paths = _cv_only(phase2, tmp_path)
+    monkeypatch.setattr(reset, "Paths", lambda: paths)
+    assert main(["reset-cv"]) == 1 and registry.read(paths.registry)  # no --confirm: nothing removed
+    assert main(["reset-cv", "--confirm"]) == 0 and registry.read(paths.registry) == []
+    assert yaml.safe_load(load_cfg().read_text(encoding="utf-8"))["pipeline_version"] == 2  # old-pipeline runs are never reused
+
+
+# ------------------------------------------------------- pd_type_v1 missingness audit
+
+def _copy_of(pipe, work):
+    """A private copy of the finished synthetic pipeline outputs, so that a test never changes the shared fixture."""
+    shutil.copytree(pipe.config.parent, work)
+    return Paths(config=work / "phase3.yaml", frozen=work / "frozen", processed=work / "processed", splits=pipe.splits,
+                 reports=work / "reports" / "phase3", phase2_reports=pipe.phase2_reports,
+                 registry=work / "experiments" / "registry.csv", runs=work / "experiments" / "phase3", models=work / "models" / "final")
+
+
+def _gap_toy(n=400, seed=3):
+    rng = np.random.default_rng(seed)
+    X = pd.DataFrame(rng.normal(size=(n, 5)), columns=["a", "b", "equal", "pd_only", "fold0_pd_missing"],
+                     index=[f"row{i}" for i in range(n)])
+    y = (X["a"] + 0.8 * X["b"] + rng.normal(scale=0.3, size=n) > 0).astype(int).to_numpy()
+    folds = np.arange(n) % 5
+    X.loc[(y == 1) & (rng.random(n) < 0.04), "equal"] = np.nan
+    X.loc[(y == 0) & (rng.random(n) < 0.04), "equal"] = np.nan
+    X.loc[(y == 1) & (rng.random(n) < 0.35), "pd_only"] = np.nan  # a large availability gap in every fold
+    X.loc[(y == 1) & (folds == 0), "fold0_pd_missing"] = np.nan  # a gap in the training rows of folds 1-4 only
+    return X, y, folds
+
+
+def test_the_availability_rule_is_decided_on_each_folds_training_rows_only_and_the_models_see_only_those_columns():
+    X, y, folds = _gap_toy()
+    rule = missingness.AvailabilityGap(10.0)
+    out = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr_l2", 1, CFG, keep_models=True, select=rule)
+    assert not any(r["failed"] for r in out["folds"]) and len(out["oof"]) == len(X)
+    for r in out["folds"]:
+        k = r["fold"]
+        kept = rule(X[folds != k], y[folds != k])
+        assert r["n_selected"] == len(kept) and set(r["excluded_features"]) == set(X.columns) - set(kept)
+        assert out["models"][k].named_steps["drop"].columns_in_ == kept  # the pipeline was fitted on exactly these columns
+        assert {"a", "b", "equal"} <= set(kept) and "pd_only" in r["excluded_features"]
+        assert ("fold0_pd_missing" in kept) == (k == 0)  # no gap in fold 0's training rows, a ~25 point gap in the others
+    parallel = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr_l2", 1, {**CFG, "outer_jobs": 2}, select=rule)  # picklable
+    assert [r.get("n_selected") for r in parallel["folds"]] == [r["n_selected"] for r in out["folds"]]
+    none_left = train.outer_cv(X, y, folds, X.index.to_numpy(), "lr_l2", 1, CFG, select=missingness.AvailabilityGap(-1.0))
+    assert all(r["failed"] and r["error"] == "FoldError" for r in none_left["folds"])
+
+
+def test_missingness_audit_writes_sorted_aggregate_percentages_and_the_low_gap_run(pipe, tmp_path):
+    paths = _copy_of(pipe, tmp_path / "copy")
+    ctx = load_context(paths)
+    missingness.cmd_missingness_audit(ctx)
+    audit = pd.read_csv(paths.reports / "pd_missingness_audit.csv")
+    assert list(audit.columns) == ["feature", "modality", "pct_available_pd", "pct_available_hc", "abs_diff_pp", "in_strict_tier",
+                                   "gap_below_threshold"]
+    assert audit["abs_diff_pp"].is_monotonic_decreasing and audit["feature"].is_unique and "PATNO" not in set(audit["feature"])
+    assert audit[["pct_available_pd", "pct_available_hc"]].apply(lambda c: c.between(0, 100)).all().all()
+    label = builders.label_column("pd_type_v1")
+    dev = ctx.frame[ctx.frame[label].notna()]
+    for _, row in audit.head(5).iterrows():  # independent check against the development frame
+        pd_pct = 100 * dev.loc[dev[label] == 1, row["feature"]].notna().mean()
+        hc_pct = 100 * dev.loc[dev[label] == 0, row["feature"]].notna().mean()
+        assert row["pct_available_pd"] == pytest.approx(pd_pct, abs=0.01) and row["pct_available_hc"] == pytest.approx(hc_pct, abs=0.01)
+        assert row["abs_diff_pp"] == pytest.approx(abs(pd_pct - hc_pct), abs=0.02)
+    assert (audit["gap_below_threshold"] == (audit["abs_diff_pp"] < 10)).all()
+    model = commands.load_selected(ctx)["pd_type_v1"]["model"]
+    details = registry.load_details(paths.runs, f"extras-pd_type_v1-strict-{model}-s{ctx.seed}-{missingness.VARIANT}")
+    assert details["tier"] == "strict" and "10 percentage points" in details["column_rule"]
+    strict = set(yaml.safe_load((leakage_guard.FEATURE_SETS_DIR / "pd_type_v1_strict.yaml").read_text(encoding="utf-8"))["features"])
+    data = prepare(ctx, "pd_type_v1", "strict", features=details["features"])
+    assert set(details["features"]) <= strict
+    for record in details["folds"]:  # recompute each fold's rule from its own training rows
+        train_rows = data["folds"] != record["fold"]
+        expected = missingness.AvailabilityGap()(data["X"][train_rows], data["y"][train_rows])
+        assert record["n_selected"] == len(expected) and set(record["excluded_features"]) == set(details["features"]) - set(expected)
+    result = _report(paths, "pd_low_missingness_run.csv")
+    assert result["analysis"].str.contains("this run").any() and result["analysis"].str.contains("reference").any()
+    assert set(result.loc[result["analysis"].str.contains("this run"), "scope"]) >= {"pooled", "mean", "sd", "fold 0", "fold 4"}
+    assert not result.astype(str).apply(lambda c: c.str.contains(r"^\d{5,}$")).any().any()  # no identifiers
+    rows = len(_rows(paths))
+    missingness.cmd_missingness_audit(load_context(paths))  # a restart reuses the registered run
+    assert len(_rows(paths)) == rows
+
+
+def test_missingness_audit_without_a_frozen_selection_writes_the_audit_and_explains_why_the_run_is_missing(pipe, tmp_path):
+    paths = _copy_of(pipe, tmp_path / "copy")
+    paths.selected.unlink()
+    with pytest.raises(Phase3Error, match="select --stage final"):
+        missingness.cmd_missingness_audit(load_context(paths))
+    assert (paths.reports / "pd_missingness_audit.csv").is_file() and not (paths.reports / "pd_low_missingness_run.csv").exists()
+
+
+# ------------------------------------------------------- report-final (read-only held-out reporting)
+
+@pytest.fixture(scope="session")
+def finished(pipe, phase2, tmp_path_factory):
+    """A synthetic pipeline in which `final` has run once (synthetic approval), as report-final expects to find it."""
+    import os
+
+    paths = phase3_paths(tmp_path_factory.mktemp("phase3_finished"), phase2, **FAST)
+    for source, target in ((pipe.processed, paths.processed), (pipe.runs, paths.runs), (pipe.frozen, paths.frozen)):
+        shutil.copytree(source, target)
+    shutil.copy(pipe.registry, paths.registry)
+    paths.config.write_text(pipe.config.read_text(encoding="utf-8"), encoding="utf-8")
+    chosen = yaml.safe_load(paths.selected.read_text(encoding="utf-8"))
+    paths.approval.write_text(yaml.safe_dump({"approved": True, "reviewer": "Synthetic Reviewer", "date": "2031-01-01",
+                                              "selected_models_sha256": sha256(paths.selected),
+                                              "acknowledge_provisional": chosen["provisional_labels"]}), encoding="utf-8")
+    os.environ.pop(split.FINAL_EVALUATION_ENV, None)
+    final.cmd_final(paths, final_flag=True)
+    return paths
+
+
+def _finished_copy(finished, work):
+    shutil.copytree(finished.config.parent, work)
+    return Paths(config=work / "phase3.yaml", frozen=work / "frozen", processed=work / "processed", splits=finished.splits,
+                 reports=work / "reports" / "phase3", phase2_reports=finished.phase2_reports,
+                 registry=work / "experiments" / "registry.csv", runs=work / "experiments" / "phase3", models=work / "models" / "final")
+
+
+def _no_model_activity(monkeypatch):
+    """Patch every fit / tune / calibrate / predict entry point and the model loader so that any call fails the test."""
+    import joblib
+    from sklearn.calibration import CalibratedClassifierCV
+
+    def forbidden(name):
+        def call(*args, **kwargs):
+            raise AssertionError(f"report-final called {name}")
+        return call
+
+    for owner, name in ((train, "fit_predict"), (train, "outer_cv"), (tuning, "tune"), (candidates, "build"), (baselines, "build"),
+                        (joblib, "load"), (final, "cmd_final"), (CalibratedClassifierCV, "fit"), (CalibratedClassifierCV, "predict_proba")):
+        monkeypatch.setattr(owner, name, forbidden(f"{owner.__name__}.{name}"))
+
+
+def _watched(paths):
+    return {str(p): sha256(p) for folder in (paths.processed, paths.models, paths.frozen, paths.runs) for p in folder.rglob("*") if p.is_file()}
+
+
+def test_report_final_reads_saved_artifacts_only_and_reproduces_the_saved_metrics(finished, tmp_path, monkeypatch):
+    paths = _finished_copy(finished, tmp_path / "copy")
+    before, registry_before = _watched(paths), paths.registry.read_text(encoding="utf-8")
+    _no_model_activity(monkeypatch)
+    from copath.phase3 import report_final
+
+    report_final.cmd_report_final(load_context(paths))
+    assert _watched(paths) == before and paths.registry.read_text(encoding="utf-8") == registry_before  # nothing written outside reports/
+    table = _report(paths, "dev_vs_test.csv")
+    assert list(table.columns) == ["label", "model", "metric", "dev_oof_pooled", "heldout", "heldout_ci_low", "heldout_ci_high",
+                                   "n_dev_eligible", "n_test_eligible"]
+    assert set(table["label"]) == set(builders.PRIMARY_LABELS) and {"auroc", "auprc", "bss"} <= set(table["metric"])
+    saved = _report(paths, "final_test_results.csv")
+    for _, row in table.iterrows():  # the held-out values ARE the saved values, and the saved predictions reproduce them
+        mine = saved[(saved["label"] == row["label"]) & (saved["metric"] == row["metric"])].iloc[0]
+        assert row["heldout"] == mine["value"] and row["heldout_ci_low"] == mine["ci_low"]
+    chosen = yaml.safe_load(paths.selected.read_text(encoding="utf-8"))["labels"]
+    for label, choice in chosen.items():
+        test = pd.read_parquet(paths.processed / "final" / f"test_predictions_{label}.parquet")
+        prevalence = json.loads((paths.models / "v1.0" / label / "config.json").read_text(encoding="utf-8"))["development_prevalence"]
+        again = metrics.label_metrics(test["y"].to_numpy(), test["p_cal"].to_numpy(), np.full(len(test), prevalence), test["pred"].to_numpy())
+        value = float(table[(table["label"] == label) & (table["metric"] == "auroc")]["heldout"].iloc[0])
+        assert again["auroc"] == pytest.approx(value, abs=2e-4)
+        dev_value = float(table[(table["label"] == label) & (table["metric"] == "auroc")]["dev_oof_pooled"].iloc[0])
+        assert dev_value == pytest.approx(registry.load_details(paths.runs, choice["cv_run_id"])["summary"]["pooled"]["auroc"], abs=2e-4)
+        assert (paths.reports / "figures" / f"final_test_curves_{label}.png").is_file()
+    assert (paths.reports / "figures" / "final_test_summary.png").is_file()
+    held_out = _test_ids(paths)
+    for path in paths.reports.rglob("*"):
+        if path.suffix in (".csv", ".md"):
+            assert not any(pid in path.read_text(encoding="utf-8") for pid in held_out), path.name  # no participant IDs
+
+
+def test_supplementary_has_the_label_the_frozen_threshold_and_the_baseline_note_without_a_new_baseline(finished, tmp_path):
+    paths = _finished_copy(finished, tmp_path / "copy")
+    from copath.phase3 import report_final
+
+    report_final.cmd_report_final(load_context(paths))
+    supp = _report(paths, "final_test_supplementary.csv")
+    assert set(supp["section"]) == {"SUPPLEMENTARY / NOT PART OF THE PRE-SPECIFIED SELECTION PROTOCOL"}
+    for label in builders.PRIMARY_LABELS:
+        threshold = json.loads((paths.models / "v1.0" / label / "config.json").read_text(encoding="utf-8"))["threshold"]
+        part = supp[supp["label"] == label].set_index("item")
+        assert float(part.loc["frozen decision threshold (from the final bundle)", "value"]) == pytest.approx(threshold, abs=1e-6)
+        assert len([i for i in part.index if i.startswith("confusion count")]) == 4
+    note = supp[supp["item"] == "held-out baseline comparison"]["note"].iloc[0]
+    assert "Brier Skill Score" in note and "No new held-out baseline was fitted" in note
+    assert "age" not in " ".join(_report(paths, "dev_vs_test.csv")["model"])  # no baseline rows were added
+
+
+def test_without_a_persisted_frozen_threshold_the_confusion_counts_are_skipped_with_a_note(finished, tmp_path):
+    paths = _finished_copy(finished, tmp_path / "copy")
+    label = builders.PRIMARY_LABELS[0]
+    config = paths.models / "v1.0" / label / "config.json"
+    data = json.loads(config.read_text(encoding="utf-8"))
+    data.pop("threshold")
+    config.write_text(json.dumps(data), encoding="utf-8")
+    from copath.phase3 import report_final
+
+    report_final.cmd_report_final(load_context(paths))
+    part = _report(paths, "final_test_supplementary.csv")
+    mine = part[part["label"] == label]
+    assert list(mine["item"]) == ["confusion counts"] and "no frozen threshold is persisted" in mine["note"].iloc[0] and mine["value"].iloc[0] == ""
+    other = part[part["label"] == builders.PRIMARY_LABELS[1]]
+    assert other["item"].str.startswith("confusion count").sum() == 4  # the other signals are unaffected
+
+
+def test_a_missing_saved_artifact_stops_with_its_name_and_makes_no_prediction(finished, tmp_path, monkeypatch):
+    from copath.phase3 import report_final
+
+    label = builders.PRIMARY_LABELS[1]
+    for victim in (lambda p: p.processed / "final" / f"test_predictions_{label}.parquet",
+                   lambda p: p.models / "v1.0" / label / "config.json",
+                   lambda p: p.reports / "final_test_results.csv", lambda p: p.lock):
+        paths = _finished_copy(finished, tmp_path / f"copy{abs(hash(str(victim(finished))))}")
+        victim(paths).unlink()
+        _no_model_activity(monkeypatch)
+        with pytest.raises(Phase3Error, match="missing") as caught:
+            report_final.cmd_report_final(load_context(paths))
+        assert victim(paths).name in str(caught.value) and "no prediction was made" in str(caught.value)
+        monkeypatch.undo()
+        assert not (paths.reports / "dev_vs_test.csv").exists()
+
+
+def test_saved_files_that_do_not_belong_together_are_refused(finished, tmp_path):
+    from copath.phase3 import report_final
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    results = paths.reports / "final_test_results.csv"
+    table = pd.read_csv(results, dtype=str, keep_default_na=False)
+    mask = (table["label"] == builders.PRIMARY_LABELS[0]) & (table["metric"] == "auroc")
+    table.loc[mask, "value"] = "0.1234"
+    table.to_csv(results, index=False)
+    with pytest.raises(Phase3Error, match="do not reproduce"):
+        report_final.cmd_report_final(load_context(paths))
+
+
+def test_reliability_bins_below_five_rows_are_excluded_and_small_counts_are_suppressed():
+    from copath.phase3 import figures, report_final
+
+    p = np.r_[np.full(20, 0.15), np.full(4, 0.55), np.full(6, 0.95)]
+    y = np.r_[np.zeros(20), [1, 0, 1, 0], np.ones(6)].astype(int)
+    points = figures.reliability_points(y, p)
+    assert [n for _, _, n in points] == [20, 6]  # the bin with 4 rows is not shown
+    cells = report_final.confusion_cells(np.r_[np.ones(3), np.zeros(40), np.ones(20)], np.r_[np.zeros(3), np.zeros(40), np.ones(20)])
+    assert cells == {"tp": "<5", "fp": 0, "fn": "<5", "tn": 40}  # fn = 3 is suppressed and hides the smallest other non-zero cell (tp)
+    suppressed = [v for v in report_final.confusion_cells(np.r_[np.ones(3), np.zeros(50), np.ones(30), np.zeros(9)],
+                                                          np.r_[np.zeros(3), np.zeros(50), np.ones(30), np.ones(9)]).values() if v == "<5"]
+    assert len(suppressed) == 2  # one small cell also hides the smallest other non-zero cell (no recovery from the sample size)
+    clean = report_final.confusion_cells(np.r_[np.ones(10), np.zeros(10)], np.r_[np.ones(10), np.zeros(10)])
+    assert clean == {"tp": 10, "fp": 0, "fn": 0, "tn": 10}
+
+
+def test_report_final_command_line_and_no_writes_outside_reports(finished, tmp_path, monkeypatch):
+    from copath.phase3 import __main__ as cli
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    before = _watched(paths)
+    monkeypatch.setattr(cli, "load_context", lambda: load_context(paths))
+    assert main(["report-final"]) == 0 and _watched(paths) == before
+    assert (paths.reports / "final_report_notes.md").is_file()
+    paths.lock.unlink()
+    assert main(["report-final"]) == 1  # a missing artifact is a clear stop, not a crash
+
+
+# ----------------------------------------- report-final: privacy self-check and metric validation
+
+def test_heldout_values_are_the_metric_code_outputs_not_values_carried_over_from_an_identifier_column(finished, tmp_path):
+    from copath.phase3 import report_final
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    report_final.cmd_report_final(load_context(paths))
+    table = _report(paths, "dev_vs_test.csv")
+    ids = set(_test_ids(paths)) | set(fx.UNIVERSE_IDS)
+    for label in builders.PRIMARY_LABELS:
+        test = pd.read_parquet(paths.processed / "final" / f"test_predictions_{label}.parquet")
+        prevalence = json.loads((paths.models / "v1.0" / label / "config.json").read_text(encoding="utf-8"))["development_prevalence"]
+        again = metrics.label_metrics(test["y"].to_numpy(), test["p_cal"].to_numpy(), np.full(len(test), prevalence), test["pred"].to_numpy())
+        for _, row in table[table["label"] == label].iterrows():
+            if row["heldout"] != "":
+                assert float(row["heldout"]) == pytest.approx(again[row["metric"]], abs=2e-4)  # every metric, recomputed
+        # no identifier-like value in the aggregate columns: they are metrics, whatever digits they contain
+        assert "PATNO" not in table.columns and not set(table["heldout"]) & ids
+
+
+def test_the_report_passes_the_privacy_check_although_metric_digits_can_look_like_identifiers(finished, tmp_path):
+    from copath.phase3 import report_final
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    ctx = load_context(paths)
+    ids = sorted(set(ctx.frame["PATNO"].astype(str)))
+    original = report_final.validate_metric_rows
+    report_final.cmd_report_final(ctx)
+    table = _report(paths, "dev_vs_test.csv")
+    # make the first held-out metric end in the digits of a real (synthetic) identifier: still an aggregate value
+    value = f"0.{ids[0]}"
+    table.loc[0, ["heldout", "heldout_ci_low", "heldout_ci_high"]] = [value, "0.0001", "0.9999"]
+    table.to_csv(paths.reports / "dev_vs_test.csv", index=False)
+    assert report_final.privacy_check(ctx) > 0  # no false positive
+    assert original is report_final.validate_metric_rows
+
+
+def test_a_genuine_failure_deletes_all_report_final_outputs_and_the_message_hides_the_id_and_the_value(finished, tmp_path, monkeypatch):
+    from copath.phase3 import report_final
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    ctx = load_context(paths)
+    planted = str(ctx.frame["PATNO"].iloc[0])
+    real = report_final.write_csv
+
+    def leaking(ctx_, rows, name):
+        if name == "final_test_supplementary.csv":
+            rows = list(rows) + [{"section": "x", "label": "ALL", "model": "", "item": "note", "value": "", "note": f"participant {planted} excluded"}]
+        return real(ctx_, rows, name)
+
+    monkeypatch.setattr(report_final, "write_csv", leaking)
+    existing = {p.name for p in paths.reports.rglob("*") if p.is_file()}
+    with pytest.raises(PrivacyCheckError) as caught:
+        report_final.cmd_report_final(ctx)
+    message = str(caught.value)
+    assert planted not in message and "excluded" not in message and "final_test_supplementary.csv" in message and "column note" in message
+    assert {p.name for p in paths.reports.rglob("*") if p.is_file()} == existing  # csv, notes AND png outputs were all deleted
+    assert not list((paths.reports / "figures").glob("final_test_*"))
+
+
+def test_metric_columns_outside_their_valid_range_are_refused():
+    from copath.phase3.report_final import validate_metric_rows
+
+    def row(metric, heldout, low="", high="", dev="0.5", n_test=100):
+        return {"label": "pd_type_v1", "model": "rf", "metric": metric, "dev_oof_pooled": dev, "heldout": heldout, "heldout_ci_low": low,
+                "heldout_ci_high": high, "n_dev_eligible": 500, "n_test_eligible": n_test}
+
+    validate_metric_rows([row("auroc", 0.9, 0.8, 0.95), row("bss", -0.4, -0.9, 0.1), row("cal_slope", 15.3, 2.0, 40.0), row("cal_intercept", -3.2),
+                          row("f1", 1.0), row("ece", 0.0), row("auprc", ""), row("auroc", 0.5, n_test="<5")])  # all valid
+    for metric in ("auroc", "auprc", "brier", "ece", "f1", "precision", "recall"):
+        for bad in (1.2, -0.1):
+            with pytest.raises(Phase3Error, match="outside"):
+                validate_metric_rows([row(metric, bad)])
+    with pytest.raises(Phase3Error, match="outside"):
+        validate_metric_rows([row("auroc", 0.5, dev="1.5")])  # the development value is checked too
+    with pytest.raises(Phase3Error, match="above 1"):
+        validate_metric_rows([row("bss", 1.01)])
+    for metric in ("cal_slope", "cal_intercept"):
+        validate_metric_rows([row(metric, 25.0), row(metric, -40.0)])  # no [0, 1] rule for these
+        with pytest.raises(Phase3Error, match="not finite"):
+            validate_metric_rows([row(metric, float("inf"))])
+    with pytest.raises(Phase3Error, match="lower bound is above"):
+        validate_metric_rows([row("auroc", 0.5, 0.7, 0.6)])
+    notes = validate_metric_rows([row("auroc", 0.95, 0.6, 0.9), row("cal_slope", 15.3, 18.0, 60.0)])  # estimate outside its CI: a note, not an error
+    assert len(notes) == 2 and all("not an error" in n for n in notes) and "pd_type_v1 / auroc" in notes[0] and "0.95" not in " ".join(notes)
+    assert validate_metric_rows([row("auroc", 0.9, 0.8, 0.95)]) == []
+    for bad in (-1, 3.5, "x"):
+        with pytest.raises(Phase3Error, match="non-negative integer"):
+            validate_metric_rows([row("auroc", 0.9, n_test=bad)])
+    validate_metric_rows([row("auroc", 0.9, n_test=0)])
+
+
+def test_report_final_refuses_to_write_when_a_saved_metric_is_out_of_range(finished, tmp_path):
+    from copath.phase3 import report_final
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    results = paths.reports / "final_test_results.csv"
+    table = pd.read_csv(results, dtype=str, keep_default_na=False)
+    mask = (table["label"] == builders.PRIMARY_LABELS[0]) & (table["metric"] == "f1")
+    table.loc[mask, "value"] = "1.5"
+    table.to_csv(results, index=False)
+    with pytest.raises(Phase3Error):  # the saved value no longer reproduces from the predictions
+        report_final.cmd_report_final(load_context(paths))
+    assert not (paths.reports / "dev_vs_test.csv").exists()
+
+
+def test_an_estimate_outside_its_percentile_interval_is_a_note_in_the_report_not_a_failure(finished, tmp_path):
+    from copath.phase3 import report_final
+
+    paths = _finished_copy(finished, tmp_path / "copy")
+    results = paths.reports / "final_test_results.csv"
+    table = pd.read_csv(results, dtype=str, keep_default_na=False)
+    mask = (table["label"] == builders.PRIMARY_LABELS[0]) & (table["metric"] == "auroc")
+    table.loc[mask, ["ci_low", "ci_high"]] = ["0.0100", "0.0200"]  # an interval that excludes the saved estimate
+    table.to_csv(results, index=False)
+    report_final.cmd_report_final(load_context(paths))  # completes
+    notes = (paths.reports / "final_report_notes.md").read_text(encoding="utf-8")
+    assert "## Notes" in notes and f"{builders.PRIMARY_LABELS[0]} / auroc" in notes and "not an error" in notes
+    assert (paths.reports / "dev_vs_test.csv").is_file()
+
+
+# ------------------------------------------------ Phase 4A.0: frozen-bundle packaging
+
+FAMILIES = {"pd_type_v1": "rf", "ad_like_v1": "lr_enet", "vascular_v1": "rf"}
+HYPER = {"rf": {"n_estimators": 30, "max_depth": 4, "min_samples_leaf": 5, "max_features": "sqrt", "class_weight": "none"},
+         "lr_enet": {"C": 1.0, "l1_ratio": 0.5, "class_weight": "none"}}
+
+
+def _make_bundle(work, phase2, versions=None, lock_versions=None):
+    """A small synthetic stand-in for models/final/v1.0 fitted on the synthetic development data (test code may fit)."""
+    from sklearn.base import clone
+    from sklearn.calibration import CalibratedClassifierCV
+
+    from copath.phase3.core import library_versions
+
+    paths = _paths(work, phase2)
+    ctx = load_context(paths)
+    paths.frozen.mkdir(parents=True, exist_ok=True)
+    paths.runs.mkdir(parents=True, exist_ok=True)
+    selected = {"version": "v1", "labels": {label: {"model": fam, "cv_run_id": f"cv-{label}-primary-{fam}-s1", "gates_passed": True}
+                                              for label, fam in FAMILIES.items()}}
+    paths.selected.write_text(yaml.safe_dump(selected, sort_keys=False), encoding="utf-8")
+    digest = sha256(paths.selected)
+    for label, fam in FAMILIES.items():
+        data = prepare(ctx, label, "primary")
+        pipeline = candidates.build(fam, HYPER[fam], data["y"], 1, ctx.cfg).fit(data["X"], data["y"])
+        calibrated = CalibratedClassifierCV(clone(pipeline), method="sigmoid", cv=3).fit(data["X"], data["y"])
+        folder = paths.models / "v1.0" / label
+        folder.mkdir(parents=True, exist_ok=True)
+        import joblib
+
+        joblib.dump(pipeline, folder / "pipeline.joblib")
+        joblib.dump(calibrated, folder / "calibrator.joblib")
+        (folder / "features.json").write_text(json.dumps(data["features"], indent=1) + "\n", encoding="utf-8")
+        config = {"label": label, "model": fam, "tier": "primary", "seed": 1, "hyperparameters": HYPER[fam], "threshold": 0.3,
+                  "calibration": {"method": "sigmoid", "cv": 3}, "development_prevalence": 0.3, "label_card_sha256": "a" * 64,
+                  "selected_models_sha256": digest, "phase3_config": {"final": {"version": "v1.0"}},
+                  "fold_scheme_sha256": "b" * 64, "dataset_sha256": "c" * 64, "config_sha256": "d" * 64}
+        (folder / "config.json").write_text(json.dumps(config, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        (folder / "metrics.json").write_text(json.dumps({"test": {"auroc": 0.5}}) + "\n", encoding="utf-8")
+        (folder / "model_card.md").write_text(f"# Model card: {label}\n", encoding="utf-8")
+        (paths.runs / f"cv-{label}-primary-{fam}-s1.json").write_text(
+            json.dumps({"run_id": f"cv-{label}-primary-{fam}-s1", "library_versions": versions or library_versions()}), encoding="utf-8")
+    lock_run = {"finished_at": "2031-01-01T00:00:00Z", "selected_models_sha256": digest, "forced": False,
+                **({"library_versions": lock_versions} if lock_versions else {})}
+    paths.lock.write_text(json.dumps({"locked": True, "runs": [lock_run]}, indent=1) + "\n", encoding="utf-8")
+    return paths, digest
+
+
+@pytest.fixture(scope="module")
+def bundle(phase2, tmp_path_factory):
+    return _make_bundle(tmp_path_factory.mktemp("bundle"), phase2)
+
+
+def _copy_bundle(bundle, work):
+    paths, digest = bundle
+    shutil.copytree(paths.config.parent, work)
+    return Paths(config=work / "phase3.yaml", frozen=work / "frozen", processed=work / "processed", splits=paths.splits, reports=work / "reports" / "phase3",
+                 phase2_reports=paths.phase2_reports, registry=work / "experiments" / "registry.csv", runs=work / "experiments" / "phase3",
+                 models=work / "models" / "final"), digest
+
+
+def _bundle_hashes(paths):
+    return {str(p.relative_to(paths.models)): sha256(p) for p in sorted(paths.models.rglob("*")) if p.is_file() and "packaging" not in p.parts}
+
+
+def _packaged(bundle, work):
+    paths, digest = _copy_bundle(bundle, work)
+    from copath.phase3 import packaging
+
+    manifest = packaging.cmd_package(paths, digest, log=lambda m: None)
+    return paths, digest, manifest
+
+
+def _no_fit_or_predict(monkeypatch):
+    from sklearn.calibration import CalibratedClassifierCV
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    def forbidden(name):
+        def call(*args, **kwargs):
+            raise AssertionError(f"packaging called {name}")
+        return call
+
+    for owner, names in ((RandomForestClassifier, ("fit", "predict", "predict_proba")), (LogisticRegression, ("fit", "predict", "predict_proba", "decision_function")),
+                         (Pipeline, ("fit", "predict", "predict_proba", "fit_transform", "decision_function")), (StandardScaler, ("fit", "partial_fit")),
+                         (CalibratedClassifierCV, ("fit", "predict_proba")), (tuning, ("tune",)), (train, ("fit_predict", "outer_cv"))):
+        for name in names:
+            monkeypatch.setattr(owner, name, forbidden(f"{owner.__name__}.{name}"))
+
+
+def test_packaging_is_additive_only_and_never_fits_predicts_or_calibrates(bundle, tmp_path, monkeypatch):
+    from copath.phase3 import packaging, reset
+
+    paths, digest = _copy_bundle(bundle, tmp_path / "copy")
+    before, lock_before = _bundle_hashes(paths), sha256(paths.lock)
+    final_before = reset._final_artifacts(paths, [])
+    _no_fit_or_predict(monkeypatch)
+    manifest = packaging.cmd_package(paths, digest, log=lambda m: None)
+    assert _bundle_hashes(paths) == before and sha256(paths.lock) == lock_before  # no bundle file and not the lock changed
+    assert {p.name for p in packaging.packaging_dir(paths, "v1.0").iterdir()} == {"bundle_manifest.json", "explainer_specs.json"}
+    assert reset._final_artifacts(paths, []) == final_before  # the final-evaluation guards see the same state
+    assert not (paths.reports.exists() and list(paths.reports.rglob("*")))  # nothing under reports/
+    assert manifest["model_version"] == "pd-copathology-v1.0" and manifest["final_bundle_version"] == "v1.0"
+    assert manifest["selected_models_sha256"] == digest and manifest["final_lock"] == {"present": True, "sha256": lock_before}
+    assert "no model fitting, prediction, thresholding or evaluation was performed" in manifest["provenance_note"]
+
+
+def test_manifest_fields_per_signal_and_the_canonical_feature_hash(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest, manifest = _packaged(bundle, tmp_path / "copy")
+    assert set(manifest["signals"]) == {"pd_type", "ad_like", "vascular_risk"}
+    for label, signal in packaging.SIGNALS.items():
+        item, folder = manifest["signals"][signal], paths.models / "v1.0" / label
+        features = json.loads((folder / "features.json").read_text(encoding="utf-8"))
+        assert item["target_definition"] == label and item["estimator_family"] == FAMILIES[label] and item["calibration_method"] == "sigmoid"
+        assert set(item["files_sha256"]) == set(packaging.BUNDLE_FILES) and all(item["files_sha256"][n] == sha256(folder / n) for n in packaging.BUNDLE_FILES)
+        assert item["raw_feature_list_sha256"] == packaging.feature_list_sha256(features) and item["n_raw_features"] == len(features)
+        assert item["label_card_sha256"] == "a" * 64 and item["config_sha256"] == "d" * 64
+    reordered = list(reversed(features))
+    assert packaging.feature_list_sha256(reordered) != packaging.feature_list_sha256(features)
+    assert packaging.feature_list_sha256(features) == __import__("hashlib").sha256(json.dumps(features, separators=(",", ":")).encode()).hexdigest()
+    specs = packaging.packaging_dir(paths, "v1.0") / "explainer_specs.json"
+    assert manifest["explainer_specs"] == {"file": "explainer_specs.json", "sha256": sha256(specs)}
+
+
+def test_training_versions_come_from_the_selected_cv_run_and_are_not_called_final_fit_versions(bundle, tmp_path):
+    from copath.phase3.core import library_versions
+
+    paths, digest, manifest = _packaged(bundle, tmp_path / "copy")
+    assert manifest["reference_training_library_versions"] == library_versions()
+    assert manifest["version_source"] == "selected_cv_run_metadata"
+    assert "not directly observed final-fit versions" in manifest["version_source_detail"]
+    assert all(f"cv-{label}-primary-" in manifest["version_source_detail"] for label in FAMILIES)
+    assert manifest["packaging_runtime_versions"]["scikit-learn"] == manifest["reference_training_library_versions"]["scikit-learn"]
+    text = json.dumps(manifest)
+    assert "observed final-fit" not in text.replace("not directly observed final-fit", "")
+
+
+def test_versions_stored_by_the_final_run_itself_take_precedence(phase2, tmp_path):
+    from copath.phase3 import packaging
+    from copath.phase3.core import library_versions
+
+    paths, digest = _make_bundle(tmp_path / "b", phase2, versions={"scikit-learn": "0.0.1"}, lock_versions=library_versions())
+    manifest = packaging.cmd_package(paths, digest, log=lambda m: None)
+    assert manifest["version_source"] == "final_run_metadata" and manifest["reference_training_library_versions"] == library_versions()
+
+
+def test_packaging_stops_without_the_lock_with_another_selection_or_without_run_metadata(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest = _copy_bundle(bundle, tmp_path / "a")
+    paths.lock.unlink()
+    with pytest.raises(packaging.PackagingError, match="lock does not exist"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+    paths, digest = _copy_bundle(bundle, tmp_path / "b")
+    with pytest.raises(packaging.PackagingError, match="frozen SHA-256"):
+        packaging.cmd_package(paths, "0" * 64, log=lambda m: None)
+    paths, digest = _copy_bundle(bundle, tmp_path / "c")
+    for record in paths.runs.glob("cv-*.json"):
+        record.unlink()
+    with pytest.raises(packaging.PackagingError, match="no library versions"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+    paths, digest = _copy_bundle(bundle, tmp_path / "d")
+    for record in paths.runs.glob("cv-*.json"):
+        record.write_text(json.dumps({"run_id": record.stem}), encoding="utf-8")  # a record without library_versions
+    with pytest.raises(packaging.PackagingError, match="neither the final run nor the selected cv run"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+    assert not packaging.packaging_dir(paths, "v1.0").exists()
+
+
+def test_a_scikit_learn_version_difference_or_an_inconsistent_version_warning_stops_packaging(bundle, tmp_path, monkeypatch):
+    import joblib
+    import warnings
+
+    from sklearn.exceptions import InconsistentVersionWarning
+
+    from copath.phase3 import packaging
+    from copath.phase3.core import library_versions
+
+    paths, digest = _copy_bundle(bundle, tmp_path / "a")
+    for record in paths.runs.glob("cv-*.json"):
+        record.write_text(json.dumps({"run_id": record.stem, "library_versions": {**library_versions(), "scikit-learn": "0.0.1"}}), encoding="utf-8")
+    with pytest.raises(packaging.PackagingError, match="scikit-learn mismatch"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+    paths, digest = _copy_bundle(bundle, tmp_path / "b")
+    real = joblib.load
+
+    def warns(path, *args, **kwargs):
+        warnings.warn(InconsistentVersionWarning(estimator_name="Pipeline", current_sklearn_version="9.9", original_sklearn_version="0.0.1"))
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(packaging.joblib, "load", warns)
+    with pytest.raises(packaging.PackagingError, match="another scikit-learn version"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+    assert not packaging.packaging_dir(paths, "v1.0").exists()
+
+
+def test_other_library_differences_only_warn(bundle, tmp_path):
+    from copath.phase3 import packaging
+    from copath.phase3.core import library_versions
+
+    paths, digest = _copy_bundle(bundle, tmp_path / "copy")
+    for record in paths.runs.glob("cv-*.json"):
+        record.write_text(json.dumps({"run_id": record.stem, "library_versions": {**library_versions(), "numpy": "0.1"}}), encoding="utf-8")
+    seen = []
+    manifest = packaging.cmd_package(paths, digest, log=seen.append)
+    assert any("WARNING: numpy differs" in line for line in seen) and manifest["reference_training_library_versions"]["numpy"] == "0.1"
+
+
+def test_verify_recomputes_every_hash_writes_nothing_and_detects_a_changed_byte(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest, _ = _packaged(bundle, tmp_path / "copy")
+    folder = packaging.packaging_dir(paths, "v1.0")
+    before = {p.name: sha256(p) for p in folder.iterdir()}
+    assert packaging.verify(paths, digest) == []
+    assert {p.name: sha256(p) for p in folder.iterdir()} == before  # --verify writes nothing
+    for name, damage in (("model_card.md", lambda b: b + b"x"), ("metrics.json", lambda b: b.replace(b"0.5", b"0.6")),
+                         ("pipeline.joblib", lambda b: b + b"\0"), ("calibrator.joblib", lambda b: b + b"\0")):
+        target = paths.models / "v1.0" / "ad_like_v1" / name
+        original = target.read_bytes()
+        target.write_bytes(damage(original))
+        problems = packaging.verify(paths, digest)
+        assert problems and any(name in p for p in problems), (name, problems)
+        target.write_bytes(original)
+    assert packaging.verify(paths, digest) == []
+    features = paths.models / "v1.0" / "ad_like_v1" / "features.json"
+    original = features.read_bytes()
+    features.write_bytes(original.replace(b"age", b"agX", 1))
+    assert packaging.verify(paths, digest)
+    features.write_bytes(original)
+    paths.lock.write_text(paths.lock.read_text(encoding="utf-8").replace("2031", "2032"), encoding="utf-8")
+    assert any("lock" in p or "header" in p for p in packaging.verify(paths, digest))  # a changed lock is noticed
+
+
+def test_the_explainer_specs_record_the_phase3_convention_without_inventing_one(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest, _ = _packaged(bundle, tmp_path / "copy")
+    specs = json.loads((packaging.packaging_dir(paths, "v1.0") / "explainer_specs.json").read_text(encoding="utf-8"))["signals"]
+    for signal in ("pd_type", "vascular_risk"):
+        spec = specs[signal]
+        assert spec["explainer"] == "shap.TreeExplainer" and spec["feature_perturbation"] == "tree_path_dependent" and spec["background_data"] is None
+        assert spec["output_space"].startswith("probability") and spec["class_index"] == 1 and spec["pipeline_steps"] == ["drop", "impute", "model"]
+    ad = specs["ad_like"]
+    assert ad["output_space"].startswith("log-odds") and ad["pipeline_steps"] == ["drop", "impute", "scale", "model"]
+    assert ad["reference"].startswith("zero vector in post-pipeline scaled space") and ad["contribution"] == "coef_j * scaled_value_j" and ad["base_value"] == "intercept_"
+    assert ad["justification"] == packaging.JUSTIFICATION and "subsampled" in ad["explainer"]  # the full, unsubsampled background
+    assert "1,000" not in json.dumps(ad) and "818" not in json.dumps(ad)  # no claim about a subsampled background or fold sizes
+    assert "still excluded from top_features" in ad["absent_features"] and "non-zero contribution" in ad["absent_features"]
+    assert set(specs) == {"pd_type", "ad_like", "vascular_risk"}
+
+
+def test_an_estimator_input_that_no_scaler_centres_stops_packaging():
+    from sklearn.impute import SimpleImputer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    from copath.models.preprocessing import DropDegenerateColumns
+    from copath.phase3 import packaging
+
+    X, y, _ = _toy(n=200)
+    good = candidates.build("lr_enet", HYPER["lr_enet"], y, 1, CFG).fit(X, y)
+    assert packaging.check_pipeline("x", "lr_enet", good, list(X.columns))["scaler_with_mean"] is True
+    uncentred = Pipeline([("drop", DropDegenerateColumns()), ("impute", SimpleImputer(strategy="median")), ("scale", StandardScaler(with_mean=False)),
+                          ("model", LogisticRegression(max_iter=500))]).fit(X, y)
+    with pytest.raises(packaging.PackagingError, match="does not centre"):
+        packaging.check_pipeline("x", "lr_enet", uncentred, list(X.columns))
+    indicators = Pipeline([("drop", DropDegenerateColumns()), ("impute", SimpleImputer(strategy="median", add_indicator=True)),
+                           ("scale", StandardScaler()), ("model", LogisticRegression(max_iter=500))]).fit(X, y)
+    with pytest.raises(packaging.PackagingError, match="missing-indicator|column counts differ"):
+        packaging.check_pipeline("x", "lr_enet", indicators, list(X.columns))
+    passthrough = Pipeline([("drop", DropDegenerateColumns()), ("impute", SimpleImputer(strategy="median")), ("model", LogisticRegression(max_iter=500))]).fit(X, y)
+    with pytest.raises(packaging.PackagingError, match="unexpected linear pipeline structure"):
+        packaging.check_pipeline("x", "lr_enet", passthrough, list(X.columns))
+    with pytest.raises(packaging.PackagingError, match="does not take exactly the raw features"):
+        packaging.check_pipeline("x", "lr_enet", good, list(reversed(list(X.columns))))
+    with pytest.raises(packaging.PackagingError, match="not supported"):
+        packaging.check_pipeline("x", "hgb", good, list(X.columns))
+
+
+def test_manifest_and_specs_hold_no_participant_identifiers_or_values(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest, _ = _packaged(bundle, tmp_path / "copy")
+    for name in ("bundle_manifest.json", "explainer_specs.json"):
+        text = (packaging.packaging_dir(paths, "v1.0") / name).read_text(encoding="utf-8")
+        assert not any(pid in text for pid in fx.UNIVERSE_IDS) and "PATNO" not in text
+
+
+def test_repeating_the_packaging_rewrites_nothing_and_keeps_the_first_packaged_at(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest, first = _packaged(bundle, tmp_path / "copy")
+    folder = packaging.packaging_dir(paths, "v1.0")
+    stamps = {p.name: (p.stat().st_mtime_ns, sha256(p)) for p in folder.iterdir()}
+    time.sleep(1.1)
+    again = packaging.cmd_package(paths, digest, log=lambda m: None)
+    assert again["packaged_at"] == first["packaged_at"] and {p.name: (p.stat().st_mtime_ns, sha256(p)) for p in folder.iterdir()} == stamps
+
+
+def test_a_conflicting_existing_manifest_is_never_overwritten(bundle, tmp_path):
+    from copath.phase3 import packaging
+
+    paths, digest, _ = _packaged(bundle, tmp_path / "copy")
+    folder = packaging.packaging_dir(paths, "v1.0")
+    manifest = folder / "bundle_manifest.json"
+    changed = json.loads(manifest.read_text(encoding="utf-8"))
+    changed["signals"]["ad_like"]["n_raw_features"] += 1
+    manifest.write_text(json.dumps(changed, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    kept = sha256(manifest)
+    with pytest.raises(packaging.PackagingError, match="never overwritten"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+    assert sha256(manifest) == kept
+    (folder / "explainer_specs.json").unlink()
+    with pytest.raises(packaging.PackagingError, match="only one of the two"):
+        packaging.cmd_package(paths, digest, log=lambda m: None)
+
+
+def test_verify_explainer_spec_matches_shap_on_the_development_set(bundle, tmp_path, capsys, monkeypatch):
+    from copath.phase3 import packaging
+
+    paths, digest, _ = _packaged(bundle, tmp_path / "copy")
+    results = packaging.cmd_verify_explainer_spec(paths, log=print)
+    assert set(results) == {"pd_type", "ad_like", "vascular_risk"} and all(r["pass"] for r in results.values())
+    assert results["ad_like"]["max_abs_difference"] < 1e-8 and results["ad_like"]["max_abs_mean_scaled_background"] < 1e-8
+    assert results["pd_type"]["max_abs_difference"] < 1e-6 and "max_abs_mean_scaled_background" not in results["pd_type"]
+    out = capsys.readouterr().out
+    assert out.count("PASS") == 3 and not any(pid in out for pid in fx.UNIVERSE_IDS)
+    assert not (paths.reports.exists() and list(paths.reports.rglob("*")))  # prints only; writes nothing
+    parts, real = [], split.load_analytic
+
+    def watch(*args, **kwargs):
+        parts.append(kwargs.get("part", args[2] if len(args) > 2 else "dev"))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(split, "load_analytic", watch)
+    packaging.cmd_verify_explainer_spec(paths, log=lambda m: None)
+    assert parts == ["dev"]  # the held-out part is never loaded
+
+
+def test_packaging_command_line_enforces_the_frozen_selection_hash(bundle, tmp_path, monkeypatch, capsys):
+    from copath.phase3 import packaging
+
+    paths, digest = _copy_bundle(bundle, tmp_path / "copy")
+    monkeypatch.setattr(packaging, "Paths", lambda: paths)
+    assert main(["package-final-bundle"]) == 1  # the synthetic selection does not have the frozen real hash
+    assert "frozen SHA-256" in capsys.readouterr().err and not packaging.packaging_dir(paths, "v1.0").exists()
+    monkeypatch.setattr(packaging, "FROZEN_SELECTED_SHA256", digest)
+    assert main(["package-final-bundle"]) == 0 and main(["package-final-bundle", "--verify"]) == 0
