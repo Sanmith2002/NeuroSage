@@ -96,9 +96,9 @@
 
 **Purpose**: Prove the completed story set against the measurable outcomes and preserve existing Safira behavior.
 
-- [ ] T021 Write end-to-end synthetic acceptance tests in `tests/test_registry_acceptance.py` for SC-001, SC-002, SC-004, and SC-006, including registration without labelled safety data or a safety package; exact round-trip of label outcomes, continuous primary-output semantics/mapping, artifact identity, input schemas, modality declarations, preprocessing identities, and supported versus unsupported capabilities.
-- [ ] T022 Update `specs/001-model-registration-registry/quickstart.md` with final test paths, exact commands, expected outcomes, and limitations; keep examples synthetic and preserve the research-prototype/no-clinical-validation claim.
-- [ ] T023 Run the full pytest suite with `\.venv\Scripts\python.exe -m pytest -q`, including existing `tests/test_model_adapter.py`, `tests/test_adapter_capabilities.py`, `tests/test_safety_context.py`, and `tests/test_assessment.py`; fix registry regressions without changing those existing contracts or tests (FR-013; SC-004).
+- [X] T021 Write end-to-end synthetic acceptance tests in `tests/test_registry_acceptance.py` for SC-001, SC-002, SC-004, and SC-006, including registration without labelled safety data or a safety package; exact round-trip of label outcomes, continuous primary-output semantics/mapping, artifact identity, input schemas, modality declarations, preprocessing identities, and supported versus unsupported capabilities.
+- [X] T022 Update `specs/001-model-registration-registry/quickstart.md` with final test paths, exact commands, expected outcomes, and limitations; keep examples synthetic and preserve the research-prototype/no-clinical-validation claim.
+- [X] T023 Run the full pytest suite with `\.venv\Scripts\python.exe -m pytest -q`, including existing `tests/test_model_adapter.py`, `tests/test_adapter_capabilities.py`, `tests/test_safety_context.py`, and `tests/test_assessment.py`; fix registry regressions without changing those existing contracts or tests (FR-013; SC-004).
 
 ---
 

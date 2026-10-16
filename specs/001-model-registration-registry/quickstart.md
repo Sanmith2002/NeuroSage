@@ -1,32 +1,120 @@
-# Planned Verification Quickstart: Feature 001 Registry
+# Verification Quickstart: Feature 001 Registry
 
-This guide is for validating Feature 001 **after implementation**. The registry modules and proposed tests in [plan.md](plan.md) do not exist yet. Use synthetic classifiers and temporary catalogs only; registration must succeed without labelled safety data or a safety package, and no patient dataset is needed.
+Feature 001 stores immutable supervised multi-label registration metadata in a
+local SQLite catalog and keeps validated classifier-adapter bindings in memory.
+Verification uses synthetic models and temporary files. Registration requires
+neither labelled safety data nor a safety package.
 
-## Prerequisites and setup
+## Run verification
 
-From the repository root, use Python 3.11 or later with pytest available. The current workspace has a `.venv` containing pytest. On PowerShell:
+From the repository root, use Python 3.11+ with Safira and pytest available.
+The workspace's existing `.venv` contains both. On PowerShell:
 
 ```powershell
 .\.venv\Scripts\python.exe --version
-```
-
-Do not place a runtime SQLite catalog or classifier artifact in tracked source; tests must use pytest temporary directories. After the proposed registry tests are created, run them and then the complete suite. These are implementation verification targets, not claims that the new tests already pass:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q tests/test_registry_definitions.py tests/test_registry_storage.py tests/test_registry_integration.py
+.\.venv\Scripts\python.exe -m pytest -q tests/test_registry_acceptance.py
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-## End-to-end review scenarios
+Expected for this revision: **4 acceptance tests pass** and **231 tests pass in
+the full suite**, including all 28 original Safira contract tests. Any collection
+error, assertion failure, unexpected exception, or subprocess failure fails
+verification. Counts may change with later approved work; no numerical lookup
+latency target is asserted.
 
-The scenarios refer to the proposed [Python contract](contracts/registry-python.md) and [data model](data-model.md). Future pytest files should execute them deterministically with synthetic artifact bytes and test-only `ModelAdapter` subclasses.
+The acceptance file exercises executable toy classifiers with two, three, and four
+labels, including probabilities and non-probability continuous scores. It verifies
+exact metadata round trips, active attachment, mutation resistance, and no safety
+setup or assessment calls. Primary output methods are exercised independently on
+invented numeric vectors after the registry operations. A five-record catalog
+contains three model IDs and three versions of one ID; a fresh interpreter verifies
+all metadata, refuses usable access before attachment, and reattaches exact pairs.
 
-1. **Valid registration**: Supply an exact model ID/version, synthetic classifier and adapter artifacts, and identity evidence from a trusted test provider that ties deterministic fingerprints to the supplied loaded pair. Include two binary-ground-truth labels, explicit output selectors, continuous per-label values, and class mappings. Register successfully without labelled safety data or a safety package, then retrieve metadata. Expect exact round-trip of schema, identity, capability, input, modality, and preprocessing fields. Mutating nested input declarations after registration or mutating returned values must not change the accepted metadata. Expect usable resolution with the validated pair and no safety training or assessment call. An artifact digest by itself is not evidence of an arbitrary live Python object's origin.
-2. **Exact versions**: Register at least three distinct model IDs and three versions of one ID. Expect every exact lookup to return its own immutable definition. Query an absent ID and an absent version; expect the corresponding typed errors with no fallback.
-3. **Restart and reattachment**: Close the first registry instance, open the same temporary catalog in a genuine subprocess using the same temporary database, and query metadata. Expect identical metadata but `UnattachedModelError` on usable resolution because process-local bindings are not restored. Attach the exact classifier and compatible adapter with freshly checked identities; expect usable resolution. Try changed classifier material, adapter implementation/version, label mapping, and preprocessing under the old version; expect rejection and unchanged metadata.
-4. **Invalid definitions**: Try empty/duplicate/one-label schemas, more than two ground-truth outcomes, hard 0/1-only declarations, missing score meaning/scale/class boundary, a probability without the required capability/method, non-Boolean capability flags, malformed keys, and non-supervised or non-multi-label tasks. Expect specific failures with no row inserted. Do not call adapters on patient data during these checks.
-5. **Duplicate race and storage failure**: Use two independent connections/processes against one temporary catalog and attempt the same key concurrently. Expect one accepted row and an explicit duplicate failure, with no overwrite. Open corrupt or unknown-schema storage; expect `RegistryStorageError`, not an empty registry. Check a failed attach leaves any prior valid binding in place.
-6. **Privacy and scope**: Try a registration payload with patient-level values or a restricted-data field and assert rejection without those values appearing in stored bytes or routine error text. Use spies to assert no prediction, extraction, training, calibration, policy selection, or assessment call occurs in registration and lookup.
-7. **Regression**: Run all existing tests along with registry tests. Expect no change to `ModelAdapter`, `AdapterCapabilities`, `SafetyContext`, or `SafetyAssessment` behavior.
+Tests place catalogs and synthetic manifests in pytest temporary directories.
+Keep manual catalogs and model artifacts outside tracked source or under ignored
+`artifacts/`. Never commit patient datasets or identifiable records.
 
-These software checks verify registry behavior only. They do not establish clinical safety, model correctness, calibration, or a TRUST/CAUTION/DEFER operating point. Safira remains a research prototype.
+## Public operations
+
+Import types from `safira.registry`. The owning integration supplies a
+`RegisteredModelVersion` (constructed directly or with `from_dict`), its actual
+classifier, an existing `ModelAdapter`, and a trusted `IdentityProvider`.
+
+| Operation | Expected behavior |
+|---|---|
+| `ModelRegistry(storage_path)` | Open/create the local catalog; reject corrupt or unsupported storage. Supports `with` and `close()`. |
+| `register(definition, classifier, adapter, identity_provider)` | Validate, commit once, and bind the submitted pair to this registry handle; return immutable metadata. |
+| `get_metadata(model_id, model_version)` | Return exact immutable metadata even while unattached; never choose a latest version. |
+| `attach(model_id, model_version, classifier, adapter, identity_provider, definition=candidate_definition)` | Obtain fresh identity evidence and compare every candidate declaration before publishing a binding. |
+| `resolve_usable(model_id, model_version)` | Return metadata, classifier, and adapter together; raise `UnattachedModelError` until attachment succeeds. |
+
+The required `definition=` argument supplies candidate label/output, input,
+modality, preprocessing, and adapter declarations. Safira does not call
+patient-facing adapter methods to infer them. `to_dict()` returns detached values;
+nested collections retained in definitions are immutable.
+
+`IdentityProvider.identify_loaded_pair(classifier, adapter)` returns
+`IdentityEvidence(classifier_sha256, adapter_sha256, loaded_pair_verified)`.
+Digests must be 64 lowercase SHA-256 hexadecimal characters. Attestation must be
+an actual Boolean and true for acceptance; both digests must match the declared
+or stored identities. See the [Python contract](contracts/registry-python.md) and
+the working test-only loader in
+[test_registry_acceptance.py](../../tests/test_registry_acceptance.py). Its JSON
+artifact format is an example owner integration, not a serialization standard.
+
+## Requirement and acceptance coverage
+
+Test paths below are relative to the repository root under `tests/`.
+
+| Functional requirements | Verification files and evidence |
+|---|---|
+| FR-001–FR-003 | `test_registry_us1.py`, `test_registry_us3.py`, `test_registry_acceptance.py`: multi-label scope, exact keys, binary outcome meanings, continuous outputs and class mappings, schema rejection. |
+| FR-004–FR-006 | `test_registry_identity.py`, `test_registry_us1.py`, `test_registry_us2.py`, `test_registry_us3.py`, `test_registry_acceptance.py`: existing adapter methods, Boolean capabilities, checked identities, deep immutability, input/modality/preprocessing round trips, material-change rejection. |
+| FR-007–FR-009 | `test_registry_us2.py`, `test_registry_concurrency.py`, `test_registry_errors.py`, `test_registry_acceptance.py`: exact versions, subprocess persistence, explicit reattachment, no substitution, duplicate/concurrent insertion protection. |
+| FR-010 | `test_registry_us3.py`, `test_registry_errors.py`, `test_registry_storage.py`: actionable typed validation, compatibility, missing identity and storage failures; prior state preserved. |
+| FR-011–FR-012 | `test_registry_us1.py`, `test_registry_acceptance.py`: registration without safety data/packages; spies verify no patient-facing adapter calls or safety work during registry operations. |
+| FR-013 | `test_model_adapter.py`, `test_adapter_capabilities.py`, `test_safety_context.py`, `test_assessment.py`, and registry acceptance: original contracts preserved; new models use owner integrations. |
+| FR-014 | `test_registry_errors.py`, `test_registry_us3.py`, `test_registry_storage.py`: restricted payload rejection without echo/logging/persistence, sanitized integration errors, invalid stored-row rejection. |
+
+| User-story acceptance scenarios | Verification |
+|---|---|
+| US1: 1–6 | `test_registry_us1.py`, `test_registry_acceptance.py` |
+| US2: 1–6 | `test_registry_us2.py`, `test_registry_concurrency.py`, `test_registry_acceptance.py` |
+| US3: 1–10 | `test_registry_us3.py`, `test_registry_errors.py`, `test_registry_us2.py`, `test_registry_concurrency.py` |
+
+| Success criteria | Verification |
+|---|---|
+| SC-001, SC-006 | Acceptance tests preserve label meanings, scale, mapping, artifact identity, and supported/unsupported capabilities without inventing reliability scores or selective statuses. |
+| SC-002 | Five-record catalogs retain three model IDs and three versions of one ID across genuine subprocess boundaries; concurrent duplicate tests accept one insert without overwrite. |
+| SC-003 | Parameterized invalid declaration, adapter, lookup, and stored-row tests require typed failures and unchanged accepted state. |
+| SC-004 | US1 and final acceptance spies require zero safety setup or assessment work during registry operations. |
+
+SC-005 was removed during clarification. The full command above runs all listed
+evidence, including the writer/reader subprocess tests and synchronized duplicate
+race tests.
+
+## Known limitations and scope
+
+- Identity provenance depends on the classifier owner or trusted loader linking
+  live objects to fingerprinted material. A digest alone cannot prove an arbitrary
+  Python object's origin. Safira checks evidence and digests; it does not authenticate
+  arbitrary integration code.
+- Owners must keep loaded classifier, adapter, and preprocessing behavior fixed.
+  Material changes require a new model version. Bindings belong to a registry
+  handle and disappear on close or process exit; retained metadata alone establishes
+  neither usable access nor a ready safety package.
+- Registration checks declarations and method availability without predictions.
+  It cannot prove an arbitrary model's future output ranges, correctness, calibration,
+  or clinical validity. Toy output checks validate only the synthetic integrations.
+- Storage is a local SQLite file with explicit schema versioning. Concurrent insert
+  tests use two independent connections to an initialized catalog. Distributed
+  synchronization, network-filesystem guarantees, import/export, and migrations
+  are outside Feature 001. Unknown schema versions fail closed.
+- Only supervised multi-label classifiers with at least two binary-outcome labels
+  and continuous per-label outputs are supported. Standalone single-label binary
+  classifiers and other learning tasks remain unsupported.
+
+These tests verify registry software behavior. Feature 001 performs no safety-model
+training, calibration, policy selection, or runtime patient assessment and supplies
+no TRUST/CAUTION/DEFER operating point. **Safira remains a research prototype, not a
+clinically validated medical device.**
