@@ -25,14 +25,14 @@ Only `RegisteredModelVersion` and its nested declarative values persist. `Proces
 |---|---|
 | `model_id`, `model_version` | Nonblank exact strings, no leading/trailing whitespace or control characters; composite immutable key. Opaque versions have no ordering or latest alias. |
 | `task_type` | Fixed supervised multi-label classification declaration; other tasks and one-label classifiers rejected. |
-| `classifier_artifact` | Checkable immutable artifact identity, including digest algorithm and digest/fingerprint of version-specific classifier material. No executable bytes in the record. |
-| `labels` | Ordered or explicitly indexed set of at least two unique `LabelDefinition` values. Order/output selection is part of immutable compatibility metadata. |
+| `classifier_artifact` | Checkable immutable artifact identity, including a deterministic SHA-256 fingerprint of version-specific classifier material. No executable bytes in the record. The owner-supplied identity provider must attest that the live classifier was loaded from this material; a digest alone is not proof of object origin. |
+| `labels` | Immutable ordered or explicitly indexed collection of at least two unique `LabelDefinition` values. Order/output selection is part of immutable compatibility metadata. |
 | `adapter` | `AdapterDeclaration` for the associated implementation and this exact classifier version. |
 | `input` | Declarative input shape/type and named modality metadata, without observations. |
 | `preprocessing_identity` | Checkable version/fingerprint of required preprocessing, or explicit `none`. |
 | `metadata_schema_version` | Storage serialization version for fail-closed decoding/migration. |
 
-The persistent representation uses canonical JSON for structured metadata in a SQLite row or normalized tables where appropriate, with a composite primary key and schema-version marker. Serialization must round-trip exact values and validate on decode. Storage internals do not expand the public contract.
+The persistent representation uses canonical JSON for structured metadata in a SQLite row or normalized tables where appropriate, with a composite primary key and schema-version marker. Serialization must round-trip exact values and validate on decode. Deep immutability applies to nested labels, output selectors/mappings, capabilities, input schema, modality declarations, preprocessing identity, and every other stored metadata value. Use immutable nested representations or defensive copies both when accepting caller input and returning metadata; later mutation through either reference must not change the accepted record. Storage internals do not expand the public contract.
 
 ## LabelDefinition
 
@@ -44,7 +44,7 @@ The persistent representation uses canonical JSON for structured metadata in a S
 | `value_kind` | `probability` or `continuous_score`; describes the primary classifier's output, never Safira reliability. |
 | `value_source` | Existing `ModelAdapter.predict_probability` for probabilities or `ModelAdapter.predict` for a declared non-probability continuous score. |
 | `value_scale` | Defined numeric domain/scale and meaning; probability is 0–1, with direction and positive-class semantics stated. A non-probability score may have an unbounded declared domain, but each observed value must be finite. |
-| `class_mapping` | Deterministic rule mapping a value to positive or negative primary prediction, including threshold/boundary behavior and positive direction. This rule describes the **primary classifier**, not a Safira TRUST/CAUTION/DEFER policy. |
+| `class_mapping` | Immutable deterministic rule mapping a value to positive or negative primary prediction, including threshold/boundary behavior and positive direction. This rule describes the **primary classifier**, not a Safira TRUST/CAUTION/DEFER policy. |
 
 Validation rejects missing output mapping, duplicate label IDs/selectors, a third ground-truth class, ambiguous scale/direction/boundary, a hard 0/1-only declaration, or a non-probability score mislabeled as a probability. Individual predictions may legitimately equal 0 or 1; capability to provide continuous values is the requirement. Static validation cannot prove observed runtime output distributions.
 
@@ -53,15 +53,15 @@ Validation rejects missing output mapping, duplicate label IDs/selectors, a thir
 | Field | Rule |
 |---|---|
 | `adapter_id`, `adapter_version` | Nonblank stable implementation identity and exact version. A material version change requires a new registered model version. |
-| `implementation_fingerprint` | Checkable identity for the adapter implementation, distinct from a human-readable class name/version assertion. |
+| `implementation_fingerprint` | Deterministic SHA-256 fingerprint of the adapter implementation artifact, distinct from a human-readable class name/version assertion. |
 | `associated_model_id`, `associated_model_version` | Must exactly match the parent record's key. |
 | `capabilities` | Snapshot of every existing `AdapterCapabilities` flag with actual Boolean values. Unsupported flags remain `false` and do not imply a numeric signal value. |
 
-At registration and attachment, check `ModelAdapter` conformance, the capability snapshot, and concrete implementation of methods claimed by relevant capabilities. A `probability` value source requires `prediction_probability=True` and a concrete method override. A non-probability `predict` score does not set that capability unless true probabilities are independently supported. No optional safety dimension is inferred from an unclaimed capability.
+At registration and attachment, check `ModelAdapter` conformance, the capability snapshot, and concrete implementation of methods claimed by relevant capabilities. A `probability` value source requires `prediction_probability=True` and a concrete method override. A non-probability `predict` score does not set that capability unless true probabilities are independently supported. No optional safety dimension is inferred from an unclaimed capability. Capability snapshots are deeply immutable when returned from or retained by a registration.
 
 ## InputDefinition and identity evidence
 
-`InputDefinition` contains only structural input schema (field names/types/shapes as required to identify compatibility) and declared modality names. It cannot include sample values, observations, outcomes, patient identifiers, clinical records, or arbitrary data blobs. `preprocessing_identity` identifies transformations that affect classifier behavior, with an explicit `none` when none applies. The classifier artifact and adapter implementation identity providers operate on immutable artifact/code material or deterministic non-patient state; their callables and source material are not persisted. Exact identity verification is required before usable attachment.
+`InputDefinition` contains only immutable structural input schema (field names/types/shapes as required to identify compatibility) and immutable declared modality names. It cannot include sample values, observations, outcomes, patient identifiers, clinical records, or arbitrary data blobs. `preprocessing_identity` identifies transformations that affect classifier behavior, with an explicit `none` when none applies. The configured `IdentityProvider.identify_loaded_pair(classifier, adapter)` returns the classifier artifact SHA-256, adapter implementation SHA-256, and Boolean `loaded_pair_verified` attestation at registration and attachment. It hashes exact immutable artifact bytes; a multi-file artifact uses a deterministic manifest with normalized relative paths and file-content digests. For in-memory models, the owner/provider may hash an owner-defined deterministic representation of non-patient model state. The provider must bind its evidence to the live objects and attest the classifier's origin; the owner or trusted loader is responsible for this link. A digest alone cannot prove the origin of an arbitrary Python object. Safira compares evidence with the record and fails closed on missing, false, unverifiable, or mismatched evidence. Provider callables and source material are not persisted. Exact identity verification is required before usable attachment.
 
 ## ProcessLocalBinding
 
