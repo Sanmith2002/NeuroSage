@@ -12,7 +12,7 @@
 
 **Purpose**: Establish only the registry package and reusable synthetic test setup. Python 3.11+ and pytest already exist; SQLite is in the standard library, so no runtime dependency or service is added.
 
-- [ ] T001 Create the registry package entry point in `src/safira/registry/__init__.py` and shared temporary-catalog, synthetic classifier artifact, and test-only `ModelAdapter` fixtures in `tests/conftest.py`; keep fixtures free of patient data.
+- [X] T001 Create the registry package entry point in `src/safira/registry/__init__.py` and shared temporary-catalog, synthetic classifier artifact, and test-only `ModelAdapter` fixtures in `tests/conftest.py`; keep fixtures free of patient data.
 
 ---
 
@@ -20,11 +20,11 @@
 
 **Purpose**: Establish tested local metadata storage, identity verification, and typed errors used by all stories.
 
-- [ ] T002 [P] Write SQLite storage contract tests in `tests/test_registry_storage.py` for schema-version initialization, canonical metadata round-trip, composite `(model_id, model_version)` uniqueness, close/reopen retrieval, and fail-closed handling of corrupt or unknown-schema catalogs.
-- [ ] T003 [P] Write identity contract tests in `tests/test_registry_identity.py` using a fake trusted loader/provider and synthetic classifier/adapter artifact bytes; assert deterministic SHA-256 fingerprints, evidence tied to the supplied live pair, true versus false `loaded_pair_verified` attestation, mismatch rejection, and fail-closed behavior when evidence is missing or unverifiable, without requiring a framework-specific serialization format.
-- [ ] T004 Implement typed registry exceptions in `src/safira/registry/exceptions.py` for invalid registration, unsupported task, incompatible adapter, duplicate registration, unknown model, unknown version, unattached model, binding mismatch, and storage failure.
-- [ ] T005 [P] Implement foundational SQLite metadata storage in `src/safira/registry/storage.py` using only `sqlite3`, a composite `(model_id, model_version)` primary key, immutable plain `INSERT`, explicit transaction/rollback, validated serialization, and no executable or patient data; enforce uniqueness and translate a basic composite-key conflict to `DuplicateRegistrationError`.
-- [ ] T006 [P] Implement `IdentityProvider.identify_loaded_pair(classifier, adapter)` and immutable `IdentityEvidence` in `src/safira/registry/identity.py`; require classifier artifact and adapter implementation SHA-256 fingerprints plus actual-Boolean `loaded_pair_verified`, validate evidence shape, fail closed on missing/false/unverifiable evidence, and impose no universal model serialization or `ModelAdapter` change.
+- [X] T002 [P] Write SQLite storage contract tests in `tests/test_registry_storage.py` for schema-version initialization, canonical metadata round-trip, composite `(model_id, model_version)` uniqueness, close/reopen retrieval, and fail-closed handling of corrupt or unknown-schema catalogs.
+- [X] T003 [P] Write identity contract tests in `tests/test_registry_identity.py` using a fake trusted loader/provider and synthetic classifier/adapter artifact bytes; assert deterministic SHA-256 fingerprints, evidence tied to the supplied live pair, true versus false `loaded_pair_verified` attestation, mismatch rejection, and fail-closed behavior when evidence is missing or unverifiable, without requiring a framework-specific serialization format.
+- [X] T004 Implement typed registry exceptions in `src/safira/registry/exceptions.py` for invalid registration, unsupported task, incompatible adapter, duplicate registration, unknown model, unknown version, unattached model, binding mismatch, and storage failure.
+- [X] T005 [P] Implement foundational SQLite metadata storage in `src/safira/registry/storage.py` using only `sqlite3`, a composite `(model_id, model_version)` primary key, immutable plain `INSERT`, explicit transaction/rollback, validated serialization, and no executable or patient data; enforce uniqueness and translate a basic composite-key conflict to `DuplicateRegistrationError`.
+- [X] T006 [P] Implement `IdentityProvider.identify_loaded_pair(classifier, adapter)` and immutable `IdentityEvidence` in `src/safira/registry/identity.py`; require classifier artifact and adapter implementation SHA-256 fingerprints plus actual-Boolean `loaded_pair_verified`, validate evidence shape, fail closed on missing/false/unverifiable evidence, and impose no universal model serialization or `ModelAdapter` change.
 
 **Checkpoint**: Storage primitives and checked identity inputs are ready; every story can build on them without modifying current Safira contracts.
 
