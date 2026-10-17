@@ -47,7 +47,7 @@
 
 ## Decision 5: Make split membership patient-group based and protocol controlled
 
-**Decision**: A versioned `EvaluationProtocol` supplies either complete patient-group assignments or deterministic allocation settings and constraints. The builder supports a simple stable hash-based group allocator only when the protocol supplies its role allocation intent, seed and applicable constraints. The builder then validates group exclusivity, optional declared strata, required site/time rules, adequacy and feasibility. It never chooses seed candidates by inspecting final-test outcomes or changes constraints to force a fit. Complex constraints can use supplied assignments. Infeasible scope returns `INSUFFICIENT_EVIDENCE` or `NOT_READY` with safe reasons.
+**Decision**: A versioned `EvaluationProtocol` supplies either complete patient-group assignments or deterministic allocation settings and constraints. The builder supports a simple stable hash-based group allocator only when the protocol supplies its role allocation intent, exact seed, algorithm version and applicable constraints. It performs one allocation using exactly that configuration, then validates group exclusivity, optional declared strata, required site/time rules, adequacy and feasibility. It never tries alternative seeds, chooses seed candidates by inspecting final-test outcomes, or changes constraints to force a fit. Infeasible scope returns `INSUFFICIENT_EVIDENCE` or `NOT_READY` with safe reasons even if an unapproved seed might yield a favorable allocation. Complex constraints can use supplied assignments.
 
 **Rationale**: A deterministic assignment supports reproducibility, while supplied assignments allow approved designs with complicated site/time constraints. Explicit protocol settings avoid universal percentages or minimum counts. Checking constraints after assignment is simpler and auditable; a general-purpose constrained optimizer would add complexity and opportunities for test-set tuning.
 
@@ -59,7 +59,7 @@
 
 ## Decision 6: Protect assignments through supplied prior manifests; keep storage external
 
-**Decision**: The builder produces immutable manifests with exact protocol/version/configuration, assignment and source lineage. Callers provide relevant prior manifests; the builder detects changed membership or movement of previously protected patient groups into development. The caller or custodian persists the full sensitive manifest and protected dataset under approved access controls. The package does not choose a database, export format or access-control service.
+**Decision**: The builder produces immutable manifests with exact protocol/version/configuration, assignment and source lineage. Callers provide prior manifests, and an explicitly injected trusted integration checks their origin, source/version, requested and declared scope, completeness evidence, and relevant protected-test memberships against independently controlled custodian history. A manifest's self-asserted completeness, identifier or digest alone cannot establish verified coverage. Missing, partial, stale, conflicting or unverifiable history remains unknown and cannot support a cross-version protection claim; a protocol requiring verified history returns `NOT_READY`. The builder detects known changed membership or movement of previously protected patient groups into development. The caller or custodian persists the full sensitive manifest and protected data under approved access controls. The package does not choose a database, export format or access-control service.
 
 **Rationale**: The project has no dataset storage subsystem and has no runtime dependencies. Pure values are easy to test and do not silently create a new data store. Existing history can be checked by passing controlled manifests, while the responsible research environment retains them.
 
@@ -70,12 +70,12 @@
 
 ## Decision 7: Separate protected final-test artifact and ordinary development report
 
-**Decision**: Build results distinguish train/validation/calibration outputs, a separately handled protected final-test artifact, a sensitive complete manifest, and a privacy-safe summary. Before the protocol's release condition, ordinary development reports omit final-test row details and outcome/correctness distributions; only explicitly allowed integrity/eligibility or structural summaries may be emitted. Release and reuse require the protocol's authorized lifecycle condition. The Python library does not claim to enforce operating-system access control against its caller.
+**Decision**: `DatasetBuildResult`, all of its ordinary serialization forms, and development-facing APIs contain only train/validation/calibration outputs, controlled non-row protected-test lifecycle status, a sensitive manifest reference, and a privacy-safe summary; they never contain protected-test rows, outcomes or correctness targets. The row-bearing artifact is transferred only through a separate explicit handoff to the protocol-authorized custodian. Before the protocol's release condition, only expressly allowed integrity/eligibility or structural summaries may be emitted. Release and reuse require the protocol's authorized lifecycle condition. The Python library does not claim to enforce operating-system access control against its caller, and adds no storage service.
 
 **Rationale**: The final test must be assembled for future use but remain unavailable for model, feature, threshold, seed, eligibility or calibration choices. A separate artifact boundary makes that distinction visible and testable without adding a service. External restricted storage and custodian release remain operational responsibilities.
 
 **Alternatives considered**:
-- Return all four partitions in one ordinary report: rejected because it exposes protected values to development code.
+- Return the protected artifact as a field on the ordinary `DatasetBuildResult`: rejected because development callers could access protected values even if summaries omit them.
 - Add authentication, key management, or a secure enclave: rejected as disproportionate infrastructure and not requested by the spec.
 - Hide final-test rows only in logs while returning them with all other rows: rejected because the ordinary API would still expose them.
 

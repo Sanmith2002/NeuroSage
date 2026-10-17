@@ -85,20 +85,25 @@ Versioned study rules for inclusion, partitions, adequacy and protected-test han
 - partition mode: supplied opaque patient-group assignments, or deterministic allocation configuration with explicit seed, role allocation, allowed strata, and stable algorithm version;
 - required site/time isolation and other hard constraints;
 - scope-specific adequacy criteria, limited-data status behavior and permitted summary outputs;
+- whether verified prior-history coverage is required, including expected custodian/source scope;
 - final-test assembly, access/release and cross-version reuse conditions;
 - transformation lineage policy and permitted use of each partition.
 
 Invariants: all four roles are explicit; no universal ratios or minima; no seed search or constraint weakening; any infeasible assignment fails with a scoped readiness result.
 
-### PriorAssignmentManifest
+### PriorAssignmentManifest and PriorHistoryVerification
 
-Controlled prior lineage supplied by the custodian for related-build conflict checks.
+The caller supplies a controlled prior manifest for related-build conflict checks. Its declarations identify dataset/protocol versions, origin/source, source and cohort scope, covered population/history interval, opaque group-to-role assignments, protected final-test membership, lifecycle state, and manifest content/version reference. A self-declared completeness field is descriptive only and is not evidence that the manifest is complete.
 
-- dataset/protocol versions and opaque group-to-role assignments;
-- protected final-test membership, source/cohort scope, lineage and permitted lifecycle state;
-- manifest content/version reference.
+An explicitly injected trusted research integration checks the manifest against independently controlled custodian history and returns an immutable `PriorHistoryVerification` bound to:
 
-Prior protected assignments cannot silently change because of a new seed, source alias, contributor or dataset version. Changed protocol or population requiring reassignment must follow the declared authorized lifecycle and create a traceable new artifact.
+- the actual manifest content/version and its origin/source;
+- the declared and requested study, cohort/source, population and time scope;
+- the completeness evidence and coverage basis used for the check;
+- protected group memberships relevant to the current build and lifecycle state;
+- the authority, method, evidence reference, check time/version, limitations and state (`verified_complete`, `partial`, `unavailable`, `stale`, `conflict`, or `unverifiable`).
+
+The builder compares the result against the submitted manifest and current protocol/build scope. A caller assertion, completeness flag, identifier or digest alone cannot produce `verified_complete`. Missing, partial, stale, conflicting or unverifiable history remains unknown and cannot support a cross-version protection claim. If the protocol requires verified coverage, the build is `NOT_READY`. Verified prior protected assignments cannot silently change because of a new seed, source alias, contributor or dataset version. An authorized protocol lifecycle change creates a traceable new artifact and does not rewrite prior history.
 
 ## Outputs
 
@@ -124,11 +129,11 @@ Ground truth, correctness, verification, patient group, audit and partition valu
 ### PartitionedDataset and ProtectedTestArtifact
 
 - development partitions: training, validation, calibration;
-- separate protected final-test artifact with its own protocol state and handling boundary;
+- protected final-test artifact with its own protocol state and handling boundary, excluded from ordinary build results and development-facing API objects;
 - all associated rows, visits, labels and contributors for one `patient_group_ref` share one role;
 - exact duplicates do not increase examples/patient counts; distinct repeats preserve occurrence and eligibility lineage.
 
-The Python package does not implement access control. The caller/custodian stores and releases the protected artifact according to the protocol. Ordinary build summaries do not return its rows or outcome/correctness distributions before the protocol's release condition.
+The row-bearing artifact is transferred only through a separate explicit custodian-controlled `ProtectedArtifactHandoff` integration, which returns a detached receipt/status rather than the artifact. `DatasetBuildResult`, its serialization, and development-facing APIs never expose protected rows, outcomes or correctness targets. The Python package does not implement access control or storage; the custodian controls the handoff implementation, persistence and release according to the protocol.
 
 ### DatasetManifest
 
@@ -139,7 +144,7 @@ Immutable controlled artifact for reproduction and conflict detection:
 - exact model/version/label registrations, target definitions/bindings and verification lineage;
 - primary model independence and patient linkage versions/check references;
 - inclusion/exclusion rule versions and controlled per-record audit references;
-- partition mode/configuration/seed or supplied assignment reference, group assignments and prior protected history;
+- partition mode/configuration/exact seed or supplied assignment reference, group assignments, and prior-history verification/coverage references;
 - outcome/evidence timing and preprocessing/transform declarations;
 - protected-test lifecycle state and permitted reuse.
 
@@ -150,7 +155,7 @@ The full manifest may expose sensitive opaque group references and is treated as
 1. **Candidate**: admitted Feature 002 record plus target, outcome, timing, independence and linkage declarations.
 2. **Validated**: exact registration and all required executed check records match candidate scope; malformed, contradictory, duplicate or unverified joins move to exclusion.
 3. **Eligible**: primary-time semantics and protocol inclusion requirements pass. Optional evidence states remain unchanged; optional invalid evidence is not silently upgraded or converted.
-4. **Assigned**: opaque patient group receives exactly one protocol role after duplicate, overlap and prior-manifest checks.
-5. **Published**: immutable dataset, protected-test artifact, controlled manifest and safe summary are returned. Adequacy failure or missing prerequisite produces `INSUFFICIENT_EVIDENCE` or `NOT_READY`, not an apparently ready training dataset.
+4. **Assigned**: opaque patient group receives exactly one protocol role after duplicate, overlap and verified prior-history checks. Deterministic allocation uses exactly the protocol seed once; there are no alternative-seed attempts.
+5. **Published**: immutable development dataset, safe protected-artifact handoff receipt, controlled manifest reference and safe summary are returned; protected rows are transferred separately. Adequacy failure or missing prerequisite produces `INSUFFICIENT_EVIDENCE` or `NOT_READY`, not an apparently ready training dataset.
 
 At every transition, Feature 001 and Feature 002 values remain immutable and unchanged. No transition performs inference, safety feature extraction, fitting, calibration, policy selection, or assessment.

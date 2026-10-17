@@ -7,7 +7,7 @@ Reusable repository and sequencing notes for task generation and implementation.
 - `src/safira/registry/`: `ModelRegistry.get_metadata(model_id, model_version)` returns the exact immutable `RegisteredModelVersion`; `resolve_usable` is unnecessary. `LabelDefinition` declares binary positive/negative class names, value kind/scale, and the existing primary class mapping. Never modify or infer around it.
 - `src/safira/collection/`: `PredictionRecord` is immutable and source-qualified by `(model_id, model_version, label_id)`, with opaque `CollectionAssociation(patient_ref, assessment_ref, occurrence_ref)`, `PrimaryOutput.predicted_class`, score semantics, `SourceProvenance`, component identity and five-state `EvidenceItem` values. Consume these records directly; no re-inference or changes to collection types.
 - `src/safira/context/`, `src/safira/adapters/`, `src/safira/models/`: `SafetyContext`, `ModelAdapter`, `AdapterCapabilities`, and `SafetyAssessment` remain unchanged and are not used to store correctness/ground-truth outputs.
-- Feature 001/002 do not define target versions, verified outcomes, primary-model data-development lineage, cross-source patient groups, dataset partitions, or protected assignment history. Add these as supplemental Feature 003 values and explicitly injected verifier results.
+- Feature 001/002 do not define target versions, verified outcomes, primary-model data-development lineage, cross-source patient groups, dataset partitions, or protected assignment history. Add these as supplemental Feature 003 values and explicitly injected verifier results. Prior-history verification must check manifest origin, source/version, requested and declared scope, completeness evidence, and relevant protected-test membership against independent custodian history; a self-asserted completeness flag or digest is insufficient.
 - Root `pyproject.toml` requires Python >=3.11 and declares no runtime dependencies. Tests use pytest. Keep implementation on the standard library and existing packages.
 
 ## Proposed modules and jobs
@@ -15,10 +15,10 @@ Reusable repository and sequencing notes for task generation and implementation.
 | Module | Job |
 |---|---|
 | `src/safira/dataset/records.py` | Deeply immutable target/outcome/linkage/protocol, correctness example, partition, manifest and summary values. |
-| `src/safira/dataset/verification.py` | Explicit verifier protocols and exact-scope result validation for outcomes, independence and linkage. |
+| `src/safira/dataset/verification.py` | Explicit verifier protocols and exact-scope result validation for outcomes, independence, linkage and prior-history coverage. |
 | `src/safira/dataset/validation.py` | Exact registry/target joins, eligibility, duplicate/conflict, timing and transform-leakage checks; safe exclusion reasons. |
-| `src/safira/dataset/partitioning.py` | Supplied or deterministic patient-group assignment, prior-manifest conflict checks and scoped adequacy. |
-| `src/safira/dataset/builder.py` | Ordered orchestration into development partitions, separately handled protected artifact, manifest and redacted report. |
+| `src/safira/dataset/partitioning.py` | Supplied or deterministic patient-group assignment, trusted prior-manifest coverage/conflict checks and scoped adequacy. |
+| `src/safira/dataset/builder.py` | Ordered orchestration into development partitions, separate custodian handoff of the protected artifact, manifest reference and redacted report. |
 | `src/safira/dataset/exceptions.py` | Typed, privacy-safe exceptions and readiness categories. |
 
 ## Dependency order
@@ -27,8 +27,8 @@ Reusable repository and sequencing notes for task generation and implementation.
 2. Verifier protocols and exact Feature 001 registration/target compatibility.
 3. Verified outcome/independence joins and correctness target derivation.
 4. Authorized patient-linkage validation, duplicate/conflict and overlap checks.
-5. Versioned protocol and patient-grouped assignments; frozen prior/final-test membership and adequacy.
-6. Prediction-time evidence and transform leakage checks; protected output separation and deterministic manifest.
+5. Versioned protocol and patient-grouped assignments; trusted prior-history coverage, frozen prior/final-test membership and adequacy.
+6. Prediction-time evidence and transform leakage checks; protected-artifact handoff separated from ordinary outputs and deterministic manifest.
 7. End-to-end story tests, privacy/immutability probes, contract regression, quickstart and full pytest.
 
 Tests should reuse `tests/conftest.py` and `tests/collection_fixtures.py` for registry, adapters and accepted prediction records. Add a synthetic-only `tests/dataset_fixtures.py`; keep Feature 003 tests under `tests/test_dataset_*.py`.
@@ -39,7 +39,8 @@ Tests should reuse `tests/conftest.py` and `tests/collection_fixtures.py` for re
 - Every output remains exact `(model_id, model_version, label_id)` and association qualified. Two contributors with the same label remain distinct.
 - No caller flag, source identifier, or digest alone proves outcome truth, development independence, or patient equivalence. Injected trusted integrations execute exact-scope checks against their controlled sources; Safira does not claim universal verification.
 - Unresolved patient overlap is unknown, not disjoint. Every related record for an authorized patient group occupies exactly one of train, validation, calibration, or protected final test.
-- No default split ratios/minima, seed search, fabricated/balanced samples, silent reassignment, or weakening constraints to achieve readiness.
+- Prior history is verified against independent custodian evidence. Missing, partial or unverifiable history remains unknown and never supports a cross-version protection claim; a self-declared complete manifest is not sufficient.
+- Deterministic allocation uses exactly the protocol seed/configuration once. No default split ratios/minima, alternative-seed search, fabricated/balanced samples, silent reassignment, or weakening constraints to achieve readiness.
 - Ground truth, correctness, group identity, verification, and role never become prediction-time features. Future transforms are declared and checked, never fit here.
-- Protected rows, full linkage and assignment manifests are controlled artifacts; ordinary diagnostics expose no patient identifiers, raw evidence or protected outcome distributions.
+- Protected rows are sent only through the explicit custodian-controlled handoff and never appear in `DatasetBuildResult`, its serialization or development-facing APIs. Full linkage and assignment manifests are controlled artifacts; ordinary diagnostics expose no patient identifiers, raw evidence or protected outcome distributions.
 - No classifier/adapter prediction, safety signals, estimator training, calibration, policy selection, reliability score or assessment occurs in Feature 003.
