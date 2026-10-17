@@ -1,0 +1,104 @@
+# Planned Python Contract: Feature 003 Dataset Builder
+
+This is a proposed in-process library boundary. It consumes Feature 001/002 public values and introduces supplemental supervised dataset records. Names/signatures are planning targets, not implemented APIs. There is no REST endpoint, registry migration, adapter change, safety estimator or clinical adjudication service in Feature 003.
+
+## Public construction boundary
+
+```python
+DatasetBuilder(registry, trusted_verifier)
+
+builder.build(
+    predictions,
+    outcomes,
+    target_definitions,
+    target_bindings,
+    linkage_declaration,
+    protocol,
+    *,
+    prior_manifests=(),
+    timing_declarations=(),
+    transformation_declarations=(),
+) -> DatasetBuildResult
+```
+
+Inputs are Feature 002 `PredictionRecord` values; normalized supplemental outcome/target, timing, independence and linkage values; and an approved versioned `EvaluationProtocol`. A source-specific trusted integration is explicitly supplied to the builder. It performs verification calls against independently controlled evidence and returns immutable scoped check records. Implementations must not accept a caller-provided pass Boolean, an identifier match or a digest as proof.
+
+The builder uses exact `ModelRegistry.get_metadata(model_id, model_version)` lookups. It does not call `resolve_usable`, attach/reload models, call `ModelAdapter.predict*`, or alter collection records. One output example is keyed by exact `(model_id, model_version, label_id)` plus assessment/occurrence; overlapping component labels remain separate.
+
+## Trusted verifier boundary
+
+The integration is trusted configuration supplied explicitly by the research application/operator. The implementation is responsible for accessing the appropriate independent source or custodian evidence and executing the claimed checks. Safira validates each immutable result's type and exact checked scope; it does not independently establish the authority's truth or promise universal verification.
+
+Planned operations:
+
+```python
+trusted_verifier.verify_outcome(
+    outcome, prediction, target_definition, target_binding
+) -> OutcomeVerification
+
+trusted_verifier.verify_independence(
+    prediction, model_metadata, independence_evidence, protocol
+) -> IndependenceVerification
+
+trusted_verifier.verify_linkage(
+    linkage_declaration, candidate_patient_refs, protocol
+) -> LinkageVerification
+```
+
+Each returned check is an immutable record bound to exact content/source version, source-qualified association, label/target or linkage scope, check method/authority/evidence reference, timing and declared limitations. The builder compares the check binding with the actual candidate values and protocol. Missing, conflicting, stale, revoked under the source protocol, out-of-scope or unverifiable checks fail closed for eligibility. Exceptions are translated to fixed safe reason codes; arbitrary external error text is not retained.
+
+Outcome truth, model-development independence and patient linkage are separate checks. A successful outcome check does not imply independent supervision; an independence record does not verify an outcome; a linkage mapping does not establish either one.
+
+## Core value contract
+
+The planned `safira.dataset` exports frozen value types described in [data-model.md](../data-model.md): `TargetDefinition`, `TargetBinding`, `OutcomeCandidate`, `OutcomeVerification`, `IndependenceEvidence`, `IndependenceVerification`, `EvidenceTimingDeclaration`, `PatientLinkageDeclaration`, `LinkageVerification`, `EvaluationProtocol`, `CorrectnessExample`, `ExclusionRecord`, `DatasetReadiness`, `PartitionedDataset`, `ProtectedTestArtifact`, `DatasetManifest`, and `DatasetBuildResult`.
+
+### Correctness derivation
+
+1. Verify the outcome and exact target association through the injected trusted integration.
+2. Resolve the exact immutable registered model version and label.
+3. Validate target positive/negative meanings against the registered positive/negative class meanings using explicit `TargetBinding`.
+4. Compare the mapped verified class string with `PredictionRecord.primary.predicted_class`.
+5. Store integer `1` for equality and integer `0` for inequality.
+
+The builder never re-evaluates `primary.value`, classifies a score, uses calibration/confidence as correctness, or modifies an existing mapping.
+
+## Partitioning and protected-test behavior
+
+- A protocol names training, validation, calibration and protected final-test roles and defines supplied assignments or a deterministic allocator with explicit configuration.
+- The allocator operates on opaque patient-group references, not example rows. It applies a single deterministic assignment using the declared seed/algorithm/allocation and validates declared constraints. It does not search seeds or tune eligibility against protected outcomes.
+- Every visit, occurrence, label, contributor and source alias in a patient group receives one role across all related dataset views.
+- Prior sensitive manifests are checked for protected membership or assignment conflicts. A new build/version cannot silently move a protected patient group to development.
+- Final-test rows are represented as a distinct protected artifact. The ordinary build summary and development views omit their row values and outcome/correctness distributions before the protocol's release condition. Permitted integrity and structural summaries must be explicitly listed in the protocol.
+- Feature 003 does not implement file-system access control or assert that later safety models are frozen. The caller/custodian controls protected artifact storage and authorized release/reuse.
+
+## Immutability, privacy, and manifest contract
+
+Accepted values are deeply immutable or own defensive copies of all nested inputs. Mutating original declarations, source values or returned serialization cannot mutate accepted examples, assignments or manifests. Public serialization is detached. Manifests containing patient-group references, source associations or protected membership are sensitive controlled artifacts. Ordinary summaries and errors contain only safe categories, approved aggregate scope/count information, and no identifying patient content, raw clinical data, row-level trace or protected outcome distribution.
+
+Canonical serialization may use the standard library and a digest for deterministic comparison/change detection. Such a digest is not source proof, outcome verification, patient identity evidence or authorization.
+
+## Error and readiness contract
+
+Planned typed categories (exact names may be refined during task generation):
+
+| Category | Trigger | Result |
+|---|---|---|
+| `InvalidDatasetInput` | malformed/duplicate records, targets, protocol or association | no affected example or dataset published |
+| `DatasetVerificationFailed` | outcome, independence or linkage check absent, mismatched, stale, conflicting or unverified | affected scope excluded or `NOT_READY`; no correctness target |
+| `DatasetCompatibilityError` | exact registration/label/target semantics conflict | no affected example published |
+| `PatientGroupingConflict` | alias maps to conflicting groups, unresolved required overlap, or prior assignment conflict | no combined partition claim; no silent reassignment |
+| `DatasetLeakageError` | outcome-derived/post-outcome feature, held-out transform fitting, or prohibited final-test use | reject affected scope or return non-ready with safe reason |
+| `DatasetProtocolError` | missing/unsupported protocol version or inconsistent roles/constraints | `NOT_READY` |
+| `DatasetStorageError` | not introduced by core Feature 003; reserved only if a later approved persistence adapter is added | not applicable to in-memory contract |
+
+`DatasetBuildResult` distinguishes a protocol-ready build, a `NOT_READY` prerequisite failure, `INSUFFICIENT_EVIDENCE` under a declared adequacy/feasibility rule, and record-level exclusions. Neither success nor readiness indicates clinical validity or safety.
+
+## Compatibility examples
+
+1. A standalone one-label classifier and a multi-label registration use identical target-join rules; each label resolves against the exact registration and class mapping.
+2. Two independently registered contributors with the same `label_id` produce distinct examples retaining their own source keys, target bindings and provenance.
+3. Live and trusted precomputed Feature 002 records may be consumed under their existing distinct provenance assurance; an unverified precomputed claim or `input_verification="unavailable"` alone does not satisfy any new outcome/linkage verification requirement.
+4. Missing optional evidence remains in its Feature 002 five-state form when an otherwise eligible example is retained. Required evidence failure follows the protocol with an explicit exclusion reason.
+5. Correctness is derived from `predicted_class`; a synthetic score crossing a hypothetical different boundary cannot change the target.
+6. Changing an outcome value, target version, patient mapping, protected assignment, or source lineage changes or invalidates the build; an earlier accepted immutable manifest remains unchanged.
