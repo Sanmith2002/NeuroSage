@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-17
 
-**Status**: Draft — clarification required before planning
+**Status**: Clarified — ready for planning
 
 **Input**: User request for Feature 002: collect, validate and standardize primary
 predictions and supporting evidence from live adapters or versioned precomputed outputs,
@@ -31,6 +31,16 @@ contracts and the registry's immutable metadata and separate process-local bindi
 Existing context availability Booleans alone cannot express all required evidence
 states; standardization must preserve the additional distinctions without redefining
 those Booleans or treating empty defaults as proof of unsupported capability.
+
+## Clarifications
+
+### Session 2026-10-17
+
+- Q: Who supplies the mapping from each component output to its exact registered classifier, version, and label, and how does Safira check it? → A: The component owner or trusted integration supplies an explicit mapping. Safira compares every contributor's exact model ID, version, label ID, output selector and output meaning with Feature 001 metadata; missing, ambiguous or conflicting entries fail. Checking a mapping does not verify that the external classifier actually generated a precomputed value.
+- Q: What provenance must Safira require before accepting an external precomputed prediction for downstream evidence collection? → A: A trusted integration checks source-specific evidence linking the output to the exact registered contributor before admission. Safira rejects absent, failed or conflicting links and records what was checked without claiming a live-model binding or universal proof of arbitrary producer behavior.
+- Q: What should Safira do with a probability-only output when its classifier has no Feature 001-approved prediction-to-class mapping? → A: Reject it from Feature 002 collection until the owner supplies a compliant mapping and registration. No unlinked diagnostic prediction record or inferred cutoff is introduced.
+- Q: When a primary prediction is valid but optional evidence is missing, unavailable, invalid or fails extraction, should Safira retain the prediction? → A: Retain the valid primary prediction as explicitly incomplete, recording each optional evidence state with a safe reason. Reject invalid primary values or required identity, association and provenance; do not imply safety readiness.
+- Q: If a precomputed output lacks patient/assessment/occurrence references or the meaning of supplied evidence, who must provide those details before Safira accepts it? → A: The source owner or trusted integration may supply required opaque associations and evidence-meaning declarations separately from its JSON. Safira checks them against the declared source contract and rejects missing or conflicting required associations. Optional evidence lacking required interpretation is invalid and cannot be labeled validated, while an otherwise valid primary prediction follows the incomplete-evidence policy.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -83,13 +93,15 @@ verification or evidence.
 source contracts and their versions, using retained exact registration metadata but no
 live binding. Compare the
 accepted values and declared provenance with equivalent live collection, while confirming
-that the external provenance is not relabeled as verified live identity. Final admission
-expectations depend on clarification C2 below.
+that the external provenance is not relabeled as verified live identity. A trusted
+integration checks source-specific evidence linking each saved output to its exact
+contributor before admission.
 
 **Acceptance Scenarios**:
 
 1. **Given** a supported versioned output, compatible exact registration metadata and
-   the provenance required by the approved admission policy, **when** it is ingested,
+   a trusted integration's successful output-to-contributor provenance check,
+   **when** it is ingested,
    **then** its source-qualified primary values and evidence are standardized without
    calling the original classifier or creating a live registry binding.
 2. **Given** two sources containing equivalent primary values and evidence, **when**
@@ -105,14 +117,23 @@ expectations depend on clarification C2 below.
    value; requesting another assessment, label or unavailable capability fails explicitly
    and never triggers inference, training or evidence fabrication.
 5. **Given** missing or conflicting contributor identity evidence, **when** ingestion
-   runs, **then** the uncertainty/conflict is explicit; a digest assertion or shared
-   component version is never reported as verified live-model identity. Admission
-   follows C1/C2 and cannot bypass Feature 001 validation.
-6. **Given** equivalent predictions/evidence encoded in different explicitly declared
+   runs, **then** admission fails with a safe reason. A digest assertion, checked
+   registration mapping or shared component version alone never establishes the
+   output-to-contributor link or a verified live-model binding.
+6. **Given** an otherwise well-formed probability-only output without a compliant
+   registered prediction-to-class mapping, **when** collection is attempted, **then**
+   it is rejected without a substitute threshold or accepted diagnostic record.
+7. **Given** equivalent predictions/evidence encoded in different explicitly declared
    source contracts with different field names or structures, **when** each is ingested
    using its own supported contract and version, **then** the standardized meanings and
    exact provenance are preserved without requiring either source to adopt the other's
    format. Unknown contract/version combinations fail explicitly.
+8. **Given** a supported source output that omits opaque association references or
+   evidence-meaning details, **when** its owner or trusted integration supplies those
+   declarations separately, **then** Safira checks them against the source contract and
+   accepts compatible declarations. Missing or conflicting required associations fail;
+   optional evidence without a required interpretation is invalid, and an otherwise
+   valid primary prediction remains explicitly incomplete.
 
 ---
 
@@ -142,7 +163,10 @@ source and component association without relying on disease labels or model fami
    attributed solely by label name; each exact model/version/label remains distinguishable.
 3. **Given** only a component-level version and model family names, **when** contributor
    mapping is attempted, **then** exact individual classifier identities are not inferred.
-   Missing provenance is reported according to C1/C2 rather than silently supplied.
+   The owner-supplied mapping must match each exact Feature 001 registration; missing,
+   ambiguous or conflicting entries fail. Mapping validation alone does not verify
+   external prediction generation; the separate precomputed provenance check is
+   governed by FR-005.
 4. **Given** missing contributors, conflicting duplicate contributions or mixed subject/
    assessment associations, **when** a component output is validated, **then** its
    incomplete/invalid state is explicit; it cannot be reported as a complete valid set.
@@ -169,7 +193,7 @@ paired with a calibrated probability. Confirm meanings, absence reasons and safe
    method is not invoked and its evidence state is unsupported, with no invented value.
 2. **Given** supported evidence that is absent, cannot currently be obtained, is invalid
    or raises an exception, **when** collection runs, **then** these cases are distinguished
-   with safe reasons; an otherwise valid primary record may remain explicitly incomplete.
+   with safe reasons; an otherwise valid primary record remains explicitly incomplete.
 3. **Given** calibrated probabilities and explanations of a different declared output
    space, such as an uncalibrated probability or log-odds score, **when** evidence is
    standardized, **then** both meanings and their relationship are preserved without
@@ -192,6 +216,8 @@ paired with a calibrated probability. Confirm meanings, absence reasons and safe
   Non-probability scores may be negative or unbounded as declared but must be finite.
 - An output contains only a hard class, a third ground-truth class, an unknown label,
   or a different preprocessing/output mapping from its exact registration.
+- A probability-only source lacks the registered prediction-to-class mapping; collection
+  rejects it without inventing a cutoff, class or downstream diagnostic record.
 - A field is omitted, explicitly null, empty or structurally malformed; these cases are
   interpreted under the supported source contract, not guessed to mean measured zero.
 - A source declares a capability unsupported but supplies purported evidence for it;
@@ -205,8 +231,11 @@ paired with a calibrated probability. Confirm meanings, absence reasons and safe
   space or target makes the evidence incomplete/invalid rather than silently comparable.
 - Original raw input or domain metadata is absent in precomputed mode; neither may be
   reconstructed or inferred from probabilities or component labels.
-- The external output has no patient/assessment identifier; an explicit trusted caller
-  association is needed. Contradictory supplied associations must not be ignored.
+- The external output has no patient/assessment identifier; the source owner or trusted
+  integration supplies an explicit opaque association, separately if necessary.
+  Contradictory supplied associations must not be ignored.
+- An external evidence item lacks a declared meaning, output space, unit or shape needed
+  by its source contract; it cannot be marked validated merely because a value exists.
 - Reingesting the same output cannot be mistaken for stochastic repeated predictions;
   genuinely repeated outputs require their own provenance and compatible semantics.
 - A source schema, exact contributor mappings or class mappings are unavailable;
@@ -244,11 +273,23 @@ paired with a calibrated probability. Confirm meanings, absence reasons and safe
   verification. It MUST preserve what was checked, by whom/which trusted integration,
   what evidence supports that check and what remains unverified, without retaining
   patient data in routine provenance diagnostics. A supplied digest does not itself
-  prove that an output was generated by the claimed classifier. Admission is subject to C2.
+  prove that an output was generated by the claimed classifier. Before admitting a
+  precomputed prediction, a trusted integration MUST check source-specific evidence
+  linking the supplied output to its exact registered contributor. Safira MUST require
+  a successful check, retain the checked evidence type, integration identity, result and
+  scope, and reject missing, failed or conflicting checks. No particular signing,
+  serialization or external security system is mandated. This check is not a universal
+  proof of arbitrary producer behavior and MUST NOT be labeled live-model verification.
 - **FR-006**: Component collection MUST associate each source output with its individual
   exact registered model/version/label and retain component-to-contributor provenance.
   Shared bundle/schema versions MUST NOT substitute for individual model versions or
-  artifact identity. Required mapping authority and consistency checks are subject to C1.
+  artifact identity. The component owner or trusted integration MUST supply an explicit
+  mapping from every component output selector to exact registered model ID, model version
+  and label ID. Safira MUST compare each mapping with Feature 001 label selectors, output
+  meanings and schema; missing, ambiguous or conflicting mappings MUST fail. Validation
+  of this mapping establishes registration compatibility; the separate successful
+  source-specific output-to-contributor check required by FR-005 establishes the
+  recorded precomputed provenance assurance.
 - **FR-007**: Primary probabilities MUST be finite numeric values within [0, 1]; primary
   non-probability scores MUST be finite values within their declared domain, preserving
   meaning, direction and scale. Boolean/string coercion, silent clipping, conversion of
@@ -257,8 +298,10 @@ paired with a calibrated probability. Confirm meanings, absence reasons and safe
 - **FR-008**: Existing Feature 001 label definitions and prediction-to-class mappings
   MUST be preserved. A supplied primary class, if present, MUST agree with its registered
   mapping. Feature 002 MUST NOT invent thresholds, derive them from patient values or
-  substitute target-definition cutoffs for classifier decision rules. Behavior for
-  probability-only sources lacking the required registered mapping is subject to C3.
+  substitute target-definition cutoffs for classifier decision rules. A probability-only
+  output lacking a compliant registered mapping MUST be rejected from collection until
+  its owner supplies the mapping and valid registration; no unlinked diagnostic prediction
+  record is accepted under this feature.
 - **FR-009**: Live inputs and supplied output/evidence structure MUST be validated against
   applicable declared schemas and requested source/label/assessment associations.
   Shape, type, output selection and declared modality mismatches MUST be explicit.
@@ -279,12 +322,21 @@ paired with a calibrated probability. Confirm meanings, absence reasons and safe
   a failed extraction; invalid means a supplied value fails its evidence contract.
   None may be represented by fabricated zero, empty data presented as measured evidence,
   or a successful collection flag. Empty values are valid only when the declared evidence
-  contract permits them. Review the partial-record policy at clarification.
+  contract permits them. A valid primary prediction MUST be retained with explicit
+  incomplete optional-evidence states and safe reasons when optional evidence is
+  missing, unavailable, invalid or fails extraction; these states MUST NOT imply
+  safety readiness.
 - **FR-012**: Validated evidence MUST retain its contributing source and association,
   representation/meaning and applicable dimensions, feature/modality identifiers or
   repetition provenance needed to interpret it. Numeric evidence MUST reject non-finite
   values where numbers are expected. Unknown formats or mismatched lengths/sources MUST
-  not be labeled validated. Repeated outputs MUST NOT be manufactured by duplicating a
+  not be labeled validated. Required interpretation declarations, including output
+  space, units, shape and target where applicable to that evidence and source contract,
+  MAY be supplied separately by the source owner or trusted integration when absent
+  from the output; Safira MUST check their consistency with the declared contract and
+  supplied value. Missing or conflicting required interpretation makes that optional
+  evidence invalid under FR-011, without invalidating an otherwise valid primary
+  prediction. Repeated outputs MUST NOT be manufactured by duplicating a
   single value; modality agreement or uncertainty MUST NOT be computed here.
 - **FR-013**: Explanations MUST retain the explained label/output, method and output
   space where supplied, including whether the explained output is calibrated. Unknown
@@ -303,12 +355,15 @@ paired with a calibrated probability. Confirm meanings, absence reasons and safe
 - **FR-015**: A precomputed adapter MUST expose supplied predictions/evidence through the
   existing ModelAdapter semantics for the associated assessment and exact labels, without
   inference or original-classifier access. Its capabilities MUST reflect what it can
-  genuinely return. Unavailable capabilities and mismatched requests MUST fail explicitly.
+  genuinely return from admitted, checked precomputed records. Unavailable capabilities
+  and mismatched requests MUST fail explicitly.
   This adapter MUST NOT masquerade as the original live adapter or be attached under its
   immutable identity; external ingestion and live registry usable access remain distinct.
 - **FR-016**: Records/evidence MUST NOT be reassigned across patients, assessments,
   collection occurrences or contributor versions. Where an external output lacks these
-  associations, the caller MUST supply them explicitly; conflicts MUST fail validation.
+  associations, the source owner or trusted integration MUST supply opaque references
+  explicitly, separately if necessary; Safira MUST check them against the declared
+  source contract and reject missing or conflicting required associations.
   Real-world patient identifiers MUST NOT be required in order to collect evidence.
 - **FR-017**: Within an assessment/collection occurrence, each model/version/label
   contribution MUST be unique. Conflicting duplicates MUST fail explicitly without
@@ -324,8 +379,9 @@ paired with a calibrated probability. Confirm meanings, absence reasons and safe
   partially validated result may be presented as complete. Optional evidence failures
   MUST be isolated and reported explicitly while retaining an otherwise valid primary
   record as incomplete, without synthesizing evidence. Exceptions MUST identify safe
-  error categories and preserve earlier accepted records/registrations. This default
-  partial-evidence policy is to be confirmed at clarification.
+  error categories and preserve earlier accepted records/registrations. Invalid
+  primary values or required identity, association and provenance MUST still cause
+  rejection under their applicable requirements.
 - **FR-020**: Feature 002 MUST reuse ModelAdapter, AdapterCapabilities and SafetyContext
   where their meanings fit, preserving existing behavior and SafetyAssessment unchanged.
   Contexts prepared for downstream use MUST retain source identity, value kind and
@@ -359,7 +415,9 @@ paired with a calibrated probability. Confirm meanings, absence reasons and safe
   identity linking values/evidence without embedding identifying patient information.
 - **Component Contribution**: Component identity/version plus an explicit association
   to each exact independent classifier/version/label. It groups sources, not values or
-  classifier task types, and identifies whether the expected set is complete. Its declared
+  classifier task types, and identifies whether the expected set is complete. The owner
+  or trusted integration supplies its explicit output-selector-to-model/version/label
+  mapping; Safira checks each entry against immutable registry metadata. Its declared
   contributor set is not restricted to a particular size, disease or model architecture.
 - **Evidence Item**: An optional source-associated value, evidence category, interpretation
   metadata, availability/validation state and safe absence/failure reason.
@@ -367,11 +425,13 @@ paired with a calibrated probability. Confirm meanings, absence reasons and safe
   declarations, applicable artifact/output references and verification evidence/status.
   It distinguishes checking a declaration from verifying how a prediction was produced.
 - **Precomputed Output**: An external versioned JSON record and separately supplied
-  association/mapping declarations where required, validated without original-model access.
+  association, mapping and evidence-meaning declarations where required, validated
+  against the source contract without original-model access.
   Its layout follows its own explicitly declared source contract, not a fixed component
   example. Safira's internal concepts do not assert undocumented external field names.
 - **Precomputed Adapter**: A view of accepted saved values through the existing adapter
-  semantics; it is distinct from the original classifier's registry binding.
+  semantics; it is distinct from the original classifier's registry binding. It exposes
+  only admitted values whose output-to-contributor provenance check succeeded.
 
 ## Success Criteria *(mandatory)*
 
@@ -383,13 +443,20 @@ paired with a calibrated probability. Confirm meanings, absence reasons and safe
 - **SC-002**: For paired live/precomputed cases with identical supplied values, all
   standardized semantic values and evidence states agree; reviewers can distinguish the
   source modes and assurance levels for every record without inspecting classifier code.
-  Applicable precomputed admission cases will be finalized after C2.
+  Every admitted precomputed case has a successful source-specific output-to-contributor
+  check; missing, failed and conflicting checks cause zero admissions.
 - **SC-003**: Every listed malformed-value, schema, identity, association and duplicate
   category produces its specified rejection or explicit incomplete evidence outcome;
-  zero invalid primary values or ambiguous contributor identities appear as valid records.
+  zero invalid primary values, ambiguous contributor identities or mapping-free
+  probability outputs appear as valid records. Required associations supplied outside
+  a source JSON are checked against its declared contract; missing or conflicting ones
+  produce zero accepted records.
 - **SC-004**: Synthetic cases cover every evidence category and all five states. Every
   unsupported capability has zero extraction calls, and no absent/invalid evidence is
-  represented as a measured zero or an inferred safety signal.
+  represented as a measured zero or an inferred safety signal. Every otherwise valid
+  primary prediction survives optional-evidence absence, invalidity or extraction
+  failure with explicit incomplete states; evidence lacking required interpretation
+  is never marked validated.
 - **SC-005**: Across synthetic components with different declared contributor counts and
   eligible classifier configurations, 100% of expected source-qualified predictions,
   target meanings and supplied cohort/training-scope provenance are preserved. Equivalent
@@ -410,67 +477,43 @@ paired with a calibrated probability. Confirm meanings, absence reasons and safe
 - Feature 001 registrations already exist and satisfy its immutable identity and mapping
   requirements. Their metadata can be read without a live binding; that alone never
   grants live usable access or verifies an external prediction's generation provenance.
+- A probability-only output without the required registered class mapping is not an
+  eligible collection input. The owner must complete Feature 001 registration first;
+  Feature 002 does not derive a decision rule from the observed probability.
 - Collection is caller-initiated and returns research evidence for downstream use. No
   new persistence service, transport, authentication system, retention platform or patient
-  dataset is specified. Callers supply opaque association references; organizational
+  dataset is specified. For external outputs, the source owner or trusted integration
+  supplies required opaque associations and evidence-meaning declarations in or alongside
+  the source output, subject to contract checks; organizational
   access control and reidentification mappings remain outside this feature.
 - Both source modes preserve the same output/evidence meanings; they need not have equal
-  provenance assurance or equal available evidence. No model must support all optional
+  provenance assurance or equal available evidence. A trusted integration supplies a
+  source-specific check for every admitted precomputed output; the source contract
+  determines the evidence it can actually check. No model must support all optional
   capabilities or all six future safety dimensions.
 - Available evidence is validated against an explicit declared evidence contract; no
   universal embedding dimension, explanation algorithm, repeat count or modality list is
-  imposed. Concrete evidence representations belong to clarification and later contracts.
+  imposed. Concrete representations are defined by each supported source contract.
 - Collection requires no new patient's verified ground truth, no labelled safety dataset
   and no trained safety package. A successful collection is not safety readiness.
 - Each external source supplies an explicitly declared contract and version for its own
   output structure. Supporting a source does not require other sources to use its layout
-  or evidence categories. Source-specific mapping details remain subject to C1/C2.
+  or evidence categories. A trusted integration checks source-specific
+  output-to-contributor provenance before precomputed admission; the owner-supplied
+  component mapping is checked against Feature 001 metadata.
 - Source-reported clinical results, bundle files and hash assertions are not independently
   verified merely by reading an integration handoff. Only synthetic examples are used
   for this feature; a reference integration does not define general eligibility.
-
-## Clarification Priorities Before Planning
-
-These are intentionally deferred to the requested subsequent `$speckit-clarify` stage;
-no answers have been assumed and no clarification questions were asked in this draft.
-
-1. **C1 — Component/contributor mapping authority.**
-   [NEEDS CLARIFICATION: Who supplies and validates the mapping from a component identity,
-   version and output selector to each exact registered classifier/version/label when the
-   external output has no per-model identity evidence?] The mapping may be supplied
-   separately; it must not be inferred from the shared bundle version. This determines
-   the acceptable provenance contract for FR-002/003/006 and US3.3.
-2. **C2 — Precomputed provenance admission.**
-   [NEEDS CLARIFICATION: May structurally valid registry-matched predictions with only
-   claimed external provenance enter downstream evidence collection, or must independently
-   checked producer/output provenance be supplied first?] Both paths must work without
-   loading the original classifier and distinguish assertions from verified generation.
-   This sets acceptance rules for FR-005/015, US2 and SC-002; no live-binding claim is allowed.
-3. **C3 — Missing prediction-to-class mapping.**
-   [NEEDS CLARIFICATION: Should probability-only outputs lacking a Feature 001-compliant
-   registered class mapping be rejected entirely or returned only as clearly unlinked
-   diagnostic input outside accepted downstream prediction records?] Accepted compatible
-   records still require the existing registration. Supporting accepted mapping-free
-   records would need a separate approved Feature 001 contract amendment. The PD handoff
-   does not resolve this requirement, and no threshold may be invented.
-4. **Missing/invalid optional evidence:** confirm the FR-011/019 default of retaining a
-   valid primary prediction with explicit incomplete evidence, while rejecting invalid
-   primary values/associations. Confirm whether any consumer-required evidence changes
-   acceptance; no automatic safety policy is implied.
-5. **Association and evidence detail:** confirm caller responsibility for opaque subject/
-   assessment/occurrence references when absent externally, and the minimal supported
-   evidence structures. Review each actual source contract before binding its field
-   mappings; the unavailable PD schema is one example of this source-specific dependency.
 
 ## Acceptance Traceability
 
 | Requirements | Acceptance scenarios / outcomes |
 |---|---|
-| FR-001–004, FR-007–009 | US1.1–5, US3.1–2; SC-001/003/005; arbitrary eligible classifiers and contributor counts; C3 controls mapping-free diagnostics. |
-| FR-005, FR-014–015 | US2.1–6; SC-002/003/005/006; distinct declared source contracts; C1/C2 gate provenance admission. |
-| FR-002/006/016–017 | US2.4–5, US3.1–4; SC-001/003/005. |
-| FR-010–013, FR-023 | US4.1–4; SC-004/005. |
-| FR-018–020 | US1.3–5, US2.3–4, US4.2/5; SC-003/007. |
+| FR-001–004, FR-007–009 | US1.1–5, US2.6, US3.1–2; SC-001/003/005; arbitrary eligible classifiers and contributor counts; mapping-free probabilities rejected. |
+| FR-005, FR-014–015 | US2.1–7; SC-002/003/005/006; distinct declared source contracts and checked output-to-contributor provenance before admission. |
+| FR-002/006/016–017 | US2.4–5, US3.1–4; SC-001/003/005; every owner-supplied contributor mapping checked against exact Feature 001 metadata. |
+| FR-010–013, FR-023 | US2.8, US4.1–4; SC-003/004/005. |
+| FR-016, FR-018–020 | US1.3–5, US2.3–4/8, US4.2/5; SC-003/007. |
 | FR-021–022 | All stories; SC-001–007; synthetic automated acceptance and existing-contract regression evidence required. |
 
 ## Out of Scope
