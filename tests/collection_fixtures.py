@@ -12,6 +12,90 @@ from safira.adapters.base import ModelAdapter
 from safira.adapters.capabilities import AdapterCapabilities
 
 
+class SyntheticSourceContract:
+    """One of two unrelated layouts, used only for generic ingestion tests."""
+
+    def __init__(self, contract_id: str, version: str, layout: str) -> None:
+        self.contract_id = contract_id
+        self.version = version
+        self.layout = layout
+
+    def parse(self, raw_json):
+        from safira.collection.precomputed import NormalizedEnvelope, OutputCandidate
+        document = json.loads(raw_json)
+        if self.layout == "flat":
+            if set(document) - {"schema", "selector", "value", "class", "event", "association", "extension"}:
+                raise ValueError("unknown field")
+            if not {"schema", "selector", "value"} <= set(document):
+                raise ValueError("required field missing")
+            if document["schema"] != self.version:
+                raise ValueError("version mismatch")
+            outputs = (OutputCandidate(document["selector"], document["value"], "probability",
+                                       "synthetic probability", "increasing", supplied_class=document.get("class"),
+                                       event_id=document.get("event")),)
+        else:
+            if set(document) - {"release", "items", "association", "extension"}:
+                raise ValueError("unknown field")
+            if not {"release", "items"} <= set(document):
+                raise ValueError("required field missing")
+            if document["release"] != self.version or not isinstance(document["items"], list):
+                raise ValueError("version mismatch")
+            outputs = tuple(
+                OutputCandidate(item["path"], item["reading"], "probability", "synthetic probability",
+                                "increasing", supplied_class=item.get("class"), event_id=item.get("event"))
+                for item in document["items"]
+                if set(item) in ({"path", "reading"}, {"path", "reading", "event"},
+                                 {"path", "reading", "class", "event"})
+            )
+            if len(outputs) != len(document["items"]):
+                raise ValueError("invalid item")
+        source_association = document.get("association")
+        if source_association is not None:
+            source_association = tuple(source_association)
+        return NormalizedEnvelope(outputs, source_association)
+
+    def validate_declarations(self, envelope, declarations):
+        return envelope
+
+
+from safira.collection.precomputed import ProvenanceCheck as SyntheticProvenanceCheck
+
+
+class SyntheticTrustedVerifier:
+    """Independent fixture ledger; entries are registered outside payloads."""
+
+    integration_id = "synthetic-trusted-export-ledger"
+
+    def __init__(self):
+        self.entries = {}
+        self.calls = []
+
+    def add(self, event_id, raw_json, candidate, contribution, association):
+        self.entries[event_id] = (
+            sha256(raw_json.encode("utf-8") if isinstance(raw_json, str) else raw_json).hexdigest(),
+            candidate.external_selector, contribution.source_key,
+            (association.patient_ref, association.assessment_ref, association.occurrence_ref),
+        )
+
+    def check_output_link(self, raw_json, candidate, contributor, label, association):
+        self.calls.append((raw_json, candidate, contributor.model_id, label.label_id, association))
+        raw = raw_json.encode("utf-8") if isinstance(raw_json, str) else raw_json
+        event_id = candidate.event_id
+        expected = (
+            sha256(raw).hexdigest(), candidate.external_selector,
+            (contributor.model_id, contributor.model_version, label.label_id),
+            (association.patient_ref, association.assessment_ref, association.occurrence_ref),
+        )
+        matched = self.entries.get(event_id) == expected
+        return SyntheticProvenanceCheck(
+            self.integration_id, "independent synthetic ledger comparison", "ledger-row-" + str(event_id),
+            str(event_id), "sha256 of exact submitted bytes compared with independent ledger entry",
+            matched, candidate.external_selector,
+            (contributor.model_id, contributor.model_version, label.label_id),
+            expected[3], matched, True, True, matched,
+        )
+
+
 @dataclass(frozen=True)
 class CollectionClassifier:
     """An opaque synthetic classifier artifact with no clinical behavior."""

@@ -221,8 +221,8 @@ def test_foundational_exports_include_values_and_errors_without_future_operation
         "SourceProvenance", "CollectionError", "InvalidCollectionRequest",
     ):
         assert hasattr(collection, name)
-    for name in ("PrecomputedCollector", "precomputed_adapter"):
-        assert not hasattr(collection, name)
+    for name in ("PrecomputedCollector", "TrustedSourceIntegration", "precomputed_adapter"):
+        assert hasattr(collection, name)
 
 
 def test_registered_mapping_preserves_probability_and_score_semantics(synthetic_metadata):

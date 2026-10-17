@@ -20,10 +20,32 @@ from safira.collection.records import (
     SourceProvenance,
 )
 from safira.collection.live import LiveRequest, collect_live
+from safira.collection.precomputed import (
+    NormalizedEnvelope,
+    OutputCandidate,
+    ProvenanceCheck,
+    PrecomputedAdapter,
+    PrecomputedCollector,
+    SourceContract,
+    SourceDeclarations,
+    TrustedProvenanceVerifier,
+    TrustedSourceIntegration,
+    precomputed_adapter,
+)
 
 __all__ = [
     "LiveRequest",
     "collect_live",
+    "NormalizedEnvelope",
+    "OutputCandidate",
+    "ProvenanceCheck",
+    "PrecomputedAdapter",
+    "PrecomputedCollector",
+    "SourceContract",
+    "SourceDeclarations",
+    "TrustedProvenanceVerifier",
+    "TrustedSourceIntegration",
+    "precomputed_adapter",
     "CollectionAssociation",
     "CollectionError",
     "CollectionResult",
