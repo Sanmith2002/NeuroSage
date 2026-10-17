@@ -6,9 +6,9 @@ from collections.abc import Iterable, Mapping
 from math import isfinite
 from typing import Any
 
-from safira.collection.exceptions import InvalidCollectionRequest, InvalidPrimaryOutput
-from safira.collection.records import CollectionAssociation, PrimaryOutput
-from safira.registry.definitions import InputDefinition, LabelDefinition
+from safira.collection.exceptions import ContributorMismatch, InvalidCollectionRequest, InvalidPrimaryOutput
+from safira.collection.records import CollectionAssociation, ComponentContribution, PrimaryOutput
+from safira.registry.definitions import InputDefinition, LabelDefinition, RegisteredModelVersion
 
 
 def validate_source_key(
@@ -36,6 +36,103 @@ def validate_source_key(
         model_version,
         label_id,
     )
+
+
+def validate_expected_contributors(
+    actual: Iterable[tuple[str, str, str]],
+    expected: Iterable[tuple[str, str, str]],
+    *,
+    required: bool = False,
+) -> tuple[tuple[str, str, str], ...]:
+    """Require a component's explicit expected source-key set to match exactly."""
+
+    try:
+        raw_actual = tuple(actual)
+        raw_expected = tuple(expected)
+        if any(not isinstance(key, (tuple, list)) for key in (*raw_actual, *raw_expected)):
+            raise ValueError
+        actual_keys = tuple(tuple(key) for key in raw_actual)
+        expected_keys = tuple(tuple(key) for key in raw_expected)
+        for key in (*actual_keys, *expected_keys):
+            if len(key) != 3 or any(type(part) is not str or not part.strip() for part in key):
+                raise ValueError
+        if len(set(actual_keys)) != len(actual_keys) or len(set(expected_keys)) != len(expected_keys):
+            raise ValueError
+    except Exception:
+        raise ContributorMismatch("component.contribution") from None
+    if required and not expected_keys:
+        raise ContributorMismatch("component.contribution")
+    if expected_keys and set(actual_keys) != set(expected_keys):
+        raise ContributorMismatch("component.contribution")
+    return expected_keys
+
+
+def validate_component_contributor_mapping(
+    registry: object,
+    contributions: Iterable[ComponentContribution],
+    candidate_selectors: Iterable[str],
+    *,
+    contract_key: tuple[str, str],
+    expected_contributors: Iterable[tuple[str, str, str]] = (),
+) -> dict[str, tuple[ComponentContribution, RegisteredModelVersion, LabelDefinition]]:
+    """Resolve each external selector through its exact immutable registration.
+
+    The owner-supplied selector translation is never used to infer model identity.
+    Registration metadata remains authoritative for label semantics, preprocessing,
+    input schema and adapter declaration; the source candidate's declared primary
+    meaning is compared with that label by the ingestion path.
+    """
+
+    try:
+        selectors = tuple(candidate_selectors)
+        entries = tuple(contributions)
+        if any(type(selector) is not str or not selector.strip() for selector in selectors):
+            raise ValueError
+        if len(set(selectors)) != len(selectors):
+            raise ValueError
+    except Exception:
+        raise ContributorMismatch("component.contribution") from None
+    by_selector: dict[str, ComponentContribution] = {}
+    actual_keys: list[tuple[str, str, str]] = []
+    for item in entries:
+        if not isinstance(item, ComponentContribution):
+            raise ContributorMismatch("component.contribution")
+        if (item.source_contract_id, item.source_contract_version) != contract_key:
+            raise ContributorMismatch("component.contribution")
+        if item.external_selector in by_selector:
+            raise ContributorMismatch("component.contribution")
+        by_selector[item.external_selector] = item
+        actual_keys.append(item.source_key)
+    if set(selectors) != set(by_selector):
+        raise ContributorMismatch("component.contribution")
+    validate_expected_contributors(actual_keys, expected_contributors)
+
+    result: dict[str, tuple[ComponentContribution, RegisteredModelVersion, LabelDefinition]] = {}
+    for selector, contribution in by_selector.items():
+        try:
+            definition = registry.get_metadata(contribution.model_id, contribution.model_version)
+        except Exception:
+            raise ContributorMismatch("model_version") from None
+        if not isinstance(definition, RegisteredModelVersion):
+            raise ContributorMismatch("model_version")
+        label = next((item for item in definition.labels if item.label_id == contribution.label_id), None)
+        if label is None or label.output_selector != contribution.registered_output_selector:
+            raise ContributorMismatch("component.contribution")
+        expected_source = "predict_probability" if label.value_kind == "probability" else "predict"
+        adapter = definition.adapter
+        if (label.value_source != expected_source
+                or adapter.associated_model_id != definition.model_id
+                or adapter.associated_model_version != definition.model_version
+                or not definition.classifier_artifact.get("sha256")
+                or not definition.preprocessing_identity):
+            raise ContributorMismatch("component.contribution")
+        # Definitions validate the declared input schema and adapter capabilities
+        # on registry load. Touch those exact fields here so the mapping is checked
+        # against the full registration rather than a name-only model lookup.
+        if not isinstance(definition.input, InputDefinition) or not adapter.capabilities:
+            raise ContributorMismatch("component.contribution")
+        result[selector] = (contribution, definition, label)
+    return result
 
 
 def validate_primary_output(

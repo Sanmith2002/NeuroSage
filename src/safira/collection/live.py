@@ -9,12 +9,12 @@ from safira.collection.exceptions import (
     ContributorMismatch, InvalidCollectionRequest, InvalidPrimaryOutput,
 )
 from safira.collection.records import (
-    CollectionAssociation, CollectionResult, EvidenceItem, PredictionRecord,
+    CollectionAssociation, CollectionResult, ComponentIdentity, EvidenceItem, PredictionRecord,
     SourceProvenance, _freeze,
 )
 from safira.collection.validation import (
     _matches_shape_and_type, validate_input_structure, validate_primary_output,
-    validate_source_key,
+    validate_expected_contributors, validate_source_key,
 )
 from safira.registry import ModelRegistry
 
@@ -101,7 +101,8 @@ def _initial_item(association, key, category, value, interpretation):
     return EvidenceItem(association, key, category, "available", value=value, interpretation=interpretation)
 
 
-def collect_live(registry, association, requests, patient_data, *, component=None):
+def collect_live(registry, association, requests, patient_data, *, component=None,
+                 expected_contributors=None):
     """Collect exact requested labels and return one atomic in-memory result.
 
     Each request is a LiveRequest or a (model_id, model_version, label_id)
@@ -111,8 +112,10 @@ def collect_live(registry, association, requests, patient_data, *, component=Non
     """
     if not isinstance(registry, ModelRegistry) or not isinstance(association, CollectionAssociation):
         raise InvalidCollectionRequest("request")
-    if component is not None:
+    if component is not None and not isinstance(component, ComponentIdentity):
         raise InvalidCollectionRequest("component.identity")
+    if component is None and expected_contributors is not None:
+        raise InvalidCollectionRequest("component.contribution")
     try:
         supplied = tuple(requests)
     except Exception:
@@ -145,6 +148,12 @@ def collect_live(registry, association, requests, patient_data, *, component=Non
         validate_input_structure(patient_data, usable.metadata.input,
                                  available_modalities=request.available_modalities)
         prepared.append((request, usable, label))
+
+    if component is not None:
+        validate_expected_contributors(
+            ((entry[0].model_id, entry[0].model_version, entry[0].label_id) for entry in prepared),
+            expected_contributors or (), required=True,
+        )
 
     primaries = []
     for request, usable, label in prepared:
@@ -201,6 +210,6 @@ def collect_live(registry, association, requests, patient_data, *, component=Non
         records.append(PredictionRecord(
             association=association, model_id=request.model_id, model_version=request.model_version,
             label_id=request.label_id, primary=primary, provenance=provenance,
-            evidence=tuple(evidence), input_verification="validated",
+            evidence=tuple(evidence), component=component, input_verification="validated",
         ))
     return CollectionResult(association, tuple(records))

@@ -33,7 +33,9 @@ from safira.collection.records import (
     PredictionRecord,
     SourceProvenance,
 )
-from safira.collection.validation import validate_primary_output
+from safira.collection.validation import (
+    validate_component_contributor_mapping, validate_primary_output,
+)
 
 
 _EVIDENCE_CATEGORIES = (
@@ -288,8 +290,10 @@ class PrecomputedCollector:
         *,
         component: ComponentIdentity | None = None,
     ) -> CollectionResult:
-        if not isinstance(association, CollectionAssociation) or component is not None:
-            raise InvalidCollectionRequest("association.occurrence_ref" if not isinstance(association, CollectionAssociation) else "component.identity")
+        if not isinstance(association, CollectionAssociation):
+            raise InvalidCollectionRequest("association.occurrence_ref")
+        if component is not None and not isinstance(component, ComponentIdentity):
+            raise InvalidCollectionRequest("component.identity")
         if not isinstance(contract_key, (tuple, list)) or len(contract_key) != 2 or any(type(v) is not str for v in contract_key):
             raise UnknownSourceContract("source_contract")
         integration = self._integrations.get(tuple(contract_key))
@@ -317,37 +321,21 @@ class PrecomputedCollector:
         except Exception:
             raise UnknownSourceContract("source_contract") from None
 
-        by_selector: dict[str, ComponentContribution] = {}
-        seen_sources: set[tuple[str, str, str]] = set()
-        for contribution in supplied.contributions:
-            if not isinstance(contribution, ComponentContribution):
-                raise ContributorMismatch("component.contribution")
-            if (contribution.source_contract_id, contribution.source_contract_version) != tuple(contract_key):
-                raise ContributorMismatch("component.contribution")
-            if contribution.external_selector in by_selector or contribution.source_key in seen_sources:
-                raise ContributorMismatch("component.contribution")
-            by_selector[contribution.external_selector] = contribution
-            seen_sources.add(contribution.source_key)
         candidate_selectors = [candidate.external_selector for candidate in candidates]
-        if len(set(candidate_selectors)) != len(candidate_selectors) or set(candidate_selectors) != set(by_selector):
-            raise ContributorMismatch("component.contribution")
         if set(supplied.meanings) - set(candidate_selectors):
             raise ContributorMismatch("component.contribution")
-        if supplied.expected_contributors and set(supplied.expected_contributors) != seen_sources:
+        by_selector = validate_component_contributor_mapping(
+            self._registry, supplied.contributions, candidate_selectors,
+            contract_key=tuple(contract_key), expected_contributors=supplied.expected_contributors,
+        )
+        if component is not None and not supplied.expected_contributors:
             raise ContributorMismatch("component.contribution")
 
         # Validate the full candidate set and every check before publishing any record.
         pending: list[PredictionRecord] = []
         event_ids: set[str] = set()
         for candidate in candidates:
-            contribution = by_selector[candidate.external_selector]
-            try:
-                definition = self._registry.get_metadata(contribution.model_id, contribution.model_version)
-            except Exception:
-                raise ContributorMismatch("model_version") from None
-            label = next((item for item in definition.labels if item.label_id == contribution.label_id), None)
-            if label is None or contribution.registered_output_selector != label.output_selector:
-                raise ContributorMismatch("component.contribution")
+            contribution, definition, label = by_selector[candidate.external_selector]
             declared_meaning = supplied.meanings.get(candidate.external_selector)
             if declared_meaning is not None:
                 if not isinstance(declared_meaning, Mapping) or set(declared_meaning) - {
@@ -408,7 +396,7 @@ class PrecomputedCollector:
                                           "trusted_source_checked", details)
             pending.append(PredictionRecord(association, contribution.model_id, contribution.model_version,
                                             contribution.label_id, primary, provenance, evidence_items,
-                                            component=None, input_verification="unavailable"))
+                                            component=component, input_verification="unavailable"))
         return CollectionResult(association, tuple(pending))
 
     @staticmethod
