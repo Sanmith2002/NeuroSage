@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-17
 
-**Status**: Clarified — ready for planning
+**Status**: Clarified and planned — ready for implementation review
 
 **Input**: User request for Feature 002: collect, validate and standardize primary
 predictions and supporting evidence from live adapters or versioned precomputed outputs,
@@ -524,7 +524,8 @@ TRUST/CAUTION/DEFER generation, clinical decision-making, diagnosis, primary pip
 training/calibration changes, clinical threshold selection, classifier fusion, changing
 registry architecture or identity validation, and building a new patient database or
 transport service. Safira remains a research prototype, not a clinically validated
-medical device. This draft authorizes no implementation or technical planning.
+medical device. This specification defines approved behavior; implementation remains
+subject to the reviewed plan and task sequence.
 
 
 ## Integration Reference and Optional Example (Non-normative)

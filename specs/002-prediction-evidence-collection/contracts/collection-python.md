@@ -7,7 +7,8 @@ This is an in-process library contract for implementation planning, not existing
 | Operation | Inputs | Result | Required behavior |
 |---|---|---|---|
 | `collect_live(registry, association, requests, patient_data, *, component=None)` | Exact registered `(model_id, model_version, label_id)` requests, opaque association, live input, optional component grouping | `CollectionResult` | Resolve each exact `UsableRegistration`; check input and label declarations; call only registered `value_source` once per label; validate primary and optional evidence; retain independent contributions. Missing binding fails. |
-| `ingest_precomputed(registry, association, contract_key, raw_json, declarations, *, component=None)` | Exact supported source contract ID/version, versioned JSON, owner/integration mapping and any separately supplied association/meaning declarations | `CollectionResult` | Parse under that contract, look up immutable exact metadata, check mapping and independent source-specific output provenance for every contribution; require no original classifier or live binding. Reject required-field failures before returning accepted records. |
+| `PrecomputedCollector(registry, integrations)` | Feature 001 registry and a finite application-owned iterable of trusted contract/verifier pairs | Configured collector | Derive exact keys from contract declarations, reject duplicate/conflicting keys, and retain a detached read-only mapping. Do not use global mutable registration or permit payload-installed handlers. |
+| `collector.ingest(association, contract_key, raw_json, declarations, *, component=None)` | Exact configured source contract ID/version, versioned JSON, owner/integration mapping and any separately supplied association/meaning declarations | `CollectionResult` | Select the injected trusted pair; parse under that contract; look up immutable exact metadata; check mapping and independent source-specific output provenance for every contribution; require no original classifier or live binding. Record `input_verification=unavailable` when raw input is absent. Reject required-field failures before returning accepted records. |
 | `precomputed_adapter(record)` | One admitted precomputed `PredictionRecord` | `ModelAdapter`-compatible view | Expose only saved value and validated, available optional evidence for that exact record/association. Never attach it to Feature 001 as the original adapter. |
 | `to_safety_context(record, *, patient_data=None)` | One validated record and optional live input already held by the caller | `SafetyContext` projection | Preserve existing context semantics; leave five-state evidence and source provenance authoritative in `record` (or an explicitly paired companion), never infer support from context defaults. No assessment is created. |
 
@@ -15,7 +16,7 @@ This is an in-process library contract for implementation planning, not existing
 
 ## Source integration boundary
 
-The application configures trusted integrations before accepting outputs. An incoming JSON value may name a contract, but it cannot install a parser or provenance verifier. `contract_key = (contract_id, version)` selects one configured integration. A minimal structural protocol is:
+The host constructs `PrecomputedCollector(registry, integrations)` before accepting outputs. `integrations` is an application-owned finite iterable of immutable `TrustedSourceIntegration` values. The constructor derives each exact `contract_key = (contract_id, version)` from its contract declaration, rejects duplicate/conflicting keys, and stores a detached read-only mapping. Two collectors may have different mappings without affecting each other. An incoming JSON value or per-call declaration may select a configured key, but it cannot install, replace or mutate a parser or provenance verifier. There is no process-global mutable catalog. A minimal structural contract is:
 
 ```python
 class SourceContract(Protocol):
@@ -35,6 +36,24 @@ class TrustedProvenanceVerifier(Protocol):
         contributor: RegisteredModelVersion, label: LabelDefinition,
         association: CollectionAssociation
     ) -> ProvenanceCheck: ...
+
+@dataclass(frozen=True)
+class TrustedSourceIntegration:
+    contract: SourceContract
+    verifier: TrustedProvenanceVerifier
+
+class PrecomputedCollector:
+    def __init__(
+        self,
+        registry: ModelRegistry,
+        integrations: Iterable[TrustedSourceIntegration],
+    ) -> None: ...
+
+    def ingest(
+        self, association: CollectionAssociation,
+        contract_key: tuple[str, str], raw_json: str | bytes,
+        declarations: SourceDeclarations, *, component: ComponentIdentity | None = None,
+    ) -> CollectionResult: ...
 ```
 
 `NormalizedEnvelope`/`OutputCandidate` are internal parsed values, not universal JSON field names. The handler defines required fields, extension rules, external selector extraction, allowed association/meaning side declarations, evidence structure and resource limits for its own format. Generic JSON parsing rejects duplicate member names and nonfinite constants before source-specific parsing. Different contracts can use unrelated nesting/field names and identical version strings without collision.
