@@ -1,0 +1,110 @@
+{
+  "CRAFTVRS": {
+    "mean": 22.397707415950233,
+    "sd": 6.5924878764082795,
+    "higher_is_better": true,
+    "n": 14307
+  },
+  "CRAFTURS": {
+    "mean": 16.48207171314741,
+    "sd": 3.8906755116898455,
+    "higher_is_better": true,
+    "n": 14307
+  },
+  "CRAFTDVR": {
+    "mean": 20.030917739227757,
+    "sd": 6.750657154477321,
+    "higher_is_better": true,
+    "n": 14296
+  },
+  "CRAFTDRE": {
+    "mean": 15.600097929490767,
+    "sd": 4.18977256788481,
+    "higher_is_better": true,
+    "n": 14296
+  },
+  "UDSBENTD": {
+    "mean": 11.463152857533498,
+    "sd": 3.0283856637847624,
+    "higher_is_better": true,
+    "n": 14628
+  },
+  "DIGFORCT": {
+    "mean": 8.118186203569707,
+    "sd": 2.3679269676749235,
+    "higher_is_better": true,
+    "n": 14511
+  },
+  "DIGFORSL": {
+    "mean": 6.579904899731238,
+    "sd": 1.3279930683054835,
+    "higher_is_better": true,
+    "n": 14511
+  },
+  "DIGBACCT": {
+    "mean": 7.002002209334438,
+    "sd": 2.2086505809117503,
+    "higher_is_better": true,
+    "n": 14484
+  },
+  "DIGBACLS": {
+    "mean": 4.997376415354874,
+    "sd": 1.2695284909465454,
+    "higher_is_better": true,
+    "n": 14484
+  },
+  "TRAILA": {
+    "mean": 33.254145129891924,
+    "sd": 15.471233066470441,
+    "higher_is_better": false,
+    "n": 14897
+  },
+  "TRAILB": {
+    "mean": 88.7744984699082,
+    "sd": 49.98293094361439,
+    "higher_is_better": false,
+    "n": 14705
+  },
+  "UDSVERFC": {
+    "mean": 15.00781302620058,
+    "sd": 4.699948866023085,
+    "higher_is_better": true,
+    "n": 14847
+  },
+  "UDSVERLC": {
+    "mean": 14.006308934264975,
+    "sd": 4.518888392182851,
+    "higher_is_better": true,
+    "n": 14741
+  },
+  "UDSVERTN": {
+    "mean": 28.985951815405496,
+    "sd": 8.495928452689128,
+    "higher_is_better": true,
+    "n": 14735
+  },
+  "MINTTOTS": {
+    "mean": 30.06260065821721,
+    "sd": 2.273074463604175,
+    "higher_is_better": true,
+    "n": 14281
+  },
+  "ANIMALS": {
+    "mean": 20.93483012120008,
+    "sd": 5.5886776869470145,
+    "higher_is_better": true,
+    "n": 15099
+  },
+  "VEG": {
+    "mean": 14.291339630171612,
+    "sd": 4.248233498233987,
+    "higher_is_better": true,
+    "n": 15034
+  },
+  "UDSBENTC": {
+    "mean": 15.390874369117446,
+    "sd": 1.3570898063516685,
+    "higher_is_better": true,
+    "n": 14662
+  }
+}

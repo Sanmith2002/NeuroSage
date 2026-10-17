@@ -1,0 +1,25 @@
+{
+  "orientation": "raw prediction = annual z-score slope; NEGATIVE = faster decline. SAW input 'severity' = max(0, -prediction): higher = more future decline, never negative.",
+  "features": [
+    "base_memory",
+    "base_attention",
+    "base_executive",
+    "base_language",
+    "base_visuospatial",
+    "age",
+    "education",
+    "sex01"
+  ],
+  "tasks": {
+    "AD|memory": "ridge",
+    "AD|attention": "ridge",
+    "AD|executive": "ridge",
+    "AD|language": "ridge",
+    "AD|visuospatial": "ridge",
+    "LBD|memory": "group-average",
+    "LBD|attention": "ridge",
+    "LBD|executive": "group-average",
+    "LBD|language": "ridge",
+    "LBD|visuospatial": "ridge"
+  }
+}

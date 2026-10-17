@@ -20,3 +20,7 @@ data/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# exercise catalog stays local (draft, per owner)
+exercise_catalog.json
+exercise_catalog.md
