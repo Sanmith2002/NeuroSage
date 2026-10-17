@@ -7,7 +7,10 @@ import pytest
 
 from safira import AdapterCapabilities, ModelAdapter
 
-from collection_fixtures import collection_manifest, collection_multi_pair, collection_single_pair
+from collection_fixtures import (
+    collection_manifest, collection_multi_pair, collection_single_pair,
+    registered_collection,
+)
 
 
 @dataclass(frozen=True)

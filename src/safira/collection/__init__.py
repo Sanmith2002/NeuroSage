@@ -19,8 +19,11 @@ from safira.collection.records import (
     PrimaryOutput,
     SourceProvenance,
 )
+from safira.collection.live import LiveRequest, collect_live
 
 __all__ = [
+    "LiveRequest",
+    "collect_live",
     "CollectionAssociation",
     "CollectionError",
     "CollectionResult",

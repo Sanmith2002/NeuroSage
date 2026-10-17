@@ -212,7 +212,7 @@ def test_component_values_and_external_inputs_are_detached():
     assert contribution.source_key == ("synthetic-a", "v1", "label-a")
 
 
-def test_foundational_exports_include_values_and_errors_but_no_collection_operations():
+def test_foundational_exports_include_values_and_errors_without_future_operations():
     import safira.collection as collection
 
     for name in (
@@ -221,7 +221,7 @@ def test_foundational_exports_include_values_and_errors_but_no_collection_operat
         "SourceProvenance", "CollectionError", "InvalidCollectionRequest",
     ):
         assert hasattr(collection, name)
-    for name in ("collect_live", "PrecomputedCollector", "precomputed_adapter"):
+    for name in ("PrecomputedCollector", "precomputed_adapter"):
         assert not hasattr(collection, name)
 
 

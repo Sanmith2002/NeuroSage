@@ -46,11 +46,90 @@ class CollectionAdapter(ModelAdapter):
 
     def extract_features(self, patient_data: object, label: str) -> object:
         self.calls.append(("extract_features", label))
-        return self.evidence["feature_representation"]
+        return self._item("feature_representation")
 
     def get_input_metadata(self, patient_data: object) -> dict[str, object]:
         self.calls.append(("get_input_metadata", None))
-        return self.evidence["input_metadata"]  # type: ignore[return-value]
+        return self._item("input_metadata")
+
+    def _item(self, category):
+        value = self.evidence.get(category)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    def get_repeated_outputs(self, patient_data, label):
+        self.calls.append(("get_repeated_outputs", label))
+        return self._item("repeated_outputs")
+
+    def get_modality_outputs(self, patient_data, label):
+        self.calls.append(("get_modality_outputs", label))
+        return self._item("modality_outputs")
+
+    def get_domain_metadata(self, patient_data):
+        self.calls.append(("get_domain_metadata", None))
+        return self._item("domain_metadata")
+
+    def explain(self, patient_data, label):
+        self.calls.append(("explain", label))
+        return self._item("explanation")
+
+    def get_available_modalities(self, patient_data):
+        self.calls.append(("get_available_modalities", None))
+        return self._item("available_modalities")
+
+
+@pytest.fixture
+def registered_collection(tmp_path):
+    """Register real Feature 001 bindings using a loader-owned synthetic pair."""
+    from safira.registry import ModelRegistry, RegisteredModelVersion
+    from safira.registry.identity import IdentityEvidence
+
+    registry = ModelRegistry(tmp_path / "collection.sqlite3")
+
+    def register(*, labels=("label-a",), kinds=None, scores=None,
+                 model_id="synthetic-live", version="v1", capabilities=None,
+                 evidence=None, modalities=()):
+        classifier, _ = synthetic_pair(labels, scores)
+        adapter = CollectionAdapter(classifier, capabilities, evidence)
+        kinds = kinds or ("probability",) * len(labels)
+        definition = RegisteredModelVersion.from_dict({
+            "model_id": model_id, "model_version": version,
+            "task_type": "supervised_single_label_binary_classification" if len(labels) == 1 else "supervised_multi_label_classification",
+            "classifier_artifact": {"sha256": sha256(classifier.artifact).hexdigest()},
+            "labels": [{
+                "label_id": label, "negative_outcome": "negative", "positive_outcome": "positive",
+                "output_selector": index, "value_kind": kind,
+                "value_source": "predict_probability" if kind == "probability" else "predict",
+                "value_scale": {"minimum": 0 if kind == "probability" else -2,
+                                "maximum": 1 if kind == "probability" else 2,
+                                "meaning": "synthetic probability" if kind == "probability" else "synthetic margin",
+                                "positive_direction": "increasing"},
+                "class_mapping": {"positive_when": ">=", "boundary": 0.6 if kind == "probability" else 0},
+            } for index, (label, kind) in enumerate(zip(labels, kinds))],
+            "adapter": {"adapter_id": "synthetic-live-adapter", "adapter_version": "v1",
+                        "implementation_fingerprint": sha256(adapter.implementation_artifact).hexdigest(),
+                        "associated_model_id": model_id, "associated_model_version": version,
+                        "capabilities": adapter.capabilities.to_dict()},
+            "input": {"schema": {"synthetic-feature": {"type": "float", "shape": [1]}},
+                      "modalities": list(modalities)},
+            "preprocessing_identity": "none",
+        })
+
+        class Loader:
+            def identify_loaded_pair(self, actual_classifier, actual_adapter):
+                return IdentityEvidence(
+                    sha256(classifier.artifact).hexdigest(),
+                    sha256(adapter.implementation_artifact).hexdigest(),
+                    actual_classifier is classifier and actual_adapter is adapter
+                    and adapter.classifier is classifier,
+                )
+
+        registry.register(definition, classifier, adapter, Loader())
+        return definition, adapter
+
+    yield registry, register
+    registry.close()
 
 
 def synthetic_pair(
