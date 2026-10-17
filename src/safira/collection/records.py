@@ -8,6 +8,7 @@ from math import isfinite
 from types import MappingProxyType
 from typing import Any
 import unicodedata
+from copy import deepcopy
 
 from safira.collection.exceptions import InvalidCollectionRequest, InvalidPrimaryOutput
 
@@ -383,3 +384,52 @@ class CollectionResult:
             "association": self.association.to_dict(),
             "records": [record.to_dict() for record in self.records],
         }
+
+
+def to_safety_context(record: PredictionRecord, *, patient_data: object = None):
+    """Return a detached legacy SafetyContext projection of one accepted record.
+
+    The record remains authoritative for source identity, provenance and the
+    five evidence states. This helper only populates values the legacy context
+    can represent and never creates a SafetyAssessment.
+    """
+    if not isinstance(record, PredictionRecord):
+        raise InvalidCollectionRequest("record.primary")
+    from safira.context import SafetyContext
+
+    try:
+        detached_input = deepcopy(patient_data)
+        available = {item.category: item.to_dict()["value"]
+                     for item in record.evidence if item.state == "available"}
+        primary_metadata = {
+            "source_key": list(record.source_key),
+            "association": record.association.to_dict(),
+            "provenance": record.provenance.to_dict(),
+            "evidence_states": {item.category: item.state for item in record.evidence},
+            "primary": record.primary.to_dict(),
+        }
+        metadata = {"safira_collection": primary_metadata}
+        if record.primary.value_kind != "probability":
+            metadata["safira_collection"]["continuous_score"] = {
+                "value": record.primary.value,
+                "meaning": record.primary.meaning,
+                "scale": record.primary.to_dict()["scale"],
+            }
+        return SafetyContext(
+            patient_id=record.association.patient_ref,
+            label=record.label_id,
+            patient_data=detached_input,
+            prediction=record.primary.predicted_class,
+            prediction_probability=(record.primary.value
+                                   if record.primary.value_kind == "probability" else None),
+            input_metadata=available.get("input_metadata", {}),
+            available_modalities=available.get("available_modalities", []),
+            feature_representation=available.get("feature_representation"),
+            repeated_outputs=available.get("repeated_outputs", []),
+            modality_outputs=available.get("modality_outputs", {}),
+            domain_metadata=available.get("domain_metadata", {}),
+            explanation=available.get("explanation"),
+            model_metadata=metadata,
+        )
+    except Exception:
+        raise InvalidCollectionRequest("record.primary") from None

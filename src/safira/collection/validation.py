@@ -7,7 +7,7 @@ from math import isfinite
 from typing import Any
 
 from safira.collection.exceptions import ContributorMismatch, InvalidCollectionRequest, InvalidPrimaryOutput
-from safira.collection.records import CollectionAssociation, ComponentContribution, PrimaryOutput
+from safira.collection.records import CollectionAssociation, ComponentContribution, EvidenceItem, PrimaryOutput
 from safira.registry.definitions import InputDefinition, LabelDefinition, RegisteredModelVersion
 
 
@@ -213,6 +213,100 @@ def _matches_shape_and_type(value: object, shape: tuple[object, ...], declared: 
     if dimension is not None and len(value) != dimension:
         return False
     return all(_matches_shape_and_type(item, shape[1:], declared) for item in value)
+
+
+def validate_evidence_item(
+    association: CollectionAssociation,
+    source_key: tuple[str, str, str],
+    category: str,
+    value: object,
+    interpretation: Mapping[str, object] | None = None,
+    *,
+    available_modalities: Iterable[str] | None = None,
+) -> EvidenceItem:
+    """Validate one optional evidence value without affecting its primary record."""
+    if value is None:
+        return EvidenceItem(association, source_key, category, "missing", reason_code="missing")
+    if not isinstance(interpretation, Mapping):
+        interpretation = {}
+    meaning = interpretation.get("meaning")
+    # Existing descriptive adapter methods have a generic, adapter-reported
+    # meaning; richer evidence must declare its source-specific interpretation.
+    if category in ("input_metadata", "domain_metadata", "available_modalities") and not interpretation:
+        interpretation = {"meaning": "adapter-reported descriptive metadata"}
+        meaning = interpretation["meaning"]
+    if type(meaning) is not str or not meaning.strip():
+        return EvidenceItem(association, source_key, category, "invalid", reason_code="missing_interpretation")
+
+    def finite_tree(item: object) -> bool:
+        if type(item) in (int, float):
+            return type(item) is int or isfinite(item)
+        if isinstance(item, Mapping):
+            return all(type(k) is str and finite_tree(v) for k, v in item.items())
+        if isinstance(item, (tuple, list)):
+            return all(finite_tree(v) for v in item)
+        return item is None or type(item) in (str, bool)
+
+    def numeric_tree(item: object) -> bool:
+        if type(item) in (int, float):
+            return type(item) is int or isfinite(item)
+        if isinstance(item, Mapping):
+            return bool(item) and all(type(k) is str and numeric_tree(v) for k, v in item.items())
+        if isinstance(item, (tuple, list)):
+            return bool(item) and all(numeric_tree(v) for v in item)
+        return False
+
+    valid = False
+    if category in ("input_metadata", "domain_metadata"):
+        valid = isinstance(value, Mapping) and bool(value) and finite_tree(value)
+    elif category == "available_modalities":
+        valid = (isinstance(value, (tuple, list)) and all(type(v) is str and v.strip() for v in value)
+                 and len(set(value)) == len(value))
+        if valid and available_modalities is not None:
+            valid = set(value) == set(available_modalities)
+    elif category == "feature_representation":
+        shape = interpretation.get("shape")
+        valid = (isinstance(shape, (tuple, list))
+                 and all(d is None or (type(d) is int and d >= 0) for d in shape)
+                 and _matches_shape_and_type(value, tuple(shape), "number"))
+        if valid:
+            interpretation = {**interpretation, "shape": tuple(shape)}
+    elif category == "repeated_outputs":
+        repeat_ids = interpretation.get("repeat_ids")
+        valid = (isinstance(value, (tuple, list)) and bool(value) and numeric_tree(value)
+                 and isinstance(repeat_ids, (tuple, list)) and len(repeat_ids) == len(value)
+                 and all(type(i) is str and i.strip() for i in repeat_ids)
+                 and len(set(repeat_ids)) == len(repeat_ids)
+                 and type(interpretation.get("provenance")) is str
+                 and bool(interpretation["provenance"].strip()))
+        if valid:
+            interpretation = {**interpretation, "repeat_ids": tuple(repeat_ids)}
+    elif category == "modality_outputs":
+        modality_ids = interpretation.get("modality_ids")
+        output_space = interpretation.get("output_space")
+        valid = (isinstance(value, Mapping) and bool(value) and numeric_tree(value)
+                 and isinstance(modality_ids, (tuple, list))
+                 and all(type(i) is str and i.strip() for i in modality_ids)
+                 and len(set(modality_ids)) == len(modality_ids)
+                 and set(value) == set(modality_ids)
+                 and type(output_space) is str and bool(output_space.strip()))
+        if valid:
+            interpretation = {**interpretation, "modality_ids": tuple(modality_ids)}
+    elif category == "explanation":
+        valid = (isinstance(value, Mapping) and bool(value) and finite_tree(value)
+                 and type(interpretation.get("target_label")) is str
+                 and interpretation.get("target_label") == source_key[2]
+                 and type(interpretation.get("target_output")) is str
+                 and bool(interpretation["target_output"].strip())
+                 and type(interpretation.get("method")) is str
+                 and bool(interpretation["method"].strip())
+                 and type(interpretation.get("output_space")) is str
+                 and bool(interpretation["output_space"].strip())
+                 and type(interpretation.get("calibrated")) is bool
+                 and ("truncated" not in interpretation or type(interpretation["truncated"]) is bool))
+    if not valid:
+        return EvidenceItem(association, source_key, category, "invalid", reason_code="validation_failed")
+    return EvidenceItem(association, source_key, category, "available", value=value, interpretation=interpretation)
 
 
 def validate_input_structure(

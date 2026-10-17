@@ -18,6 +18,7 @@ from safira.collection.records import (
     PredictionRecord,
     PrimaryOutput,
     SourceProvenance,
+    to_safety_context,
 )
 from safira.collection.live import LiveRequest, collect_live
 from safira.collection.precomputed import (
@@ -60,5 +61,6 @@ __all__ = [
     "PrimaryOutput",
     "ProvenanceCheckFailed",
     "SourceProvenance",
+    "to_safety_context",
     "UnknownSourceContract",
 ]

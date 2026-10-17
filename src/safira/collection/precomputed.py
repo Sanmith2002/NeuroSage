@@ -34,7 +34,7 @@ from safira.collection.records import (
     SourceProvenance,
 )
 from safira.collection.validation import (
-    validate_component_contributor_mapping, validate_primary_output,
+    validate_component_contributor_mapping, validate_evidence_item, validate_primary_output,
 )
 
 
@@ -440,13 +440,28 @@ class PrecomputedCollector:
             if category not in raw:
                 items.append(EvidenceItem(association, source_key, category, "missing", reason_code="missing"))
                 continue
-            value = raw[category]
-            if value is None:
+            entry = raw[category]
+            if entry is None:
                 items.append(EvidenceItem(association, source_key, category, "missing", reason_code="missing"))
                 continue
-            # Category-specific validation belongs to US4. Until then, retain the
-            # declared optional value as invalid rather than assert its meaning.
-            items.append(EvidenceItem(association, source_key, category, "invalid", reason_code="missing_interpretation"))
+            if not isinstance(entry, Mapping):
+                items.append(EvidenceItem(association, source_key, category, "invalid",
+                                          reason_code="missing_interpretation"))
+                continue
+            if "state" in entry:
+                state = entry.get("state")
+                if state not in ("unsupported", "missing", "unavailable", "invalid"):
+                    state = "invalid"
+                items.append(EvidenceItem(association, source_key, category, state,
+                                          reason_code=entry.get("reason_code", state)))
+                continue
+            if set(entry) - {"value", "interpretation"} or "value" not in entry:
+                items.append(EvidenceItem(association, source_key, category, "invalid",
+                                          reason_code="missing_interpretation"))
+                continue
+            items.append(validate_evidence_item(
+                association, source_key, category, entry["value"], entry.get("interpretation", {})
+            ))
         return tuple(items)
 
 

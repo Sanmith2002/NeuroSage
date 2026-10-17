@@ -13,7 +13,7 @@ from safira.collection.records import (
     SourceProvenance, _freeze,
 )
 from safira.collection.validation import (
-    _matches_shape_and_type, validate_input_structure, validate_primary_output,
+    validate_evidence_item, validate_input_structure, validate_primary_output,
     validate_expected_contributors, validate_source_key,
 )
 from safira.registry import ModelRegistry
@@ -64,41 +64,6 @@ class LiveRequest:
             raise InvalidCollectionRequest("evidence.interpretation")
         object.__setattr__(self, "evidence_interpretation",
                            _freeze(self.evidence_interpretation, "evidence.interpretation"))
-
-
-def _initial_item(association, key, category, value, interpretation):
-    """Conservative initial validation; US4 adds advanced interpretation rules."""
-    if value is None:
-        return EvidenceItem(association, key, category, "missing")
-    if not isinstance(interpretation, Mapping):
-        interpretation = {}
-    if category in ("input_metadata", "domain_metadata"):
-        valid = isinstance(value, Mapping) and bool(value)
-        interpretation = interpretation or {"meaning": "adapter-reported descriptive metadata"}
-    elif category == "available_modalities":
-        valid = (
-            isinstance(value, (list, tuple))
-            and all(type(v) is str and v.strip() for v in value)
-            and len(set(value)) == len(value)
-        )
-        interpretation = interpretation or {"meaning": "adapter-reported modality identifiers"}
-    elif category == "feature_representation":
-        shape = interpretation.get("shape")
-        valid = (
-            isinstance(shape, (list, tuple))
-            and all(d is None or (type(d) is int and d >= 0) for d in shape)
-            and _matches_shape_and_type(value, tuple(shape), "number")
-        )
-    else:
-        # Repeated/modality outputs and explanations require the advanced
-        # category-specific interpretation validation in T030/T031. Do not
-        # present a merely copyable value as validated before that work.
-        valid = False
-    if not isinstance(interpretation.get("meaning"), str) or not interpretation["meaning"].strip():
-        return EvidenceItem(association, key, category, "invalid", reason_code="missing_interpretation")
-    if not valid:
-        return EvidenceItem(association, key, category, "invalid", reason_code="validation_failed")
-    return EvidenceItem(association, key, category, "available", value=value, interpretation=interpretation)
 
 
 def collect_live(registry, association, requests, patient_data, *, component=None,
@@ -180,8 +145,17 @@ def collect_live(registry, association, requests, patient_data, *, component=Non
                                         reason_code="extraction_failed")
                 else:
                     try:
-                        item = _initial_item(association, source_key, category, value,
-                                             request.evidence_interpretation.get(category, {}))
+                        item = validate_evidence_item(
+                            association, source_key, category, value,
+                            request.evidence_interpretation.get(category, {}),
+                            available_modalities=request.available_modalities,
+                        )
+                        if (category == "available_modalities" and item.state == "invalid"
+                                and request.available_modalities is not None
+                                and isinstance(value, (tuple, list))
+                                and set(value) != set(request.available_modalities)):
+                            item = EvidenceItem(association, source_key, category, "invalid",
+                                                reason_code="source_mismatch")
                         if (category == "available_modalities" and item.state == "available"
                                 and request.available_modalities is not None
                                 and set(item.value) != set(request.available_modalities)):
