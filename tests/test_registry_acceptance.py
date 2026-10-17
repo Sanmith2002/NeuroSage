@@ -1,4 +1,4 @@
-"""T021: end-to-end acceptance with executable, synthetic multi-label models.
+"""T021: end-to-end acceptance with executable, synthetic single-label and multi-label models.
 
 These test-only linear models require no training or clinical data. Their JSON
 artifact format is one owner integration, not a Safira serialization standard.
@@ -26,6 +26,7 @@ from safira.registry import (
     RegisteredModelVersion,
     UnattachedModelError,
     UnknownVersionError,
+    UnknownModelError,
 )
 
 
@@ -103,7 +104,11 @@ def _example(template, kind, label_count, model_id="toy-model", version="v1", se
     artifact = json.dumps(payload, sort_keys=True).encode()
     loader = _ToyLoader(artifact)
     metadata = deepcopy(template)
-    metadata.update(model_id=model_id, model_version=version)
+    metadata.update(
+        model_id=model_id, model_version=version,
+        task_type="supervised_single_label_binary_classification" if label_count == 1
+                  else "supervised_multi_label_classification",
+    )
     evidence = loader.identify_loaded_pair(loader.classifier, loader.adapter)
     metadata["classifier_artifact"] = {"sha256": evidence.classifier_sha256}
     metadata["adapter"].update(
@@ -137,6 +142,7 @@ def _example(template, kind, label_count, model_id="toy-model", version="v1", se
 
 
 @pytest.mark.parametrize("kind,label_count", [
+    ("probability", 1), ("continuous_score", 1),
     ("probability", 2), ("continuous_score", 3), ("probability", 4),
 ])
 def test_end_to_end_registration_preserves_primary_outputs_without_safety_setup(
@@ -251,6 +257,65 @@ def test_review_catalog_keeps_all_exact_versions_after_subprocess_restart(
     report = json.loads(result.stdout)
     assert report["pid"] != os.getpid()
     assert report["snapshots"] == [item["metadata"] for item in manifest]
+
+
+
+@pytest.mark.parametrize("counts", [(1, 1), (1, 2)])
+def test_component_contributors_keep_exact_model_version_and_label_provenance(
+    catalog_path, synthetic_metadata, counts, monkeypatch
+):
+    """FR-015 / US2.7 / SC-007: resolve sources, never infer or aggregate."""
+    contributors = []
+    spies = []
+    with ModelRegistry(catalog_path) as registry:
+        for index, count in enumerate(counts):
+            loader, metadata = _example(
+                synthetic_metadata, "probability" if index == 0 else "continuous_score",
+                count, model_id=f"source-{index}", version=f"frozen-{index}", seed=index + 1,
+            )
+            for name in ("predict", "predict_probability", "extract_features"):
+                spy = Mock(side_effect=AssertionError("Contributor resolution must not predict."))
+                monkeypatch.setattr(loader.adapter, name, spy)
+                spies.append(spy)
+            for name in ("fit", "calibrate", "assess", "train", "aggregate"):
+                spy = Mock(side_effect=AssertionError("No safety or aggregation work."))
+                object.__setattr__(loader.classifier, name, spy)
+                spies.append(spy)
+            declared = RegisteredModelVersion.from_dict(metadata)
+            registry.register(declared, loader.classifier, loader.adapter, loader)
+            contributors.append((loader, declared))
+        contributions = {}
+        for loader, declared in contributors:
+            key = (declared.model_id, declared.model_version)
+            usable = registry.resolve_usable(*key)
+            assert usable.metadata == registry.get_metadata(*key) == declared
+            assert usable.classifier is loader.classifier and usable.adapter is loader.adapter
+            for label in usable.metadata.labels:
+                source = (*key, label.label_id)
+                contributions[source] = (label, usable.metadata.adapter)
+                assert contributions[source][1] == declared.adapter
+        expected = { (d.model_id, d.model_version, label.label_id)
+                     for _, d in contributors for label in d.labels }
+        assert set(contributions) == expected
+        assert len(contributions) == sum(counts)
+        # Both models deliberately share synthetic-label-0; neither source is lost.
+        assert sum(key[2] == "synthetic-label-0" for key in contributions) == 2
+        assert len(contributors[0][1].labels) == 1
+        assert contributors[0][1].task_type == "supervised_single_label_binary_classification"
+        with pytest.raises(UnknownModelError):
+            registry.resolve_usable("missing-source", "frozen-0")
+        with pytest.raises(UnknownVersionError):
+            registry.resolve_usable("source-0", "wrong-version")
+        for spy in spies:
+            spy.assert_not_called()
+    # A new handle can read either source's metadata, but cannot provide a complete
+    # contributor set until each source is explicitly reattached.
+    with ModelRegistry(catalog_path) as reopened:
+        for _, declared in contributors:
+            key = (declared.model_id, declared.model_version)
+            assert reopened.get_metadata(*key) == declared
+            with pytest.raises(UnattachedModelError):
+                reopened.resolve_usable(*key)
 
 
 if __name__ == "__main__":

@@ -30,7 +30,11 @@ def definition(metadata):
     return RegisteredModelVersion.from_dict(metadata)
 
 
-def test_definitions_preserve_all_declared_semantics(synthetic_metadata):
+@pytest.mark.parametrize("label_count", [1, 2])
+def test_definitions_preserve_all_declared_semantics(synthetic_metadata, label_count):
+    if label_count == 1:
+        synthetic_metadata["task_type"] = "supervised_single_label_binary_classification"
+        synthetic_metadata["labels"] = synthetic_metadata["labels"][:1]
     record = definition(synthetic_metadata)
     assert isinstance(record.adapter, AdapterDeclaration)
     assert isinstance(record.adapter.capabilities, AdapterCapabilities)
@@ -44,7 +48,11 @@ def test_definitions_preserve_all_declared_semantics(synthetic_metadata):
     assert not hasattr(record, "status")
 
 
-def test_nested_definition_values_are_immutable(synthetic_metadata):
+@pytest.mark.parametrize("label_count", [1, 2])
+def test_nested_definition_values_are_immutable(synthetic_metadata, label_count):
+    if label_count == 1:
+        synthetic_metadata["task_type"] = "supervised_single_label_binary_classification"
+        synthetic_metadata["labels"] = synthetic_metadata["labels"][:1]
     record = definition(synthetic_metadata)
     with pytest.raises(FrozenInstanceError):
         record.model_version = "changed"
@@ -64,7 +72,11 @@ def test_nested_definition_values_are_immutable(synthetic_metadata):
     assert isinstance(record.input.modalities, tuple)
 
 
-def test_original_inputs_and_exported_values_cannot_mutate_definitions(synthetic_metadata):
+@pytest.mark.parametrize("label_count", [1, 2])
+def test_original_inputs_and_exported_values_cannot_mutate_definitions(synthetic_metadata, label_count):
+    if label_count == 1:
+        synthetic_metadata["task_type"] = "supervised_single_label_binary_classification"
+        synthetic_metadata["labels"] = synthetic_metadata["labels"][:1]
     synthetic_metadata["preprocessing_identity"] = {"version": "synthetic-transform-v1"}
     expected = deepcopy(synthetic_metadata)
     record = definition(synthetic_metadata)
@@ -88,7 +100,7 @@ def test_definition_requires_exact_nonblank_keys(synthetic_metadata, key, value)
 
 
 @pytest.mark.parametrize("count", [0, 1])
-def test_definition_requires_multiple_labels(synthetic_metadata, count):
+def test_multi_label_declaration_requires_multiple_labels(synthetic_metadata, count):
     synthetic_metadata["labels"] = synthetic_metadata["labels"][:count]
     with pytest.raises(UnsupportedTaskError):
         definition(synthetic_metadata)
@@ -113,7 +125,11 @@ def test_definition_requires_label_outcome_and_continuous_output_semantics(
         definition(synthetic_metadata)
 
 
-def test_continuous_non_probability_scores_keep_their_semantics(synthetic_metadata):
+@pytest.mark.parametrize("label_count", [1, 2])
+def test_continuous_non_probability_scores_keep_their_semantics(synthetic_metadata, label_count):
+    if label_count == 1:
+        synthetic_metadata["task_type"] = "supervised_single_label_binary_classification"
+        synthetic_metadata["labels"] = synthetic_metadata["labels"][:1]
     for label in synthetic_metadata["labels"]:
         label.update(
             value_kind="continuous_score",
@@ -314,3 +330,15 @@ def test_capability_snapshot_must_match_live_adapter(
     with ModelRegistry(catalog_path) as registry:
         with pytest.raises(IncompatibleAdapterError):
             registry.register(declared, classifier, adapter, provider)
+
+
+@pytest.mark.parametrize("task,count", [
+    ("supervised_single_label_binary_classification", 0),
+    ("supervised_single_label_binary_classification", 2),
+    ("supervised_multi_label_classification", 0),
+    ("supervised_multi_label_classification", 1),
+])
+def test_task_declaration_matches_its_own_label_count(synthetic_metadata, task, count):
+    synthetic_metadata.update(task_type=task, labels=synthetic_metadata["labels"][:count])
+    with pytest.raises(UnsupportedTaskError):
+        definition(synthetic_metadata)

@@ -34,6 +34,13 @@
 - The existing adapter and assessment contract names are retained because the user
   explicitly requires compatibility; no new implementation technology is selected.
 - Model-version identity and metadata survive restarts; the exact classifier and
-  compatible adapter are reattached before downstream use. Standalone single-label
-  binary support remains outside Feature 001 and requires separate scope approval.
-- The checklist reviews the specification only; no feature code or tests were changed.
+  compatible adapter are reattached before downstream use. The approved 2026-10-17
+  amendment supports standalone single-label binary and multi-label contributors;
+  component label counts do not redefine individual classifier scope.
+- The checklist reviews specification quality only. Completed implementation evidence
+  covers the earlier scope; T024-T028 must verify amended FR-001, FR-015, US1/US2/US3
+  acceptance, and SC-001/SC-007 before claiming amended implementation readiness.
+- The supplied PD Co-Pathology handoff confirms three independent binary models behind
+  one component output. Real-model onboarding still requires exact identity evidence and
+  authoritative prediction-to-class mappings absent from the handoff; no default mapping
+  is assumed. See `scope-amendment.md`. No feature code or tests were changed.

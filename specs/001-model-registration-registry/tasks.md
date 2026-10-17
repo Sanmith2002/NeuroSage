@@ -4,9 +4,18 @@
 
 **Prerequisites**: `spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/registry-python.md`, `quickstart.md`
 
-**Tests**: Automated pytest tasks are required by Constitution v2.0.0 and the user request. Write acceptance-focused tests before the corresponding implementation and use synthetic classifier artifacts/adapters only.
+**Tests**: Automated pytest tasks are required by Constitution v3.0.0 (v2.0.0 for the historical baseline) and the user request. Write acceptance-focused tests before the corresponding implementation and use synthetic classifier artifacts/adapters only.
 
 **Organization**: Tasks follow the three approved user stories after shared setup and foundation. Each implementation task cites its primary files; do not change the existing adapter, context, or assessment contracts without a separately justified finding.
+
+## Scope and completion status (2026-10-17)
+
+T001-T023 below are the completed Constitution v2.0.0 baseline and historical execution
+record. Their multi-label-only restrictions describe that baseline, not the amended
+scope. Constitution v3.0.0 and the current spec supersede those eligibility restrictions.
+The approved amendment tasks T024-T028 are now implemented and verified. See
+`quickstart.md` for the 167 focused passes, 265 full-suite passes and successful manual
+demonstration. The original documentation amendment preceded these source changes.
 
 ## Phase 1: Setup
 
@@ -151,4 +160,24 @@ After US2 is complete:
 4. Add US3 complete validation, error taxonomy, privacy, and fail-closed storage behavior.
 5. Complete acceptance coverage, update quickstart, and run the full existing plus new pytest suite.
 
-No task adds standalone single-label binary support, safety-model training, calibration, policy selection, runtime assessment, arbitrary operating thresholds, or REST endpoints.
+No baseline task T001-T023 adds standalone single-label binary support, safety-model training, calibration, policy selection, runtime assessment, arbitrary operating thresholds, or REST endpoints.
+
+
+## Scope Amendment: Single-Label Binary and Independent Component Contributors
+
+**Prerequisites**: Review the amended constitution and feature artifacts, including
+`specs/001-model-registration-registry/scope-amendment.md`. Preserve T001-T023 behavior
+except the explicitly superseded single-label exclusion. Use synthetic inputs only.
+
+- [X] T024 [US1] [US3] Write failing scope tests first in `tests/test_registry_us1.py`, `tests/test_registry_us3.py`, and `tests/test_registry_acceptance.py`; retain existing multi-label fixtures in `tests/conftest.py` and add single-label variants as needed. Replace blanket one-label rejection expectations with exactly-one-label acceptance under `supervised_single_label_binary_classification`; retain rejection of one-label multi-label declarations. Verify zero labels, wrong task/count combinations, unsupported learning tasks, binary outcome semantics, continuous probability and non-probability declarations, hard-only output rejection, and exact metadata round trips. Single-label registration must work without labelled safety data/packages and call no patient methods. Dependencies: T001-T023; tests precede T026. Trace: FR-001-FR-004, FR-006, FR-010-FR-012; US1.1-6, US3.2-4/9; SC-001/003/004/006.
+- [X] T025 [US2] Write amendment integration tests before implementation in `tests/test_registry_acceptance.py`, `tests/test_registry_us2.py`, and `tests/test_registry_concurrency.py`. Cover independent all-single-label and mixed contributor sets through existing exact lookup/resolution operations; preserve `(model_id, model_version, label_id)` and matching adapter metadata, including overlapping labels across models. Require explicit unknown/wrong-version/unattached source errors without substitutes, silent omission, or component-ready claims. Use a genuine subprocess boundary for mixed catalog metadata survival, absent bindings, failure before reattachment, successful exact reattachment, and wrong classifier/adapter rejection. Verify old multi-label catalog decoding, new-version immutability, and at-most-one same-key single-label insert under concurrent attempts. Assert zero prediction/aggregation/safety calls. Dependencies: T001-T023; may run alongside T024 because files can overlap only in `tests/test_registry_acceptance.py`, so coordinate edits or execute sequentially. Tests precede T026. Trace: FR-002, FR-004-FR-009, FR-011-FR-015; US2.1-7, US3.5/7/8/10; SC-002/003/004/007.
+- [X] T026 [US1] [US3] Implement the minimal task/cardinality validator update in `src/safira/registry/definitions.py` and scope/error descriptions in `src/safira/registry/exceptions.py`. Accept the new single-label binary token only with exactly one label; preserve the legacy multi-label token and at-least-two requirement. Keep all existing nested schema, continuous-output, capability, immutability, privacy, identity and version checks. Preserve serialized fields and SQLite schema version; do not change registry/identity/storage algorithms or adapter/assessment contracts without a demonstrated failure requiring review. Run T024/T025 tests and resolve failures before marking complete. Dependencies: T024, T025. Trace: FR-001-FR-015 through existing preserved behavior; SC-001/007.
+- [X] T027 Update `scripts/manual_registry_demo.py` and `specs/001-model-registration-registry/quickstart.md` after T026. Replace stale single-label-unsupported statements with the verified scope; demonstrate separate one-label contributors plus existing multi-label registration using temporary storage and checked synthetic identities. Show source-qualified contributor references without running component aggregation or claiming safety readiness. Run the demo and record actual test commands/results and remaining limitations; do not reuse baseline totals as amended evidence. Dependencies: T026. Trace: FR-001/003/009/011-015; SC-006/007.
+- [X] T028 Run the complete pytest suite via `.\.venv\Scripts\python.exe -m pytest -q`, including `tests/test_model_adapter.py`, `tests/test_adapter_capabilities.py`, `tests/test_safety_context.py`, and `tests/test_assessment.py`. Confirm original contracts unchanged; verify identity attestation/digest mismatch, privacy, deep immutability, corrupted/unknown-schema storage and multi-label regression checks remain green. Record actual results in `specs/001-model-registration-registry/quickstart.md` and mark amendment tasks complete only after verification. Dependencies: T026, T027. Trace: FR-001-FR-015; US1.1-6, US2.1-7, US3.1-10; SC-001/002/003/004/006/007.
+
+**Execution order**: T024 and T025 (test-first; coordinate shared acceptance file), then
+T026, then T027, then T028. No new infrastructure, schema migration, safety feature,
+component persistence, prediction pipeline, aggregation policy, or clinical fusion is
+part of these tasks. The supplied PD handoff has been reviewed in `scope-amendment.md`.
+Real PD onboarding remains dependent on authoritative contributor identity evidence and
+prediction-to-class mappings; synthetic tests must not invent mappings for real models.

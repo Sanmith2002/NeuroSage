@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-15
 
-**Inputs**: [specification](spec.md), [Safira Constitution v2.0.0](../../.specify/memory/constitution.md), existing package and tests
+**Inputs**: [specification](spec.md), [Safira Constitution v3.0.0](../../.specify/memory/constitution.md), existing package and tests
 
 ## Decision 1: Persist metadata in an embedded SQLite catalog
 
@@ -38,7 +38,7 @@
 
 ## Decision 5: Validate declared schema and capability shape without clinical execution
 
-**Decision**: Accept only a supervised multi-label declaration with at least two unique, nonblank stable label IDs. Validate explicit positive/negative meanings and exact output mapping for every label; validate identifiers and versions without trimming them; validate input/modality/preprocessing metadata as bounded declarative schema, including an explicit `none` preprocessing identity where applicable. Enforce actual `bool` values for every `AdapterCapabilities` flag and check that claimed optional methods are concretely implemented. Reject patient observations and arbitrary payload blobs. Registration and reattachment are metadata and identity operations; neither performs training, extraction, calibration, policy selection, or assessment.
+**Decision**: Accept `supervised_single_label_binary_classification` with exactly one label or the existing `supervised_multi_label_classification` with at least two unique, nonblank stable label IDs. Zero labels and task/count mismatches are rejected. Validate explicit positive/negative meanings and exact output mapping for every label; validate identifiers and versions without trimming them; validate input/modality/preprocessing metadata as bounded declarative schema, including an explicit `none` preprocessing identity where applicable. Enforce actual `bool` values for every `AdapterCapabilities` flag and check that claimed optional methods are concretely implemented. Reject patient observations and arbitrary payload blobs. Registration and reattachment are metadata and identity operations; neither performs training, extraction, calibration, policy selection, or assessment.
 
 **Rationale**: These checks address FR-001–FR-006, FR-011–FR-014 while preserving existing runtime behavior. Unsupported capabilities stay false/unavailable. Static checks can show only declared compatibility, not prove that all future outputs conform or that clinical evidence is sufficient.
 
@@ -48,7 +48,7 @@
 
 **Decision**: Use temporary database files, deterministic test-only adapters/classifier artifacts and a fake trusted identity provider, and pytest. Cover deep immutability against mutation through both original inputs and returned metadata; registration without labelled safety data or a package; exact input-schema, modality and preprocessing round-trips; exact lookup; a genuine subprocess restart with metadata retained and bindings absent; successful and failed reattachment; invalid schemas/output semantics/capability values; duplicate races using separate registry connections; storage failures; privacy-safe errors; and proof that registration never calls patient-facing adapter methods or safety setup. Run existing tests for regression. The review catalog for SC-002 contains at least three model IDs and three versions of one model; no numerical lookup-latency benchmark is introduced.
 
-**Rationale**: This provides reproducible evidence for FR-001–FR-014 and SC-001–SC-004 plus SC-006 (SC-005 was removed by clarification) without claiming clinical validation.
+**Rationale**: This provides reproducible evidence for FR-001–FR-015 and SC-001–SC-004 plus SC-006–SC-007 (SC-005 was removed by clarification) without claiming clinical validation.
 
 **Alternatives considered**: A latency target was expressly rejected during clarification. Clinical datasets are unnecessary and inappropriate for registry-contract verification.
 
@@ -57,3 +57,35 @@
 - Artifact/adapter identity verification depends on a trustworthy integration supplied by the classifier owner or trusted loader. Digest equality proves equality of checked bytes or deterministic identity material, not the origin or behavior of an arbitrary live object. The configured provider must attest to the loaded-object link; Safira cannot independently prove that link generically. Usable access must fail when this link cannot be established.
 - Static method and metadata checks cannot prove that a classifier actually emits continuous values for every label. Deterministic synthetic tests check integrations; later assessment/training features must validate observed output types and ranges before safety use.
 - A later safety package must reference the exact immutable registry identity and compatibility metadata, but package storage, training, and deployment are outside Feature 001.
+
+## Decision 7: Keep classifier cardinality separate from component composition
+
+**Decision (approved scope, 2026-10-17)**: Support single-label binary classifiers and
+multi-label classifiers as independently registered contributors to a component.
+Use existing exact metadata and usable-pair operations for each contributor; preserve
+`(model_id, model_version, label_id)` and the matching adapter declaration. Allow label
+IDs to overlap across separate registrations without merging the contributions.
+A missing, incompatible, or unattached source cannot be substituted or silently omitted
+to claim a complete component output. No component entity, prediction execution,
+aggregation algorithm, or clinical fusion policy is introduced into Feature 001.
+
+**Rationale**: The number of component output labels does not describe any individual
+classifier's label cardinality. Independent registrations already supply exact identity
+and compatibility boundaries (FR-002, FR-004-FR-009, FR-015). An explicit new single-label
+task token preserves the meaning of legacy multi-label records and rejects mislabeled
+schemas. The same serialized fields suffice; no storage layout migration is planned.
+
+**Verification**: Add synthetic all-single-label and mixed contributor acceptance
+(SC-007), overlapping label IDs, explicit source failures, and both probability and
+non-probability continuous-output cases. Extend restart, identity mismatch, immutability,
+and duplicate-race regressions to the new eligible form. Existing provider checks and
+the trusted-loader limitation in Decision 3 are unchanged.
+
+**Handoff review**: The user-supplied `C:/Users/User/Downloads/PD Copathology Handoff.md`
+confirms three independently trained binary classifiers behind one component output.
+Its shared component version does not replace per-classifier identity verification.
+Its output excludes decision thresholds, so the required per-label prediction-to-class
+mappings cannot be assumed from that handoff. No default threshold or new mapping policy
+is introduced. Actual PD onboarding needs authoritative identities and mappings; see
+[scope-amendment.md](scope-amendment.md) for the full comparison and remaining integration
+questions. External bundle files and reported results were not independently verified.

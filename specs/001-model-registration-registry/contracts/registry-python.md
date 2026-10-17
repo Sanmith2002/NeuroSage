@@ -1,6 +1,6 @@
 # Planned Python Contract: Feature 001 Registry
 
-This is a design contract for a future in-process Python library interface, not implemented code. Type and symbol names may be refined at the tasks stage if the same observable behavior is preserved. There is no REST, CLI, training, or assessment endpoint in this feature. See [data-model.md](../data-model.md) for field meanings.
+This describes the existing in-process Python library boundary and its proposed 2026-10-17 scope amendment. Single-label eligibility and amended acceptance remain pending implementation; existing operation signatures are preserved. There is no REST, CLI, training, or assessment endpoint in this feature. See [data-model.md](../data-model.md) for field meanings.
 
 ## Operations
 
@@ -9,7 +9,7 @@ This is a design contract for a future in-process Python library interface, not 
 | `ModelRegistry(storage_path)` | Path to local catalog | Registry instance | Open/create a versioned metadata catalog. Raise storage error for unreadable/corrupt/unknown-schema existing catalog; never treat it as empty. |
 | `register(definition, classifier, adapter, identity_provider)` | `RegisteredModelVersion` declaration; live classifier; `ModelAdapter`; configured trusted `IdentityProvider` | Frozen `RegisteredModelVersion` | Validate scope, schema, existing adapter contract, and provider evidence; commit metadata once using exact key. Duplicate pair fails even if identical. No patient method or safety setup is called. After commit, a validated live binding may be established in this process. |
 | `get_metadata(model_id, model_version)` | Exact ID and version | Frozen `RegisteredModelVersion` | Retrieve and validate persisted metadata independent of attachment. Distinguish unknown ID from missing version. No latest fallback. |
-| `attach(model_id, model_version, classifier, adapter, identity_provider)` | Exact key and live pair plus the same configured trusted `IdentityProvider` contract | `UsableRegistration` or success marker | Obtain fresh evidence for this live pair and compare artifact, adapter implementation/version/capabilities, label/output schema, input/modality/preprocessing identities with the immutable record. Publish binding only after all checks pass; no prediction call. |
+| `attach(model_id, model_version, classifier, adapter, identity_provider, *, definition)` | Exact key, live pair, trusted `IdentityProvider`, and candidate `RegisteredModelVersion` definition | `UsableRegistration` or success marker | Obtain fresh evidence for this live pair and compare artifact, adapter implementation/version/capabilities, label/output schema, input/modality/preprocessing identities with the immutable record. Publish binding only after all checks pass; no prediction call. |
 | `resolve_usable(model_id, model_version)` | Exact ID and version | `UsableRegistration(metadata, classifier, adapter)` | Return the validated association as one value. Fail explicitly when metadata is absent, no pair is attached, or a binding cannot be trusted. Never substitute another pair. |
 
 ### IdentityProvider contract
@@ -42,7 +42,7 @@ All errors are typed, actionable, and safe for routine display. They may include
 | Error category | Example trigger | Postcondition |
 |---|---|---|
 | `InvalidRegistrationError` with field detail | Blank/whitespace/control-character key; duplicate labels; missing outcome meanings, output selection, score semantics, boundary; invalid input/preprocessing declaration; non-Boolean capability flag | No new row or binding. |
-| `UnsupportedTaskError` | Regression, unsupervised task, or standalone one-label binary classifier | No new row. |
+| `UnsupportedTaskError` | Regression, unsupervised/reinforcement-learning task, unknown task declaration, empty label collection, or task/label-count mismatch | No new row. |
 | `IncompatibleAdapterError` | Not a compatible `ModelAdapter`, required method not implemented, false probability declaration, or uncheckable identity evidence | No new row/binding; existing records unchanged. |
 | `DuplicateRegistrationError` | Existing `(model_id, model_version)`, including a concurrent losing insert | Prior row and binding untouched. |
 | `UnknownModelError` | No record for `model_id` | No substitute returned. |
@@ -59,3 +59,32 @@ Names above are proposed public exception names. Low-level SQLite exceptions mus
 2. Open the same catalog in a fresh process. `get_metadata("m", "v1")` succeeds, `resolve_usable("m", "v1")` raises `UnattachedModelError`, and `attach` with the exact checked pair enables usable resolution.
 3. Reattach a changed classifier or adapter under `m/v1`. `BindingMismatchError` is raised; the immutable metadata is unchanged. Register the material change under `v2` instead.
 4. Query `m/v3` when only `v1` and `v2` exist. `UnknownVersionError` is raised; `v2` is never chosen implicitly.
+
+## Amended classifier eligibility and component use
+
+- `supervised_single_label_binary_classification`: exactly one binary-outcome label.
+- `supervised_multi_label_classification`: at least two binary-outcome labels; the
+  existing token and existing records retain their meaning.
+- Each label in either form requires continuous primary-output semantics and the same
+  existing adapter methods, identity provider, class mapping, and privacy validation.
+  Zero labels are rejected. A material task/schema change requires a new model version.
+- A component consumer calls `get_metadata` and `resolve_usable` for each exact
+  contributor; it retains `(model_id, model_version, label_id)` plus the resolved
+  adapter compatibility metadata. Several one-label contributors do not become one
+  multi-label registration. Overlapping label IDs remain separate source contributions.
+- An unknown, wrong-version, unattached, or incompatible contributor fails by the
+  existing typed error contract. It cannot be substituted or silently dropped to claim
+  a complete output. Feature 001 exposes associations and declarations only; prediction,
+  output assembly, aggregation, and safety decisions belong to separately specified
+  consumers. No new registry operation, component persistence, or adapter method is added.
+- Acceptance must exercise both all-single-label and mixed contributor sets, preserve
+  exact source metadata, and verify no patient-facing methods execute during resolution.
+
+### PD bundle onboarding prerequisite
+
+The handoff's shared `pd-copathology-v1.0` output version is not proof of any individual
+classifier/adapter identity. Each contributor still requires the same checked evidence
+and complete candidate definition. The exported probabilities have no published decision
+thresholds; registration cannot invent a class mapping to satisfy the existing contract.
+Obtain the authoritative frozen mapping or seek a separately approved contract amendment.
+The current scope amendment changes cardinality, not identity or mapping requirements.

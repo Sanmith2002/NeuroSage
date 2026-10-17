@@ -10,7 +10,7 @@ class InvalidRegistrationError(RegistryError):
 
 
 class UnsupportedTaskError(InvalidRegistrationError):
-    """The declared task is outside supervised multi-label classification."""
+    """The task or label count is outside supervised binary/multi-label scope."""
 
 
 class IncompatibleAdapterError(RegistryError):

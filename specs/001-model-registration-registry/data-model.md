@@ -1,12 +1,12 @@
 # Data Model: Feature 001 Model Registration and Registry
 
-**Scope**: Declarative classifier registration and process-local usable association. This is a design artifact; none of these types or tables exists in application code yet.
+**Scope**: Declarative classifier registration and process-local usable association. The registry exists; the 2026-10-17 scope amendment below is specified but not implemented.
 
 ## Relationships
 
 ```text
 RegisteredModelVersion (model_id, model_version)
-  ├── 2 or more LabelDefinition records (unique label_id within model version)
+  ├── 1 or more LabelDefinition records (unique label_id within model version)
   ├── 1 AdapterDeclaration
   ├── 1 ClassifierArtifactIdentity
   └── 1 InputDefinition
@@ -24,9 +24,9 @@ Only `RegisteredModelVersion` and its nested declarative values persist. `Proces
 | Field | Rule |
 |---|---|
 | `model_id`, `model_version` | Nonblank exact strings, no leading/trailing whitespace or control characters; composite immutable key. Opaque versions have no ordering or latest alias. |
-| `task_type` | Fixed supervised multi-label classification declaration; other tasks and one-label classifiers rejected. |
+| `task_type` | `supervised_single_label_binary_classification` requires exactly one label; existing `supervised_multi_label_classification` requires at least two. Other tasks and count mismatches are rejected. |
 | `classifier_artifact` | Checkable immutable artifact identity, including a deterministic SHA-256 fingerprint of version-specific classifier material. No executable bytes in the record. The owner-supplied identity provider must attest that the live classifier was loaded from this material; a digest alone is not proof of object origin. |
-| `labels` | Immutable ordered or explicitly indexed collection of at least two unique `LabelDefinition` values. Order/output selection is part of immutable compatibility metadata. |
+| `labels` | Immutable ordered or explicitly indexed collection of one or more unique `LabelDefinition` values. Order/output selection is part of immutable compatibility metadata. |
 | `adapter` | `AdapterDeclaration` for the associated implementation and this exact classifier version. |
 | `input` | Declarative input shape/type and named modality metadata, without observations. |
 | `preprocessing_identity` | Checkable version/fingerprint of required preprocessing, or explicit `none`. |
@@ -95,6 +95,24 @@ Duplicate registration always fails; no update/delete/relabel transition is part
 
 - `(model_id, model_version)` identifies one immutable definition and is never reused for changed material.
 - All lookups and bindings use both exact key components. Metadata existence does not imply a usable classifier or ready safety package.
-- One registration may describe multiple disease labels, but no patient record or patient-label assessment is stored here.
+- One registration describes one binary label or multiple binary-outcome labels. No patient record or patient-label assessment is stored here.
 - Primary prediction values and Safira reliability scores are separate; neither per-patient value is retained in registry metadata.
 - Routine error text identifies safe field names and error categories, not raw input payloads or restricted data.
+
+## Component contributors (FR-015; SC-007)
+
+A component consumer resolves a collection of `(model_id, model_version)` references
+using existing operations; each label contribution is qualified by
+`(model_id, model_version, label_id)` and retains its resolved adapter declaration.
+The component may use several single-label classifiers or a mixture of classifier
+forms. Label IDs need only be unique within a registered model version. No persistent
+component entity, component table, merged classifier, or aggregation algorithm is added.
+An absent/unattached/incompatible reference fails explicitly for that source and must
+not be silently omitted to claim a complete component output.
+
+The new task declaration fits the existing serialized metadata field. Existing
+multi-label rows retain their token, keys, fingerprints, ordering, and schemas.
+No SQLite layout or metadata-schema version change is planned; decoding validates both
+eligible forms after implementation. Older software does not gain single-label support
+merely by reading this amendment and must still fail closed on unsupported records.
+Changing a classifier's task or label cardinality requires a new model version.

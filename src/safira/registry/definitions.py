@@ -1,4 +1,4 @@
-"""Immutable, declarative metadata for supervised multi-label registrations.
+"""Immutable metadata for supervised single-label binary and multi-label models.
 
 Only structural input declarations and primary output semantics belong here.
 Class boundaries are supplied by the classifier owner; they are not Safira
@@ -18,6 +18,7 @@ from safira.registry.storage import SCHEMA_VERSION
 
 
 TASK_TYPE = "supervised_multi_label_classification"
+SINGLE_LABEL_TASK_TYPE = "supervised_single_label_binary_classification"
 
 
 def _invalid(field: str) -> None:
@@ -229,9 +230,15 @@ class RegisteredModelVersion(_Definition):
     def __post_init__(self) -> None:
         _text(self.model_id, "model_id", exact=True)
         _text(self.model_version, "model_version", exact=True)
-        if self.task_type != TASK_TYPE:
-            raise UnsupportedTaskError("Only supervised multi-label classification is supported.")
-        if not isinstance(self.labels, (tuple, list)) or len(self.labels) < 2:
+        if self.task_type not in (TASK_TYPE, SINGLE_LABEL_TASK_TYPE):
+            raise UnsupportedTaskError(
+                "Only supervised multi-label or supervised single-label binary classification is supported."
+            )
+        if not isinstance(self.labels, (tuple, list)):
+            raise UnsupportedTaskError("labels must be a nonempty label collection.")
+        if self.task_type == SINGLE_LABEL_TASK_TYPE and len(self.labels) != 1:
+            raise UnsupportedTaskError("Supervised single-label binary registration requires exactly one label.")
+        if self.task_type == TASK_TYPE and len(self.labels) < 2:
             raise UnsupportedTaskError("Supervised multi-label registration requires at least two labels.")
         labels = tuple(_definition(LabelDefinition, label) for label in self.labels)
         if len({label.label_id for label in labels}) != len(labels):

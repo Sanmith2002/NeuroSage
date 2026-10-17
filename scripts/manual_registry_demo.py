@@ -105,11 +105,12 @@ class RandomForestLike(GuardedOperations):
     """Pretend tree leaf probabilities; averaging would produce per-label scores."""
 
     leaves: tuple[tuple[float, ...], ...]
+    labels: tuple[str, ...]
     activity: Activity
 
     def probability(self, synthetic_input, label):
         self.activity.record("prediction")
-        probabilities = self.leaves[LABELS.index(label)]
+        probabilities = self.leaves[self.labels.index(label)]
         return sum(probabilities) / len(probabilities)
 
 
@@ -119,11 +120,12 @@ class XGBoostLike(GuardedOperations):
 
     base_margins: tuple[float, ...]
     contributions: tuple[tuple[float, ...], ...]
+    labels: tuple[str, ...]
     activity: Activity
 
     def score(self, synthetic_input, label):
         self.activity.record("prediction")
-        index = LABELS.index(label)
+        index = self.labels.index(label)
         return self.base_margins[index] + sum(self.contributions[index])
 
 
@@ -164,13 +166,15 @@ class DemoLoader:
         self.activity = Activity()
         if self.payload["family"] == "forest":
             self.classifier = RandomForestLike(
-                tuple(tuple(row) for row in self.payload["leaves"]), self.activity
+                tuple(tuple(row) for row in self.payload["leaves"]),
+                tuple(self.payload["labels"]), self.activity
             )
             self.adapter = ForestAdapter(self.classifier, self.activity)
         else:
             self.classifier = XGBoostLike(
                 tuple(self.payload["base_margins"]),
-                tuple(tuple(row) for row in self.payload["contributions"]), self.activity,
+                tuple(tuple(row) for row in self.payload["contributions"]),
+                tuple(self.payload["labels"]), self.activity,
             )
             self.adapter = BoostingAdapter(self.classifier, self.activity)
         self.definition = self._definition()
@@ -187,12 +191,14 @@ class DemoLoader:
 
     def _definition(self):
         probability = self.payload["family"] == "forest"
-        model_id = "synthetic-rf" if probability else "synthetic-xgb"
+        model_id = self.payload["model_id"]
         version = self.payload["version"]
         evidence = self.identify_loaded_pair(self.classifier, self.adapter)
         return RegisteredModelVersion.from_dict({
             "model_id": model_id, "model_version": version,
-            "task_type": "supervised_multi_label_classification",
+            "task_type": "supervised_single_label_binary_classification"
+                         if len(self.payload["labels"]) == 1
+                         else "supervised_multi_label_classification",
             "classifier_artifact": {"sha256": evidence.classifier_sha256},
             "labels": [
                 {
@@ -210,7 +216,7 @@ class DemoLoader:
                     # Illustrative PRIMARY classifier rules, not Safira safety cutoffs.
                     "class_mapping": {"positive_when": ">=", "boundary": 0.5 if probability else 0.0},
                 }
-                for label in LABELS
+                for label in self.payload["labels"]
             ],
             "adapter": {
                 "adapter_id": type(self.adapter).__name__, "adapter_version": "v1",
@@ -226,8 +232,11 @@ class DemoLoader:
         })
 
 
-def make_loader(family, version):
-    payload = {"family": family, "version": version}
+def make_loader(family, version, labels=LABELS, model_id=None):
+    payload = {
+        "family": family, "version": version, "labels": list(labels),
+        "model_id": model_id or ("synthetic-rf" if family == "forest" else "synthetic-xgb"),
+    }
     if family == "forest":
         payload["leaves"] = (
             [[0.35, 0.65, 0.75], [0.25, 0.45, 0.55]] if version == "v1"
@@ -235,11 +244,16 @@ def make_loader(family, version):
         )
     else:
         payload.update(base_margins=[-0.2, 0.1], contributions=[[0.4, 0.3], [-0.1, 0.2]])
+    # Each synthetic artifact explicitly declares its own label set and model state.
+    for name in ("leaves", "base_margins", "contributions"):
+        if name in payload:
+            payload[name] = payload[name][:len(labels)]
     return DemoLoader(json.dumps(payload, sort_keys=True).encode())
 
 
 def show_metadata(definition):
     print(f"\n  Model: {definition.model_id} / {definition.model_version}")
+    print(f"  Task: {definition.task_type}; classifier labels: {len(definition.labels)}")
     print(f"  Adapter: {definition.adapter.adapter_id} / {definition.adapter.adapter_version}")
     print(f"  Classifier SHA-256 prefix: {definition.classifier_artifact['sha256'][:16]}")
     for label in definition.labels:
@@ -256,12 +270,40 @@ def confirm_no_work(loaders):
         require(total == 0, f"{operation.capitalize()} calls = {total}")
 
 
+def demonstrate_contributors(registry):
+    """A consumer uses existing public operations; this is not a component API."""
+    for description, keys in (
+        ("Two independent single-label classifiers, one component",
+         (("synthetic-pd", "v1"), ("synthetic-ad", "v1"))),
+        ("Mixed single-label and multi-label component",
+         (("synthetic-pd", "v1"), ("synthetic-xgb", "v1"))),
+    ):
+        print(f"\n  {description} (source declarations only)")
+        sources = []
+        for key in keys:
+            usable = registry.resolve_usable(*key)
+            require(usable.metadata == registry.get_metadata(*key),
+                    f"Contributor {key[0]}/{key[1]} resolved with its compatible adapter")
+            for label in usable.metadata.labels:
+                source = (*key, label.label_id)
+                sources.append(source)
+                print(f"       Source: {source}; adapter: {usable.metadata.adapter.adapter_id}")
+        require(len(sources) == len(set(sources)), "Exact model/version/label provenance retained")
+        if len(sources) == 3:
+            require(sum(source[2] == "PD" for source in sources) == 2,
+                    "Overlapping PD labels retain two separate classifier sources")
+    print("  Component label count does not change any classifier's task type.")
+    print("  No component predictions, merged scores, or safety readiness claim is produced.")
+
+
 def write_demo(workdir):
     print(f"\nSTEP 1: Register synthetic models (writer process {os.getpid()})", flush=True)
     forest = make_loader("forest", "v1")
     boosting = make_loader("boosting", "v1")
     newer = make_loader("forest", "v2")
-    loaders = [forest, boosting, newer]
+    pd_single = make_loader("forest", "v1", labels=("PD",), model_id="synthetic-pd")
+    ad_single = make_loader("boosting", "v1", labels=("AD",), model_id="synthetic-ad")
+    loaders = [forest, boosting, newer, pd_single, ad_single]
     catalog = workdir / CATALOG_NAME
     require(not catalog.exists(), "Using a fresh temporary catalog")
     with ModelRegistry(catalog) as registry:
@@ -301,8 +343,17 @@ def write_demo(workdir):
                                                    forest.classifier, forest.adapter, forest))
         single_label = forest.definition.to_dict()
         single_label["labels"] = single_label["labels"][:1]
-        expect_rejection("Standalone single-label classifier rejected", UnsupportedTaskError,
+        expect_rejection("One label under a multi-label task declaration rejected", UnsupportedTaskError,
                          lambda: RegisteredModelVersion.from_dict(single_label))
+        print("\nSTEP 4A: Register standalone binary contributors", flush=True)
+        for loader in (pd_single, ad_single):
+            record = registry.register(loader.definition, loader.classifier, loader.adapter, loader)
+            require(record == loader.definition, f"Standalone binary {record.model_id} registered")
+            show_metadata(record)
+        demonstrate_contributors(registry)
+        expect_rejection("Missing contributor version cannot be silently substituted",
+                         UnknownVersionError,
+                         lambda: registry.resolve_usable("synthetic-pd", "v99"))
         for loader in loaders:
             key = (loader.definition.model_id, loader.definition.model_version)
             require(registry.get_metadata(*key) == loader.definition
@@ -335,6 +386,7 @@ def read_demo(workdir):
             require(registry.resolve_usable(*key) is usable
                     and usable.classifier is loader.classifier and usable.adapter is loader.adapter,
                     f"Fresh exact classifier-adapter pair validated and reattached for {key[0]}/{key[1]}")
+        demonstrate_contributors(registry)
     confirm_no_work(loaders)
 
 
@@ -361,7 +413,10 @@ def main():
                 print("\nWriter has EXITED. Launching a separate interpreter for restart verification.", flush=True)
     require(not Path(temporary).exists(), "Temporary catalog and synthetic artifacts removed")
     print("\nLIMITATIONS", flush=True)
-    print("- Only supervised multi-label registration (two or more labels); standalone single-label classifiers are unsupported.")
+    print("- Supports standalone binary (one label) and multi-label (two or more binary-outcome labels) classifiers.")
+    print("- Component examples resolve sources only; no prediction, aggregation or clinical fusion is performed.")
+    print("- Toy class mappings are synthetic primary-model rules, never real PD rules or Safira safety cutoffs.")
+    print("- Real PD onboarding still needs authoritative model/adapter identities and prediction-to-class mappings.")
     print("- Identity provenance depends on the trusted loader; a digest alone cannot prove an arbitrary live object's origin.")
     print("- Primary prediction scores/probabilities are distinct from future Safira reliability scores.")
     print("- Registration does not establish safety readiness, clinical validity, or a TRUST/CAUTION/DEFER status.")

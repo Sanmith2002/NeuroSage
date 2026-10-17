@@ -4,9 +4,9 @@
 
 **Created**: 2026-10-15
 
-**Status**: Draft
+**Status**: Completed v2.0.0 baseline; 2026-10-17 scope amendment specified, implementation pending
 
-**Input**: User description: "Feature 001: model registration and exact-version registry for supervised multi-label primary classifiers."
+**Input**: User description: "Feature 001: model registration and exact-version registry for standalone supervised single-label binary and supervised multi-label primary classifiers, including independent contributors to a component-level output."
 
 ## Clarifications
 
@@ -18,25 +18,35 @@
 - Q: If a registered classifier, its label schema, preprocessing, or adapter version changes, must it be registered under a new model version before downstream use? → A: Yes; every material change requires a new model version, and the earlier registration remains unchanged.
 - Q: In Feature 001, must each supported label have a binary positive/negative outcome, or may a label have more than two classes? → A: Each label has binary ground truth, but the primary classifier must provide a continuous per-label score or probability and a defined score-to-class mapping; Safira's later reliability score and status are separate.
 
+### Scope amendment 2026-10-17
+
+The user explicitly approved standalone supervised single-label binary classifiers and
+multiple independently registered classifiers contributing predictions to one component.
+This supersedes earlier multi-label-only scope restrictions under Constitution v3.0.0.
+Each classifier's task type and label count are independent of the component's output
+label count. Existing exact identities, compatibility checks, and privacy rules remain.
+See [scope-amendment.md](scope-amendment.md) for source-review limitations and impact.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Register and Retrieve a Classifier (Priority: P1)
 
-A researcher registers a supervised multi-label primary classifier with its stable identity,
+A researcher registers a standalone supervised single-label binary or supervised multi-label primary classifier with its stable identity,
 label meanings, adapter, and declared evidence capabilities. The researcher can retrieve
 that definition by exact identifier and version before a safety package exists.
 
 **Why this priority**: Downstream safety training needs an unambiguous, compatible
 classifier definition. Registration must work before training is possible.
 
-**Independent Test**: Register one valid classifier with two distinct labels, retrieve
-it by exact identifier and version, and confirm its label and capability information
+**Independent Test**: Register valid one-label binary and two-or-more-label classifiers, retrieve
+each by exact identifier and version, and confirm its label and capability information
 matches the submitted definition without starting safety training.
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid supervised multi-label classifier definition with a compatible
-   adapter, two distinct binary-outcome labels, and continuous per-label prediction
+1. **Given** a valid supervised single-label binary or multi-label classifier definition
+   with a compatible adapter, respectively one or at least two distinct binary-outcome
+   labels, and continuous per-label prediction
    outputs, **when** it is registered, **then** a retrievable model-version record
    contains its model identifier, version-specific classifier artifact identity, label
    schema, adapter identity, output meanings, prediction-to-class mappings, and
@@ -88,6 +98,15 @@ then retrieve each and compare its schema and adapter metadata.
    or adapter version changes materially, **then** the changed definition requires a new
    model version and the earlier record remains unchanged.
 
+7. **Given** two independently registered single-label binary classifiers, or a mixture
+   of single-label binary and multi-label classifiers, contributing to one component,
+   **when** a consumer requests each exact model-version association and label metadata,
+   **then** each contributor resolves independently with its own schema and validated
+   pair. Each contribution is distinguishable by `(model_id, model_version, label_id)`;
+   repeated label IDs across models are not merged. An unavailable contributor produces
+   an explicit failure for that contributor, never a substitute or a complete-output claim.
+   No prediction or component aggregation is performed by the registry.
+
 ---
 
 ### User Story 3 - Reject Invalid Definitions and Lookups (Priority: P2)
@@ -107,8 +126,8 @@ leaves existing registrations unchanged and identifies the reason.
    is attempted, **then** it fails with the offending field identified.
 2. **Given** an empty, duplicate, or semantically incomplete label schema, **when**
    registration is attempted, **then** it fails without creating a record.
-3. **Given** a task outside supervised multi-label classification, including a
-   standalone single-label binary classifier, **when** registration is attempted,
+3. **Given** regression, unsupervised or reinforcement learning, an unsupported task
+   declaration, or a task/label-count mismatch, **when** registration is attempted,
    **then** it fails with the supported scope stated.
 4. **Given** an adapter incompatible with the existing adapter and capability
    contracts, **when** registration is attempted, **then** the incompatibility is
@@ -137,7 +156,11 @@ leaves existing registrations unchanged and identifies the reason.
   invalid; leading or trailing whitespace is not silently normalized into another identity.
 - Similar but unequal version strings remain distinct; lookup never falls back to a
   newest or closest version.
-- A one-label schema is not a multi-label registration.
+- A one-label binary schema is valid under the single-label binary task declaration;
+  zero labels are always invalid. A multi-label declaration requires at least two labels.
+- A component with several output labels may use several single-label classifiers.
+  This does not turn any contributor into a multi-label classifier. Label IDs are unique
+  within each registration; the same label ID across models retains separate provenance.
 - Distinct display names do not make duplicate stable label identifiers valid.
 - A label whose output mapping or outcome meaning is undefined makes the schema invalid.
 - A score or probability may equal 0 or 1 for a particular prediction; registration
@@ -160,11 +183,12 @@ leaves existing registrations unchanged and identifies the reason.
 
 ### Functional Requirements
 
-- **FR-001**: Safira MUST accept only supervised multi-label primary classifiers with at
-  least two distinct supported label identifiers, each with binary ground-truth outcomes
-  and a continuous per-label prediction score or probability. It MUST reject standalone
-  single-label binary, regression, unsupervised, and reinforcement-learning tasks in
-  Feature 001.
+- **FR-001**: Safira MUST accept standalone supervised single-label binary primary
+  classifiers with exactly one supported label and supervised multi-label primary
+  classifiers with at least two distinct supported labels. Each label MUST have binary
+  ground-truth outcomes and a continuous prediction score or probability. Empty schemas,
+  task/label-count mismatches, regression, unsupervised, and reinforcement-learning tasks
+  MUST be rejected. Classifier eligibility MUST NOT depend on a component label count.
 - **FR-002**: Every registration MUST specify a stable model identifier and explicit
   version. Both MUST be nonblank, free of control characters, and free of leading or
   trailing whitespace. The identifier-version pair MUST designate one immutable
@@ -218,10 +242,19 @@ leaves existing registrations unchanged and identifies the reason.
 - **FR-014**: Registration records and routine errors MUST NOT store or disclose
   identifiable patient information or restricted clinical datasets.
 
+- **FR-015**: Multiple independently registered classifiers MUST be available as
+  contributors to one component-level output through exact metadata and usable-pair
+  resolution for each contributor. This MUST support multiple single-label binary
+  classifiers and mixtures of eligible classifier forms. Contributions MUST remain
+  distinguishable by exact model identifier, version, and label identifier, including
+  when label IDs overlap across models. A missing or incompatible contributor MUST fail
+  explicitly without substitution. Feature 001 MUST NOT execute predictions, combine
+  scores, persist component outputs, or infer component readiness from registration.
+
 ### Key Entities
 
 - **Registered Model Version**: One immutable classifier identifier and exact version,
-  supervised multi-label task declaration, classifier artifact identity, label schema,
+  supervised single-label binary or multi-label task declaration, classifier artifact identity, label schema,
   adapter declaration, input definition, preprocessing identity, and association to
   its compatible adapter. A
   later safety package may refer to it; registration does not create that package.
@@ -237,7 +270,8 @@ leaves existing registrations unchanged and identifies the reason.
 
 ### Measurable Outcomes
 
-- **SC-001**: All valid review definitions with at least two distinct labels register
+- **SC-001**: All valid review definitions for one-label binary and two-or-more-label
+  classifiers with matching task declarations register
   and return identical model identifier, version, classifier artifact identity, binary
   outcome semantics, continuous-score meanings, class mappings, and capabilities on
   exact lookup.
@@ -253,10 +287,18 @@ leaves existing registrations unchanged and identifies the reason.
   reliability score, and identify supported versus unsupported adapter capabilities
   without inspecting the classifier's internal implementation.
 
+- **SC-007**: Synthetic consumer acceptance cases resolve all exact contributors for
+  both (a) at least two independent single-label binary classifiers and (b) a mixed
+  single-label/multi-label component. Every declared source-qualified label is retained,
+  including overlapping label IDs, with zero identity substitutions or merged sources.
+  Missing, wrong-version, or unattached contributors yield explicit failures. These
+  cases perform zero patient prediction, aggregation, training, or assessment calls.
+
 ## Assumptions
 
-- Multi-label registration declares at least two labels; each remains individually
-  identifiable even when one prediction contains several labels.
+- Single-label binary registration declares exactly one label; multi-label registration
+  declares at least two. Component composition does not alter either declaration. Each
+  model-version-label contribution remains individually identifiable.
 - Each disease label has verified binary outcomes. A primary classifier's continuous
   per-label score or probability is different from Safira's later 0–1 reliability score
   and TRUST/CAUTION/DEFER status. Registration preserves the output contract and
@@ -276,15 +318,25 @@ leaves existing registrations unchanged and identifies the reason.
   running predictions on clinical data. Actual evidence extraction is validated later.
 - Registration captures input and preprocessing identity but does not load a reference
   cohort, collect outcomes, or determine safety eligibility.
-- No current repository integration requires standalone single-label binary
-  registration. If one is identified, it requires explicit scope approval.
-- The repository has adapter and assessment contracts but no model registry or working
-  automatic safety-training pipeline.
+- The existing registry implements the previous multi-label-only scope. The approved
+  amendment requires a focused validator and regression-test update before single-label
+  support can be claimed; automatic safety training is not part of this amendment.
 
 ## Out of Scope
 
 Safety-data preparation, clinical dataset loading, correctness target generation,
 six-dimension signal extraction, estimator training, calibration, selective policy
 generation, safety package training or deployment, runtime patient assessment, REST API
-development, clinical deployment, and standalone single-label binary support are outside
-Feature 001.
+development, clinical deployment, runtime component-output assembly, score aggregation,
+clinical fusion, and component persistence are outside Feature 001. Independent exact
+contributor resolution for a component is in scope; it does not define a fusion policy.
+
+## PD handoff integration prerequisites
+
+The supplied PD Co-Pathology handoff describes three independent binary classifiers
+behind one component output, confirming the amended scope. It does not supply each
+classifier's complete identity evidence or the prediction-to-class mappings required
+by FR-003. Its shared component version and architecture names cannot replace exact
+contributor identity (FR-002/004-009/015). Do not assume a default class threshold or
+weaken registration validation. These are real-model onboarding prerequisites, not
+additional functionality for this amendment. See [scope-amendment.md](scope-amendment.md).

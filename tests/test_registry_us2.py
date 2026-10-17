@@ -15,6 +15,7 @@ from safira.registry import (
     BindingMismatchError,
     DuplicateRegistrationError,
     ModelRegistry,
+    IncompatibleAdapterError,
     RegisteredModelVersion,
     UnattachedModelError,
     UnknownModelError,
@@ -22,7 +23,7 @@ from safira.registry import (
 )
 
 
-def _review_catalog(template):
+def _review_catalog(template, mixed=False):
     records = []
     keys = (("model-a", "v1"), ("model-a", "v2"), ("model-a", "v3"),
             ("model-b", "v1"), ("model-c", "v1"))
@@ -30,6 +31,9 @@ def _review_catalog(template):
         artifact = f"synthetic classifier {model_id}/{version}"
         record = deepcopy(template)
         record.update(model_id=model_id, model_version=version)
+        if mixed and index in (1, 3, 4):
+            record["task_type"] = "supervised_single_label_binary_classification"
+            record["labels"] = record["labels"][:1]
         record["classifier_artifact"]["sha256"] = sha256(artifact.encode()).hexdigest()
         record["adapter"].update(
             associated_model_id=model_id, associated_model_version=version,
@@ -59,6 +63,17 @@ def _restart_worker(mode, catalog_path, manifest_path):
                 with pytest.raises(UnattachedModelError):
                     registry.resolve_usable(*key)
                 provider = SyntheticIdentityProvider(item["artifact"].encode())
+                wrong = SyntheticIdentityProvider(b"different frozen synthetic classifier")
+                with pytest.raises(BindingMismatchError):
+                    registry.attach(*key, wrong.classifier, wrong.adapter, wrong,
+                                    definition=declared)
+                with pytest.raises(IncompatibleAdapterError):
+                    registry.attach(*key, provider.classifier, wrong.adapter, provider,
+                                    definition=declared)
+                with pytest.raises(UnattachedModelError):
+                    registry.resolve_usable(*key)
+                # Discard the failed evidence call before checking successful attach.
+                provider.calls.clear()
                 registry.attach(
                     *key, provider.classifier, provider.adapter, provider,
                     definition=declared,
@@ -77,10 +92,11 @@ def _restart_worker(mode, catalog_path, manifest_path):
     print(json.dumps({"pid": os.getpid(), "snapshots": snapshots}))
 
 
+@pytest.mark.parametrize("mixed", [False, True])
 def test_catalog_survives_writer_exit_and_exact_pairs_reattach_in_fresh_process(
-    catalog_path, synthetic_metadata, tmp_path
+    catalog_path, synthetic_metadata, tmp_path, mixed
 ):
-    manifest = _review_catalog(synthetic_metadata)
+    manifest = _review_catalog(synthetic_metadata, mixed=mixed)
     manifest_path = tmp_path / "synthetic-manifest.json"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     project_root = Path(__file__).resolve().parents[1]
@@ -102,14 +118,18 @@ def test_catalog_survives_writer_exit_and_exact_pairs_reattach_in_fresh_process(
     assert results[0]["snapshots"] == results[1]["snapshots"] == expected
 
 
+@pytest.mark.parametrize("single_label", [False, True])
 @pytest.mark.parametrize("change", [
     "classifier", "adapter_implementation", "adapter_id", "adapter_version",
     "capabilities", "label_scope", "output_mapping", "input_schema", "modalities",
     "preprocessing",
 ])
 def test_changed_declarations_cannot_reattach_under_accepted_version(
-    catalog_path, synthetic_metadata, loaded_pair, change
+    catalog_path, synthetic_metadata, loaded_pair, change, single_label
 ):
+    if single_label:
+        synthetic_metadata["task_type"] = "supervised_single_label_binary_classification"
+        synthetic_metadata["labels"] = synthetic_metadata["labels"][:1]
     classifier, adapter, provider = loaded_pair
     declared = RegisteredModelVersion.from_dict(synthetic_metadata)
     changed = deepcopy(synthetic_metadata)
@@ -144,10 +164,14 @@ def test_changed_declarations_cannot_reattach_under_accepted_version(
         assert registry.get_metadata(declared.model_id, declared.model_version) == declared
 
 
+@pytest.mark.parametrize("single_label", [False, True])
 @pytest.mark.parametrize("artifact_kind", ["classifier", "adapter"])
 def test_fresh_provider_evidence_is_compared_with_stored_fingerprints(
-    catalog_path, synthetic_metadata, loaded_pair, artifact_kind
+    catalog_path, synthetic_metadata, loaded_pair, artifact_kind, single_label
 ):
+    if single_label:
+        synthetic_metadata["task_type"] = "supervised_single_label_binary_classification"
+        synthetic_metadata["labels"] = synthetic_metadata["labels"][:1]
     classifier, adapter, provider = loaded_pair
     declared = RegisteredModelVersion.from_dict(synthetic_metadata)
     candidate = SyntheticIdentityProvider(provider.classifier_artifact)

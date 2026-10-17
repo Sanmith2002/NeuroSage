@@ -88,7 +88,7 @@ def test_unsupported_tasks_have_a_specific_scope_error(synthetic_metadata, task)
         RegisteredModelVersion.from_dict(synthetic_metadata)
 
 
-def test_one_label_binary_classifier_is_explicitly_unsupported(synthetic_metadata):
+def test_one_label_cannot_use_the_multi_label_task_declaration(synthetic_metadata):
     synthetic_metadata["labels"] = synthetic_metadata["labels"][:1]
     with pytest.raises(UnsupportedTaskError, match="at least two labels"):
         RegisteredModelVersion.from_dict(synthetic_metadata)
@@ -178,3 +178,24 @@ def test_adapter_inspection_failures_are_typed_and_do_not_echo_payloads(
         assert marker not in "".join(traceback.format_exception(error.value))
         with pytest.raises(UnknownModelError):
             registry.get_metadata(declared.model_id, declared.model_version)
+
+
+@pytest.mark.parametrize("path,value", [
+    (("positive_outcome",), ["positive", "third-class"]),
+    (("positive_outcome",), "negative"),
+    (("value_kind",), "hard_prediction"),
+    (("value_source",), "predict"),
+    (("class_mapping",), {}),
+    (("value_scale", "meaning"), ""),
+    (("third_outcome",), "third-class"),
+])
+def test_single_label_keeps_binary_and_continuous_output_validation(
+    synthetic_metadata, path, value
+):
+    synthetic_metadata["task_type"] = "supervised_single_label_binary_classification"
+    synthetic_metadata["labels"] = synthetic_metadata["labels"][:1]
+    _set(synthetic_metadata["labels"][0], path, value)
+    with pytest.raises(InvalidRegistrationError) as caught:
+        RegisteredModelVersion.from_dict(synthetic_metadata)
+    # Invalid semantics must reach ordinary schema validation, not task rejection.
+    assert not isinstance(caught.value, UnsupportedTaskError)

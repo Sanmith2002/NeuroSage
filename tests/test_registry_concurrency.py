@@ -16,10 +16,14 @@ from safira.registry import (
 )
 
 
+@pytest.mark.parametrize("single_label", [False, True])
 @pytest.mark.parametrize("different_metadata", [False, True])
 def test_concurrent_duplicate_registration_commits_once_and_preserves_winner(
-    catalog_path, synthetic_metadata, synthetic_classifier_artifact, different_metadata
+    catalog_path, synthetic_metadata, synthetic_classifier_artifact, different_metadata, single_label
 ):
+    if single_label:
+        synthetic_metadata["task_type"] = "supervised_single_label_binary_classification"
+        synthetic_metadata["labels"] = synthetic_metadata["labels"][:1]
     # Storage initialization is foundational; the tested race is registration.
     with ModelRegistry(catalog_path):
         pass

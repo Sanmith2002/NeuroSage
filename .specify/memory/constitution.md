@@ -1,19 +1,21 @@
 <!--
 Sync Impact Report
-- Version: 1.0.0 -> 2.0.0 (supervised multi-label scope and evidence-dimension redefinition).
+- Version: 2.0.0 -> 3.0.0 (approved redefinition of classifier eligibility).
 - Modified principles:
-  - I. Post-Hoc Reliability, Not Disease Prediction -> same title; supervised scope clarified.
-  - II. Patient-Label Assessment and Patient-Level Isolation ->
-    II. Multi-Label Safety Assessment and Patient-Level Isolation.
-  - IV. Exactly Six Safety Dimensions -> same title; explanation reliability clarified.
-  - V. Automatic, Model-Specific Safety Packages -> same title; setup sequence clarified.
-  - VI. Independent Data, Provenance, and Untouched Test Evidence -> same title; split lock clarified.
-  - VII. Explicit Signal Availability -> same title; setup and runtime cases distinguished.
-  - VIII. Evidence-Derived Targets and Operating Points -> same title; selective policy added.
-  - IX. Safe Abstention and Readiness -> same title; outcomes and readiness separated.
+  - II. Multi-Label Safety Assessment and Patient-Level Isolation ->
+    Classifier-Scoped Label Assessment and Patient-Level Isolation.
+  - V. Automatic, Model-Specific Safety Packages: both eligible classifier forms;
+    component composition does not transfer package compatibility.
 - Added sections: none. Removed sections: none.
 - Other amended text: Additional Constraints and Development Workflow.
-- Follow-up TODOs: none; estimator structure and numerical policy choices remain for specifications.
+- Reason: user-approved standalone binary and multi-model component support.
+- Compatibility: existing multi-label registrations remain valid and unchanged.
+  Single-label eligibility requires the focused implementation in amendment tasks
+  T024-T028; no storage redesign or adapter/assessment contract change is authorized.
+- Synchronized: Feature 001 spec, plan, research, data model, Python contract,
+  quickstart, checklist, and appended tasks. Templates retain generic headings.
+- PD-specific handoff reviewed; actual contributor identity material and prediction-to-class
+  mappings remain integration prerequisites; see Feature 001 scope-amendment.md.
 -->
 # Safira Constitution
 
@@ -26,9 +28,14 @@ prediction, diagnosis, or treatment recommendation. Predictor confidence alone M
 establish that a prediction is safe to trust. This separation prevents a high disease
 probability from being mistaken for evidence of correctness.
 
-### II. Multi-Label Safety Assessment and Patient-Level Isolation
-Safira MUST support supervised multi-label primary classifiers and independently assess
-the reliability of each predicted label for a patient. One patient-label pair is the
+### II. Classifier-Scoped Label Assessment and Patient-Level Isolation
+Safira MUST support standalone supervised single-label binary primary classifiers and
+supervised multi-label primary classifiers with binary outcomes for each label. Label
+cardinality MUST be evaluated for each individual classifier. Multiple independently
+registered classifiers MAY contribute predictions to one component-level output; that
+component's combined label count MUST NOT determine any contributor's task type.
+Safira MUST independently assess the reliability of each predicted label for a patient.
+One patient-label pair is the
 fundamental assessment unit. For each assessable pair, Safira MUST produce a traceable
 label-level assessment with an individual reliability score between 0 and 1, an individual
 TRUST, CAUTION, or DEFER status, and supporting reasons. These outputs MUST use the
@@ -39,9 +46,15 @@ from the same patient MAY receive different scores and statuses. Any optional pa
 level summary MUST retain all label-level outcomes and MUST NOT hide or override a
 label-level DEFER.
 
+Each prediction and assessment MUST retain its contributing classifier's exact identity,
+version, adapter compatibility, and label identity. If several classifiers predict the
+same label, their contributions MUST remain distinguishable; composition MUST NOT
+silently merge their predictions or transfer reliability evidence between classifiers.
+Any aggregation or fusion policy requires a separate specification and validation.
+
 All labels, observations, and repeated records associated with the same patient MUST
 remain in one data partition to prevent leakage. Automatic Model-Specific Safety
-Training MUST support multi-label classifiers and packages that assess each supported
+Training MUST support both eligible classifier forms and packages that assess each supported
 label independently. The feature specification and experimental validation MUST decide
 whether this uses separate per-label safety models or a shared label-aware estimator;
 this constitution does not prescribe either design.
@@ -64,7 +77,8 @@ or evaluation protocol rather than an invented signal.
 These dimensions define evidence families, not six mandatory numeric outputs.
 
 ### V. Automatic, Model-Specific Safety Packages
-For each registered supervised multi-label primary classifier and exact model version,
+For each registered supervised single-label binary or multi-label primary classifier
+and exact model version,
 Safira MUST provide an automatic setup path that trains and freezes a linked safety
 package when eligible labelled data and validation evidence exist. The path MUST cover
 these logical responsibilities in order:
@@ -85,6 +99,8 @@ calibration, decision policy, validation and final evaluation provenance, and ve
 compatibility. A package MUST NOT be assumed to transfer to another classifier or
 incompatible version. Setup MUST NOT produce a deployable package when essential
 training, calibration, or validation requirements are unmet.
+Combining predictions in a component MUST NOT make contributors' safety packages
+interchangeable or remove their individual compatibility and evidence requirements.
 
 ### VI. Independent Data, Provenance, and Untouched Test Evidence
 Safety training MUST use appropriately independent labelled data with reliable outcome,
@@ -165,7 +181,8 @@ clinical use. Any broader clinical claim requires separate evidence and review.
 ## Additional Constraints
 
 Safira targets Python 3.11 or later. Its current research and implementation scope is
-supervised classification with multi-label primary classifiers. It MUST remain model-
+supervised classification with standalone single-label binary and multi-label primary
+classifiers, each label having binary ground-truth outcomes. It MUST remain model-
 agnostic across supervised classifier architectures through its adapter boundary.
 Automatic safety training MUST use appropriately labelled data with known, verified
 reference outcomes. Safira MUST NOT claim support for unsupervised learning,
@@ -183,7 +200,8 @@ without retaining identifiable patient content in logs or committed artifacts.
 
 Feature work MUST start with a specification, continue through a plan and dependency-
 ordered tasks, and end with implementation and verification against acceptance criteria.
-Reviewers MUST confirm supervised multi-label and label-level behavior, patient-level
+Reviewers MUST confirm both eligible classifier forms, classifier-versus-component label
+cardinality, source-qualified label-level behavior, patient-level
 isolation, held-out calibration and policy evidence, untouched final testing,
 capability-aware signal handling, safe failure behavior, model-version compatibility,
 privacy, and accurate research claims where applicable.
@@ -203,4 +221,4 @@ redefinitions, MINOR for added principles or materially expanded guidance, and P
 non-semantic clarification. The version and amendment date MUST be updated with each
 approved change. Templates and other guidance remain subordinate to this constitution.
 
-**Version**: 2.0.0 | **Ratified**: 2026-10-15 | **Last Amended**: 2026-10-15
+**Version**: 3.0.0 | **Ratified**: 2026-10-15 | **Last Amended**: 2026-10-17
