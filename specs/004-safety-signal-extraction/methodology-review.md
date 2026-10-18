@@ -1,12 +1,12 @@
 # Feature 004 Supplemental Methodology Review
 
-**Purpose:** Pre-clarification scientific method-selection review for Safety Signal Extraction and Feature Engineering.  
-**Status:** Research recommendations only; no algorithm, threshold, sample minimum, or clarification decision is approved by this document.  
+**Purpose:** Supplemental scientific method-selection review for Safety Signal Extraction and Feature Engineering.
+**Status:** This review records the evidence considered before clarification. The Feature 004 specification records the subsequently approved candidate V1 method scope; this review alone does not approve method parameters, empirical adequacy, thresholds, or clinical validity.
 **Scope:** Literature-grounded candidates for the six constitutional dimensions, evaluated against current Feature 001–003 contracts and Safira FYP feasibility.
 
 ## Executive assessment
 
-Safira can define all six dimensions now, but current contracts do not support six universally available patient-level numeric features. A defensible small V1 should emit a result for every dimension while permitting `unsupported`, `missing`, `unavailable`, `invalid`, `insufficient evidence`, or `not ready` states. The result vocabulary already appears in the Feature 004 specification; its final mapping remains a clarification decision.
+Safira can define all six dimensions, but current contracts do not support six universally available patient-level numeric features. The clarified V1 scope emits a result or explicit non-value state for each dimension, using the approved availability-state meanings in the Feature 004 specification. No method is assumed clinically validated, and each method's parameters and adequacy criteria still require protocol approval.
 
 The most feasible V1 candidates are: a protocol-scoped evidence coverage profile for data sufficiency (with cohort adequacy kept outside predictors); binary predictive entropy only for registered probability outputs; a nearest-neighbour representation distance only when compatible representations and an approved independent reference exist; descriptive domain-category familiarity against a declared Feature 003 training cohort; and pairwise Jensen–Shannon disagreement only for comparable modality-specific probabilities. No per-patient explanation-reliability number is recommended for V1: current contracts can carry explanations but do not guarantee perturbation-linked explanations, an explanation method, or a model-execution interface for testing them. Explanation audits can be reported separately at the method/model level.
 
@@ -20,7 +20,7 @@ All fitted reference methods should use permitted predictor evidence from the Fe
 - Feature 003's training reference is the independent safety-supervision cohort. It is not equivalent to, and must not be silently replaced by, the primary classifier's original development/training data. Existing verifiers may report primary-model lineage and independence status, but real integrations are not configured in the repository. Their trustworthiness is an operational prerequisite, not something a method can infer from a passing synthetic test.
 - Existing `SafetyContext` evidence fields are mutable convenience projections with simple Boolean availability. Five-state Feature 002 evidence remains authoritative. Feature 004 should consume validated records/dataset values and produce its own detached, traceable results without changing `SafetyContext` or `SafetyAssessment`.
 
-The labels below describe **method suitability for a candidate V1**, not an approved implementation mandate. “Recommended for V1” is still conditional on an authorized clarification and the stated evidence prerequisites.
+The labels below explain the scientific basis and limitations of the candidates subsequently approved for the clarified V1 scope. The normative method scope is the Feature 004 specification and planning contract; this review is supplemental and does not override them.
 
 ---
 
@@ -180,19 +180,11 @@ This set gives each dimension a defined role, supports all three classifier conf
 7. **Empirical validation later:** compare kNN and Mahalanobis on an appropriately independent cohort only if representations support the question; assess uncertainty against independent correctness outcomes without using those outcomes to fit signal values; validate modality comparability and missingness; quantify category/support stability; and evaluate explanation measures against a declared perturbation protocol. Keep a final evaluation partition protected until methods are fixed. Report uncertainty, subgroup scope and limitations, not clinical safety claims.
 8. **Complexity:** the proposed V1 can use standard-library arithmetic and NumPy/scikit-learn only if already present and approved by the plan. MMD permutation inference, general Mahalanobis regularization, domain classifiers, explanation perturbation engines and multiple testing are optional research extensions, not prerequisites for the FYP minimum.
 
-## Unresolved research questions for `$speckit-clarify`
+## Study-Specific Parameters for Versioned Protocols
 
-These questions remain open; the recommendations above do not answer them on behalf of the project:
+The Feature 004 clarification session approved candidate V1 scopes for all six dimensions, patient-grouped cross-fitting, signal-state meanings, exact Feature 003 alignment, and a custodian-controlled apply-only protected-test boundary. Those decisions are recorded in [spec.md](spec.md); this review remains supporting scientific rationale, not evidence of empirical validation.
 
-1. **Data sufficiency:** which outputs are controlled cohort metadata only, which may be patient-level predictor features, and what precisely constitutes acceptable record-level evidence quality under an approved protocol?
-2. **OOD reference:** should V1 adopt raw kNN distance when a compatible representation exists, and which metric/representation normalization/reference population are supportable for the actual adapters? Is Mahalanobis retained only as a scoped comparator?
-3. **Uncertainty:** should V1 include only predictive entropy, or also repeated-output dispersion? Which registered probability semantics and stochastic provenance are enough for any decomposition claim?
-4. **Modality agreement:** approve pairwise JSD, absolute difference, or a source-defined method; specify aggregation for more than two modalities and how calibration comparability is established.
-5. **Domain familiarity:** approve a seen/unseen reference category as a signal; decide whether any category values/counts can be exposed to later model training without privacy or site-leakage concerns. Keep MMD as cohort-level analysis unless a specific study justifies it.
-6. **Explanation reliability:** should the V1 dimension remain explicitly unavailable except for provenance, or should a narrowly scoped perturbation metric be selected? Which models can be rerun, what perturbations preserve valid input semantics, and which output space is the target?
-7. **Fitted features and cross-fitting:** choose patient-grouped fold/self-exclusion behavior for training rows and define how limited cohorts yield insufficient evidence. Feature 003's approved protocol and actual available training examples must be sufficient; no protected-test shortcut is available through ordinary APIs.
-8. **Availability/readiness state mapping:** settle how `unsupported`, `missing`, `unavailable`, `invalid`, `insufficient evidence`, and `not ready` map to persisted Feature004 results without changing Feature002's evidence states.
-
+Before extraction, a versioned study protocol must still justify and record `k`, the distance metric and any representation transformation; entropy/JSD log base and modality aggregation; source-domain category semantics and privacy permission; grouped cross-fitting fold count/seed and adequacy criteria; and any method-specific support requirements. These are study configurations, not universal defaults. No protected-test outcomes may select or tune them.
 ## References
 
 Primary publisher/proceedings records are linked for verification. The short descriptions above are paraphrases of the cited works; the references do not by themselves validate an application to Safira's cohorts.
@@ -210,4 +202,4 @@ Primary publisher/proceedings records are linked for verification. The short des
 
 ## Review boundary
 
-This document supplements the Feature 004 specification for research discussion. It does not amend Constitution v3.0.0, approve the open specification decisions, revise Feature 001–003 contracts, establish thresholds or sample minima, authorize a protected-test pathway, or claim that the proposed methods are valid for clinical use. Technical planning should begin only after the project resolves material method and evidence questions through its approved clarification workflow.
+This document supplements the clarified Feature 004 specification. It does not amend Constitution v3.0.0 or Feature 001–003 contracts, establish universal thresholds or sample minima, configure a protected-test integration, or claim that the candidate methods are empirically or clinically validated.
