@@ -94,8 +94,8 @@ Signal-level states have the Feature 004 meanings in the specification: unsuppor
 |---|---|
 | FR-001–FR-010, SC-001–SC-003 | `validation.py`, `stateless.py`, `service.py`; exact source identity, configuration variants, states and non-aggregation tests. |
 | FR-011–FR-016 | `stateless.py`, `reference.py`; six method-specific calculation/metadata and availability tests. |
-| FR-017–FR-020, SC-005–SC-006, SC-010 | `reference.py`; train-only final fit, deterministic grouped folds, self-exclusion, exact compatibility and reproducibility tests. |
-| FR-021, SC-011 | injected custodian apply-only protocol; fake-custodian boundary tests, ordinary-surface inspection. |
+| FR-017–FR-020, SC-005–SC-006 | `reference.py`; train-only final fit, deterministic grouped folds, self-exclusion, exact compatibility and reproducibility tests. |
+| FR-021, SC-008 | injected custodian apply-only protocol; fake-custodian boundary tests, ordinary-surface inspection. |
 | FR-022–FR-027, SC-004, SC-007–SC-008 | `records.py`, `validation.py`, `service.py`; leakage, immutability, safe errors, provenance and contract regressions. |
 | FR-028–FR-029, SC-009 | public API boundary and acceptance tests; assert no estimator, calibration, policy or assessment behavior. |
 
@@ -106,7 +106,7 @@ Signal-level states have the Feature 004 meanings in the specification: unsuppor
 - Test standalone binary, multi-label and independently composed contributors with overlapping labels and exact version checks.
 - Test signal states against each Feature 002 evidence state and malformed, non-finite, unsupported and semantically incompatible values.
 - Test deterministic patient-group folds, group-wide exclusion (including other labels and visits), protocol seed use once, no alternate seed search, infeasible fold/reference outcomes, and final reference fitted exclusively from training rows.
-- Mutate validation/calibration/outcome/correctness/patient-group/protected input while holding allowed train predictor evidence fixed; fitted state and development feature values must remain unchanged as required.
+- Mutate validation/calibration/outcome/correctness/protected input while holding allowed training predictor evidence and verified grouping fixed; fitted state and development feature values must remain unchanged. Separately change verified patient grouping and assert fold assignments or cross-fitted scores may change, while every scored group's full records remain excluded from its reference, no prohibited information enters predictor features, and no patient identifier is emitted.
 - Inspect complete result objects and every serializer/error/log surface for protected content, supervision, identifiers and raw evidence leakage; verify deep immutability.
 - Test dataset verifier missing, false, wrong-content, wrong-dataset/version/protocol/manifest, wrong partition, stale and incomplete results. Test custodian handoff receives only frozen state/scope references, never protected rows, and ordinary callers receive no transformed values.
 - Run focused Feature 004 tests, Feature 001–003 regressions, then full `pytest`. Tests establish software behavior only; empirical validation requires a separate protocol and independent data.
