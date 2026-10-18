@@ -29,9 +29,9 @@
 - [x] CHK015 Success criteria are measurable through synthetic acceptance tests and do not make clinical claims.
 - [x] CHK016 Scope excludes safety-estimator training, reliability calibration, selective policy, and runtime assessment.
 - [x] CHK017 Dependencies on Features 001–003 and current limitations are stated without changing their contracts.
-- [ ] CHK018 Scientific definitions, algorithm choices, small-cohort behavior, and protected-test transformation lifecycle are resolved for technical planning.
+- [x] CHK018 Scientific definitions, algorithm choices, small-cohort behavior, and protected-test transformation lifecycle are resolved for technical planning.
 
 ## Notes
 
-- CHK001–CHK017 pass at specification-quality level. The remaining decisions are intentionally carried to `$speckit-clarify`; CHK018 therefore remains open and the feature is **not ready for technical planning** yet.
+- CHK001–CHK018 pass at specification-quality level after the 2026-10-18 clarification session. Method parameters and method-specific adequacy criteria remain to be documented in a versioned research protocol before extraction; this does not block technical planning.
 - The signal package currently has no operational implementations or signal-specific tests. Specification approval and later synthetic software tests will not establish scientific or clinical validity.
