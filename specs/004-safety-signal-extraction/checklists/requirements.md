@@ -21,7 +21,7 @@
 - [x] CHK010 Outcome, correctness, patient-group, partition, and protected-test leakage boundaries are explicit.
 - [x] CHK011 Privacy and protected-test restrictions follow Feature 003's actual ordinary-result and custodian-handoff boundary.
 - [x] CHK012 Positive, negative, missing-evidence, leakage, privacy, determinism, and compatibility acceptance cases are defined.
-- [x] CHK013 Material unresolved research decisions are recorded for clarification without silently choosing algorithms, thresholds, or universal minima.
+- [x] CHK013 Research-critical choices approved for the V1 candidate scope are distinguished from versioned-protocol parameters and empirical validation still required; no clinical validity is inferred from published methods.
 
 ## Feature Readiness
 
@@ -30,8 +30,10 @@
 - [x] CHK016 Scope excludes safety-estimator training, reliability calibration, selective policy, and runtime assessment.
 - [x] CHK017 Dependencies on Features 001–003 and current limitations are stated without changing their contracts.
 - [x] CHK018 Scientific definitions, algorithm choices, small-cohort behavior, and protected-test transformation lifecycle are resolved for technical planning.
+- [x] CHK019 All eleven success criteria (SC-001–SC-011) have explicit task and verification traceability, including cross-fitting invariants and protected-test isolation.
+- [x] CHK020 Feature 003 verification covers every embedded Feature 002 prediction's exact content and trusted admission lineage, or an independently controlled aggregate binding the complete row inventory and each row lineage; unverified rows cannot contribute to public results.
 
 ## Notes
 
-- CHK001–CHK018 pass at specification-quality level after the 2026-10-18 clarification session. Method parameters and method-specific adequacy criteria remain to be documented in a versioned research protocol before extraction; this does not block technical planning.
+- CHK001–CHK020 pass at specification/planning quality after the targeted consistency corrections. Method parameters and method-specific adequacy criteria remain to be documented in a versioned research protocol before extraction; this does not block planning, but public outputs require the trusted verifier boundary described in the contract.
 - The signal package currently has no operational implementations or signal-specific tests. Specification approval and later synthetic software tests will not establish scientific or clinical validity.
