@@ -8,6 +8,7 @@ from .exceptions import (
 )
 from .records import (
     CorrectnessExample, DatasetBuildResult, DatasetManifest, DatasetReadiness,
+    DatasetManifestReceipt, PredictionAdmissionVerification,
     EvaluationProtocol, EvidenceTimingDeclaration, ExclusionRecord,
     IndependenceEvidence, IndependenceVerification, LinkageVerification,
     OutcomeCandidate, OutcomeVerification, PatientLinkageDeclaration,
@@ -16,7 +17,8 @@ from .records import (
     TargetDefinition, TimingVerification, TransformationDeclaration,
     TransformationVerification,
 )
-from .verification import TrustedDatasetVerifier, ProtectedArtifactHandoff
+from .verification import (TrustedDatasetVerifier, ProtectedArtifactHandoff, DatasetManifestHandoff,
+                           prediction_fingerprint)
 
 __all__ = [
     "DatasetBuilder", "DatasetError", "InvalidDatasetInput", "DatasetVerificationFailed",
@@ -26,6 +28,7 @@ __all__ = [
     "TransformationDeclaration", "TransformationVerification", "PatientLinkageDeclaration", "LinkageVerification",
     "PriorAssignmentManifest", "PriorHistoryVerification", "EvaluationProtocol", "CorrectnessExample",
     "ExclusionRecord", "DatasetReadiness", "PartitionedDataset", "ProtectedTestArtifact",
-    "ProtectedArtifactReceipt", "DatasetManifest", "DatasetBuildResult", "TrustedDatasetVerifier",
-    "ProtectedArtifactHandoff",
+    "ProtectedArtifactReceipt", "DatasetManifestReceipt", "DatasetManifest", "DatasetBuildResult",
+    "PredictionAdmissionVerification", "TrustedDatasetVerifier", "ProtectedArtifactHandoff",
+    "DatasetManifestHandoff", "prediction_fingerprint",
 ]

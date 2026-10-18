@@ -20,6 +20,8 @@ def outcome(patient, assessment, label, value, content_ref="synthetic-content"):
 
 
 def linkage(entries):
+    entries = {(("synthetic-live" if namespace == "unknown" else namespace), patient): group
+               for (namespace, patient), group in entries.items()}
     return PatientLinkageDeclaration("synthetic-linkage", "v1", "synthetic-custodian",
                                      "synthetic-scope", "synthetic-evidence", entries)
 

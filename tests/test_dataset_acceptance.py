@@ -12,6 +12,11 @@ from safira import AdapterCapabilities, ModelAdapter, SafetyAssessment, SafetyCo
 
 
 class Verifier:
+    def verify_prediction_admission(self, prediction):
+        from safira.dataset import PredictionAdmissionVerification
+        from safira.dataset.verification import prediction_fingerprint
+        return PredictionAdmissionVerification(prediction_fingerprint(prediction),prediction.source_key,
+            prediction.association,prediction.provenance.mode,"verified","synthetic ledger","exact fixture lookup","admission-check")
     def verify_linkage(self, declaration, candidate_patient_refs, protocol):
         return LinkageVerification(declaration.linkage_id,declaration.linkage_version,declaration.scope,"verified","fixture","ledger","link-check",declaration.entries,tuple(candidate_patient_refs))
     def verify_outcome(self, outcome, prediction, target, binding):

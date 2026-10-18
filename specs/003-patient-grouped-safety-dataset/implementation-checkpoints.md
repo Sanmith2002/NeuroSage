@@ -1,5 +1,7 @@
 # Feature 003 implementation checkpoints
 
+Batch notes below are the historical implementation record. The post-audit remediation section at the end describes the current behavior and supersedes earlier limitation statements where they differ.
+
 ## Batch A — T001–T012
 
 - Completed: package and synthetic fixtures, immutable supplemental records, explicit verifier result types and scope validation, exact registry label binding, verified outcome/independence joins, correctness from `predicted_class`, and a live-record acceptance path.
@@ -24,3 +26,13 @@
 - Self-review: confirmed the protected artifact is passed only to the supplied handoff, ordinary result fields/`repr`/serialization exclude protected rows and outcome content, adequacy reads development rows only, no inference/evaluation or estimator paths are called, verifier checks bind exact content/source/target or group/lineage scope and require authority/method/evidence references, and no Feature 001/002 source files were changed.
 - Decisions and limitations: deterministic assignment hashes each group once using the exact configured seed and allocation order. Arbitrary hard site/time/strata constraints are returned as `INSUFFICIENT_EVIDENCE` because this repository has no approved group-attribute constraint contract. No trusted real-data integrations or storage service are configured; the returned manifest reference is a content digest, and callers/custodians remain responsible for controlled manifest persistence. Passing tests are synthetic software verification only.
 - Changed files: `src/safira/dataset/*.py`; `tests/dataset_fixtures.py`; `tests/test_dataset_*.py`; `specs/003-patient-grouped-safety-dataset/{tasks,quickstart,implementation-checkpoints}.md`.
+
+## Post-audit remediation — F1–F6
+
+- Added exact-record Feature 002 admission checks through an explicitly injected trusted verifier; self-asserted provenance fields cannot admit records without a matching trusted check.
+- Added an explicit custodian manifest handoff. The full immutable manifest is delivered only to that handoff; ordinary results expose only a digest reference and safe receipt.
+- Applied per-label adequacy criteria independently to each exact model/version/label scope and added exact-key `adequacy_by_source` criteria.
+- Enforced supported same-site assignment, timezone-qualified role windows, and allowed-strata membership for supplied and deterministic assignments. Unsupported constraints and missing group metadata report `NOT_READY`; infeasible supported constraints report `INSUFFICIENT_EVIDENCE`; no alternative seed is tried.
+- Removed the shared `unknown` namespace fallback. Live namespaces must be explicitly supplied for the exact record or unambiguously identified by the verified linkage declaration.
+- Made prior-history protected membership immutable and detached.
+- Verification after remediation: focused Feature 003 tests **60 passed**; registry/collection/context/assessment/adapter regressions **401 passed**; full pytest suite **461 passed**; `git diff --check` passed. All added integration verifiers and records are synthetic test doubles; real external authority/storage remains unconfigured.

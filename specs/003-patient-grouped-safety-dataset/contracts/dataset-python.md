@@ -1,6 +1,6 @@
-# Planned Python Contract: Feature 003 Dataset Builder
+# Python Contract: Feature 003 Dataset Builder
 
-This is a proposed in-process library boundary. It consumes Feature 001/002 public values and introduces supplemental supervised dataset records. Names/signatures are planning targets, not implemented APIs. There is no REST endpoint, registry migration, adapter change, safety estimator or clinical adjudication service in Feature 003.
+This describes the implemented in-process library boundary. It consumes Feature 001/002 public values and introduces supplemental supervised dataset records. There is no REST endpoint, registry migration, adapter change, safety estimator or clinical adjudication service in Feature 003.
 
 ## Public construction boundary
 
@@ -17,14 +17,22 @@ builder.build(
     *,
     prior_manifests=(),
     timing_declarations=(),
+    independence_evidence=(),
     transformation_declarations=(),
     protected_artifact_handoff=None,
+    manifest_handoff=None,
+    source_namespaces=None,
+    group_attributes=None,
 ) -> DatasetBuildResult
 ```
 
 Inputs are Feature 002 `PredictionRecord` values; normalized supplemental outcome/target, timing, independence and linkage values; and an approved versioned `EvaluationProtocol`. A source-specific trusted integration is explicitly supplied to the builder. It performs verification calls against independently controlled evidence and returns immutable scoped check records. Implementations must not accept a caller-provided pass Boolean, an identifier match or a digest as proof.
 
 The builder uses exact `ModelRegistry.get_metadata(model_id, model_version)` lookups. It does not call `resolve_usable`, attach/reload models, call `ModelAdapter.predict*`, or alter collection records. One output example is keyed by exact `(model_id, model_version, label_id)` plus assessment/occurrence; overlapping component labels remain separate.
+
+Before eligibility checks, the builder calls `trusted_verifier.verify_prediction_admission(prediction)` for each Feature 002 record. The immutable `PredictionAdmissionVerification` binds the SHA-256 fingerprint of the complete canonical record serialization, exact source key, patient/assessment/occurrence association, provenance mode, state, authority, method and evidence reference. A digest or typed result is not proof by itself: the explicitly configured integration must check the exact record against independently controlled Feature 002 admission evidence. Missing, rejected, mismatched or unverifiable admission excludes the record; if none remain, the result is `NOT_READY`. Caller-constructed records and self-asserted provenance fields cannot create admission evidence.
+
+Live `PredictionRecord` values do not carry a source namespace in the unchanged Feature 002 contract. The caller may provide `source_namespaces`, keyed by the exact prediction fingerprint, or the verified linkage declaration may identify one unambiguous namespace for that patient reference. The exact alias set is passed to the trusted linkage verifier. A missing, conflicting or ambiguous namespace, including the literal `unknown`, yields `NOT_READY`; namespaces are never defaulted or treated as interchangeable. Precomputed source-contract identifiers may supply a namespace when the declaration and trusted linkage check agree.
 
 ## Trusted verifier boundary
 
@@ -33,6 +41,10 @@ The integration is trusted configuration supplied explicitly by the research app
 Planned operations:
 
 ```python
+trusted_verifier.verify_prediction_admission(
+    prediction
+) -> PredictionAdmissionVerification
+
 trusted_verifier.verify_outcome(
     outcome, prediction, target_definition, target_binding
 ) -> OutcomeVerification
@@ -54,6 +66,10 @@ Each returned check is an immutable record bound to exact content/source version
 
 Outcome truth, model-development independence and patient linkage are separate checks. A successful outcome check does not imply independent supervision; an independence record does not verify an outcome; a linkage mapping does not establish either one.
 
+## Controlled manifest handoff
+
+`manifest_handoff` is a separate, explicitly injected custodian integration. After constructing the full immutable `DatasetManifest`, the builder passes it to `manifest_handoff.accept(manifest, protocol, manifest_reference)`. The integration persists or otherwise controls the manifest and returns a `DatasetManifestReceipt`; only that detached receipt and the digest reference may appear in `DatasetBuildResult`. The manifest itself, including opaque patient assignments, is never returned in an ordinary development result or serializer. If no manifest handoff is supplied, the builder can return a digest reference but the caller cannot recover the manifest from Feature 003; callers requiring reproducible persistence must supply the authorized handoff. This adds no database or storage service.
+
 ## Protected-artifact handoff
 
 `protected_artifact_handoff` is a separate explicit integration supplied for the build by the authorized custodian. Its single operation accepts the protected artifact only when the protocol permits assembly and returns a detached receipt/status:
@@ -68,7 +84,7 @@ The handoff owns restricted persistence and release under the study protocol; Fe
 
 ## Core value contract
 
-The planned `safira.dataset` exports frozen value types described in [data-model.md](../data-model.md): `TargetDefinition`, `TargetBinding`, `OutcomeCandidate`, `OutcomeVerification`, `IndependenceEvidence`, `IndependenceVerification`, `EvidenceTimingDeclaration`, `PatientLinkageDeclaration`, `LinkageVerification`, `PriorAssignmentManifest`, `PriorHistoryVerification`, `EvaluationProtocol`, `CorrectnessExample`, `ExclusionRecord`, `DatasetReadiness`, `PartitionedDataset`, `ProtectedTestArtifact`, `ProtectedArtifactReceipt`, `DatasetManifest`, and `DatasetBuildResult`. `ProtectedTestArtifact` is passed only to the separate handoff; it is not a field of `DatasetBuildResult`.
+The `safira.dataset` package exports frozen value types described in [data-model.md](../data-model.md), including `PredictionAdmissionVerification`, `DatasetManifestReceipt`, `DatasetManifest`, and `DatasetBuildResult`. `ProtectedTestArtifact` and `DatasetManifest` are passed only to their separate custodian handoffs; neither is a field of `DatasetBuildResult`.
 
 ### Correctness derivation
 
@@ -83,7 +99,7 @@ The builder never re-evaluates `primary.value`, classifies a score, uses calibra
 ## Partitioning and protected-test behavior
 
 - A protocol names training, validation, calibration and protected final-test roles and defines supplied assignments or a deterministic allocator with explicit configuration.
-- The allocator operates on opaque patient-group references, not example rows. It applies exactly one deterministic assignment using the exact declared seed/algorithm/allocation and validates declared constraints. It never attempts alternative seeds or tunes eligibility against protected outcomes. If the declared configuration is infeasible, it reports infeasibility even where a different seed might look favorable.
+- Supported constraints are `site_isolation="same_partition"` (all groups from one site share a role), ISO-8601 timezone-qualified `time_windows` with inclusive start/exclusive end bounds by role, and `allowed_strata` membership. `group_attributes` supplies opaque group-to-site/time/stratum values; it contains no patient identifiers. Supplied assignments are checked against every declared constraint. Deterministic allocation hashes each unconstrained group once, or each site once when site isolation is active; time windows determine the matching role. It never attempts alternative seeds or tunes eligibility against protected outcomes. Missing required group metadata returns `NOT_READY`; unsupported constraint names return `NOT_READY` with `unsupported_partition_constraint`; unsatisfied supported constraints return `INSUFFICIENT_EVIDENCE`.
 - Every visit, occurrence, label, contributor and source alias in a patient group receives one role across all related dataset views.
 - Prior sensitive manifests are checked for protected membership or assignment conflicts using `verify_prior_history` against independently controlled custodian history. The check covers origin, source/version, declared and requested scope, completeness evidence and relevant protected-test membership. A self-asserted complete manifest is insufficient. Missing or unverifiable history remains unknown and cannot support a cross-version protection claim; protocol-required verified history yields `NOT_READY` when unavailable.
 - Protected final-test rows are never fields of `DatasetBuildResult`, any ordinary serializer, or development-facing view/API. When the protocol authorizes assembly, the builder sends the row-bearing artifact only to the explicit `protected_artifact_handoff` supplied for that build. The handoff accepts the artifact under the custodian's control and returns only a detached non-sensitive receipt/status; the ordinary result contains that receipt/status, never the artifact or its correctness targets. Protocol-permitted integrity/structural summaries are explicitly listed.
@@ -94,6 +110,12 @@ The builder never re-evaluates `primary.value`, classifies a score, uses calibra
 Accepted values are deeply immutable or own defensive copies of all nested inputs. Mutating original declarations, source values or returned serialization cannot mutate accepted examples, assignments or manifests. Public serialization is detached. Manifests containing patient-group references, source associations or protected membership are sensitive controlled artifacts. Tests inspect the complete `DatasetBuildResult` object and all ordinary serialization surfaces to ensure they contain no protected rows, outcomes or correctness targets. Ordinary summaries and errors contain only safe categories, approved aggregate scope/count information, and no identifying patient content, raw clinical data, row-level trace or protected outcome distribution.
 
 Canonical serialization may use the standard library and a digest for deterministic comparison/change detection. Such a digest is not source proof, outcome verification, patient identity evidence or authorization.
+
+`PriorHistoryVerification.protected_membership` is normalized to a tuple of nonempty opaque references at construction. Mutating a caller-owned list after construction cannot change the accepted verification result.
+
+## Adequacy scope
+
+Global criteria such as `minimum_examples` describe the declared overall build scope. Per-label criteria (`minimum_examples_per_label`, group counts, outcome counts, and correct/incorrect support) are evaluated independently for every exact `(model_id, model_version, label_id)` key; records from different contributors or versions never satisfy one another's per-label requirement. `EvaluationProtocol.adequacy_by_source` may add exact-key criteria, for example `{("model-a", "v2", "label-x"): {"minimum_examples": 20, "minimum_correct_predictions": 5}}`. No defaults or universal minima are introduced.
 
 ## Error and readiness contract
 

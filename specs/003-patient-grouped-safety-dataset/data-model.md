@@ -4,6 +4,10 @@ This model is supplemental to immutable Feature 001 registrations and Feature 00
 
 ## Identity and supervision inputs
 
+### PredictionAdmissionVerification
+
+An explicitly injected trusted integration verifies one exact Feature 002 record against independently controlled admission evidence. The result binds the canonical fingerprint of the complete record, exact model/version/label key, patient/assessment/occurrence association, provenance mode, state, authority, method and evidence reference. A caller-constructed `PredictionRecord`, a `SourceProvenance` assurance string, or the fingerprint alone is insufficient. The integration and its evidence store are outside Safira; synthetic test ledgers simulate this trust boundary.
+
 ### TargetDefinition
 
 Versioned meaning of one binary research outcome.
@@ -85,11 +89,12 @@ Versioned study rules for inclusion, partitions, adequacy and protected-test han
 - partition mode: supplied opaque patient-group assignments, or deterministic allocation configuration with explicit seed, role allocation, allowed strata, and stable algorithm version;
 - required site/time isolation and other hard constraints;
 - scope-specific adequacy criteria, limited-data status behavior and permitted summary outputs;
+- optional exact `(model_id, model_version, label_id)` adequacy overrides; per-label count criteria apply separately to every exact contributor key;
 - whether verified prior-history coverage is required, including expected custodian/source scope;
 - final-test assembly, access/release and cross-version reuse conditions;
 - transformation lineage policy and permitted use of each partition.
 
-Invariants: all four roles are explicit; no universal ratios or minima; no seed search or constraint weakening; any infeasible assignment fails with a scoped readiness result.
+Invariants: all four roles are explicit; no universal ratios or minima; no seed search or constraint weakening; any infeasible assignment fails with a scoped readiness result. Supported constraints are same-role assignment for all groups from one site, timezone-qualified role time windows, and allowed-stratum membership. Required group attributes are supplemental opaque inputs; unknown constraints are reported unsupported and never ignored.
 
 ### PriorAssignmentManifest and PriorHistoryVerification
 
@@ -104,6 +109,8 @@ An explicitly injected trusted research integration checks the manifest against 
 - the authority, method, evidence reference, check time/version, limitations and state (`verified_complete`, `partial`, `unavailable`, `stale`, `conflict`, or `unverifiable`).
 
 The builder compares the result against the submitted manifest and current protocol/build scope. A caller assertion, completeness flag, identifier or digest alone cannot produce `verified_complete`. Missing, partial, stale, conflicting or unverifiable history remains unknown and cannot support a cross-version protection claim. If the protocol requires verified coverage, the build is `NOT_READY`. Verified prior protected assignments cannot silently change because of a new seed, source alias, contributor or dataset version. An authorized protocol lifecycle change creates a traceable new artifact and does not rewrite prior history.
+
+`protected_membership` is copied to a tuple of nonempty opaque references when the verification value is constructed.
 
 ## Outputs
 
@@ -148,7 +155,7 @@ Immutable controlled artifact for reproduction and conflict detection:
 - outcome/evidence timing and preprocessing/transform declarations;
 - protected-test lifecycle state and permitted reuse.
 
-The full manifest may expose sensitive opaque group references and is treated as restricted. Ordinary reports contain only protocol-permitted aggregate status/counts. A canonical serialization digest can identify a manifest version or detect change; it is not proof of source identity, truth or linkage.
+The full manifest may expose sensitive opaque group references and is treated as restricted. An explicit `DatasetManifestHandoff` gives the complete immutable value to the authorized custodian and returns only a detached receipt to ordinary results; the manifest itself is never embedded in `DatasetBuildResult`. Ordinary reports contain only protocol-permitted aggregate status/counts. A canonical serialization digest can identify a manifest version or detect change; it is not proof of source identity, truth or linkage.
 
 ## State flow and invariants
 

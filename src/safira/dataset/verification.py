@@ -1,5 +1,7 @@
 """Explicit verifier interfaces and exact-scope result checks."""
 
+from hashlib import sha256
+import json
 from typing import Protocol, runtime_checkable
 
 from .exceptions import DatasetVerificationFailed
@@ -8,6 +10,7 @@ from .records import *
 
 @runtime_checkable
 class TrustedDatasetVerifier(Protocol):
+    def verify_prediction_admission(self, prediction) -> PredictionAdmissionVerification: ...
     def verify_outcome(self, outcome, prediction, target_definition, target_binding) -> OutcomeVerification: ...
     def verify_independence(self, prediction, model_metadata, independence_evidence, protocol) -> IndependenceVerification: ...
     def verify_linkage(self, linkage_declaration, candidate_patient_refs, protocol) -> LinkageVerification: ...
@@ -19,6 +22,38 @@ class TrustedDatasetVerifier(Protocol):
 @runtime_checkable
 class ProtectedArtifactHandoff(Protocol):
     def accept(self, artifact, protocol, manifest_reference) -> ProtectedArtifactReceipt: ...
+
+
+@runtime_checkable
+class DatasetManifestHandoff(Protocol):
+    """Explicit custodian boundary for restricted immutable manifests."""
+
+    def accept(self, manifest, protocol, manifest_reference) -> DatasetManifestReceipt: ...
+
+
+def prediction_fingerprint(prediction):
+    """Canonical fingerprint of the complete Feature 002 record value."""
+    try:
+        body = json.dumps(prediction.to_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    except Exception:
+        raise DatasetVerificationFailed("prediction_admission_failed") from None
+    return sha256(body.encode("utf-8")).hexdigest()
+
+
+def validate_prediction_admission(check, prediction):
+    if type(check) is not PredictionAdmissionVerification:
+        raise DatasetVerificationFailed("prediction_admission_failed")
+    expected = (prediction_fingerprint(prediction), prediction.source_key, prediction.association,
+                prediction.provenance.mode, "verified")
+    actual = (check.record_fingerprint, check.source_key, check.association,
+              check.provenance_mode, check.state)
+    if actual != expected or not all((check.authority, check.method, check.evidence_ref)):
+        raise DatasetVerificationFailed("prediction_admission_failed")
+
+
+def validate_manifest_receipt(receipt):
+    if type(receipt) is not DatasetManifestReceipt or receipt.status != "accepted" or not receipt.receipt_ref:
+        raise DatasetVerificationFailed("manifest_handoff_failed")
 
 
 def validate_outcome_check(check, outcome, binding):

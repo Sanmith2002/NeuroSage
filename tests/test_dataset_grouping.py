@@ -111,7 +111,7 @@ def test_unsupported_hard_constraints_fail_without_trying_other_assignments(monk
     monkeypatch.setattr(partitioning,"sha256",lambda value: calls.append(value))
     p=EvaluationProtocol("p","v1","t","v1",partition_mode="deterministic",seed="approved-seed",
         algorithm_version="hash-v1",allocation_order=("train","validation","calibration","protected_test"),
-        hard_constraints={"site_isolation":"required"})
+        hard_constraints={"invented_rule":"required"})
     with pytest.raises(DatasetProtocolError): assign_groups({"g"},p)
     assert calls==[]
 

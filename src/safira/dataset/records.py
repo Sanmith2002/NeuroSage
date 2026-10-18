@@ -155,6 +155,26 @@ class IndependenceVerification:
 
 
 @dataclass(frozen=True)
+class PredictionAdmissionVerification:
+    """Trusted check that one exact Feature 002 record was admitted by its source."""
+
+    record_fingerprint: str
+    source_key: tuple[str, str, str]
+    association: Any
+    provenance_mode: str
+    state: str
+    authority: str = ""
+    method: str = ""
+    evidence_ref: str = ""
+
+    def __post_init__(self):
+        _text(self.record_fingerprint, "prediction_admission_fingerprint")
+        if not isinstance(self.source_key, (tuple, list)) or len(self.source_key) != 3:
+            raise InvalidDatasetInput("prediction_admission_scope")
+        object.__setattr__(self, "source_key", tuple(self.source_key))
+
+
+@dataclass(frozen=True)
 class EvidenceTimingDeclaration:
     source_key: tuple[str,str,str]
     occurrence_ref: str
@@ -270,6 +290,14 @@ class PriorHistoryVerification:
     method: str = ""
     evidence_ref: str = ""
 
+    def __post_init__(self):
+        for name in ("manifest_id", "content_version", "origin", "source_id", "requested_scope", "declared_scope", "state"):
+            _text(getattr(self, name), "prior_history_" + name)
+        membership = tuple(self.protected_membership)
+        if any(type(group) is not str or not group for group in membership):
+            raise InvalidDatasetInput("prior_history_membership")
+        object.__setattr__(self, "protected_membership", membership)
+
 
 @dataclass(frozen=True)
 class EvaluationProtocol:
@@ -291,6 +319,7 @@ class EvaluationProtocol:
     require_transform_declarations: bool = False
     require_adequacy_criteria: bool = False
     adequacy_criteria: Mapping[str,Any] = field(default_factory=dict)
+    adequacy_by_source: Mapping[tuple[str, str, str], Mapping[str, Any]] = field(default_factory=dict)
     permitted_summaries: tuple[str,...] = ("row_count","group_count")
     def __post_init__(self):
         if self.partition_mode not in ("supplied","deterministic"): raise InvalidDatasetInput("partition_mode")
@@ -303,7 +332,19 @@ class EvaluationProtocol:
             elif key=="maximum_outcome_imbalance_ratio":
                 if type(value) not in (int,float) or value<1 or not isfinite(value): raise InvalidDatasetInput("adequacy_criteria")
             elif type(value) is not int or value<0: raise InvalidDatasetInput("adequacy_criteria")
-        object.__setattr__(self,"assignments",_freeze(self.assignments)); object.__setattr__(self,"hard_constraints",_freeze(self.hard_constraints)); object.__setattr__(self,"adequacy_criteria",_freeze(self.adequacy_criteria))
+        scoped_allowed = allowed_criteria - {"required_labels", "required_modalities"}
+        for scope, scoped in self.adequacy_by_source.items():
+            if not isinstance(scope, (tuple, list)) or len(scope) != 3 or any(type(x) is not str or not x for x in scope):
+                raise InvalidDatasetInput("adequacy_scope")
+            if not isinstance(scoped, Mapping) or set(scoped) - scoped_allowed:
+                raise InvalidDatasetInput("adequacy_scope")
+            for key,value in scoped.items():
+                if key == "maximum_outcome_imbalance_ratio":
+                    if type(value) not in (int,float) or value < 1 or not isfinite(value):
+                        raise InvalidDatasetInput("adequacy_scope")
+                elif type(value) is not int or value < 0:
+                    raise InvalidDatasetInput("adequacy_scope")
+        object.__setattr__(self,"assignments",_freeze(self.assignments)); object.__setattr__(self,"hard_constraints",_freeze(self.hard_constraints)); object.__setattr__(self,"adequacy_criteria",_freeze(self.adequacy_criteria)); object.__setattr__(self,"adequacy_by_source",_freeze(self.adequacy_by_source))
         for name in ("roles","allocation_order","allowed_strata","permitted_summaries","required_timing_categories"):
             object.__setattr__(self,name,tuple(getattr(self,name)))
 
@@ -370,6 +411,17 @@ class ProtectedArtifactReceipt:
 
 
 @dataclass(frozen=True)
+class DatasetManifestReceipt:
+    status: str
+    receipt_ref: str = ""
+    def __post_init__(self):
+        if self.status not in ("accepted", "unavailable", "rejected"):
+            raise InvalidDatasetInput("manifest_receipt_status")
+        if self.status == "accepted":
+            _text(self.receipt_ref, "manifest_receipt_ref")
+
+
+@dataclass(frozen=True)
 class DatasetManifest:
     dataset_id: str
     protocol_id: str
@@ -399,8 +451,9 @@ class DatasetBuildResult:
     manifest_reference: str
     protected_receipt: ProtectedArtifactReceipt | None = None
     summary: Mapping[str,int] = field(default_factory=dict)
+    manifest_receipt: DatasetManifestReceipt | None = None
     def __post_init__(self):
         _text(self.manifest_reference,"manifest_reference")
         object.__setattr__(self,"exclusions",tuple(self.exclusions))
         object.__setattr__(self,"summary",_freeze(self.summary))
-    def to_dict(self): return {"development":self.development.to_dict(),"readiness":{"state":self.readiness.state,"reason_codes":list(self.readiness.reason_codes),"scope":self.readiness.scope},"exclusions":[{"source_ref":x.source_ref,"reason_code":x.reason_code,"stage":x.stage} for x in self.exclusions],"manifest_ref":self.manifest_reference,"protected_receipt":None if self.protected_receipt is None else {"status":self.protected_receipt.status,"receipt_ref":self.protected_receipt.receipt_ref},"summary":_thaw(self.summary)}
+    def to_dict(self): return {"development":self.development.to_dict(),"readiness":{"state":self.readiness.state,"reason_codes":list(self.readiness.reason_codes),"scope":self.readiness.scope},"exclusions":[{"source_ref":x.source_ref,"reason_code":x.reason_code,"stage":x.stage} for x in self.exclusions],"manifest_ref":self.manifest_reference,"protected_receipt":None if self.protected_receipt is None else {"status":self.protected_receipt.status,"receipt_ref":self.protected_receipt.receipt_ref},"manifest_receipt":None if self.manifest_receipt is None else {"status":self.manifest_receipt.status,"receipt_ref":self.manifest_receipt.receipt_ref},"summary":_thaw(self.summary)}

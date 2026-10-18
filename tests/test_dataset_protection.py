@@ -8,6 +8,10 @@ from tests.dataset_fixtures import target_and_binding, outcome, linkage, protoco
 
 
 class Verifier:
+    def verify_prediction_admission(self,r):
+        from safira.dataset import PredictionAdmissionVerification
+        from safira.dataset.verification import prediction_fingerprint
+        return PredictionAdmissionVerification(prediction_fingerprint(r),r.source_key,r.association,r.provenance.mode,"verified","synthetic ledger","exact fixture lookup","admission-check")
     def verify_linkage(self,d,refs,p): return LinkageVerification(d.linkage_id,d.linkage_version,d.scope,"verified","a","m","e",d.entries,tuple(refs))
     def verify_outcome(self,o,r,t,b): return OutcomeVerification(o.content_ref,o.source_contract_id,o.source_contract_version,o.patient_ref,o.assessment_ref,o.label_id,o.target_id,o.target_version,"verified","a","m","e",source_namespace=o.source_namespace,source_record_ref=o.source_record_ref)
     def verify_independence(self,r,m,e,p): return IndependenceVerification(r.model_id,r.model_version,r.label_id,e.target_id,e.target_version,"eligible","a","m","e",e.development_source_ref,e.lineage_ref)
