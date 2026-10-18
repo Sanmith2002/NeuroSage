@@ -40,7 +40,12 @@ class ManifestCustodian:
         from safira.dataset import DatasetManifestReceipt
 
         self.manifests.append((manifest, protocol.protocol_id, manifest_reference))
-        return DatasetManifestReceipt("accepted", "synthetic-custodian-receipt")
+        return DatasetManifestReceipt(
+            "accepted", "synthetic-custodian-receipt", manifest_reference, manifest.digest,
+            manifest.dataset_id, manifest.protocol_id, manifest.protocol_version,
+            manifest.builder_version, "synthetic-custodian", "exact-manifest-readback",
+            "synthetic-readback-evidence",
+        )
 
 
 def _prediction(registry, definition, patient="patient-a", score_input=None):
@@ -117,9 +122,155 @@ def test_f2_manifest_is_sent_only_to_custodian_handoff(registered_collection):
     manifest = custodian.manifests[0][0]
     assert manifest.assignments == protocol.assignments
     assert manifest.digest == result.manifest_reference.removeprefix("manifest:")
+    assert result.manifest_receipt.manifest_reference == result.manifest_reference
+    assert result.manifest_receipt.manifest_digest == manifest.digest
+    assert result.manifest_receipt.dataset_id == manifest.dataset_id
     assert "assignments" not in result.to_dict()
     assert "synthetic-linkage" not in repr(result)
     assert "synthetic-linkage" not in repr(result.to_dict())
+
+
+def _receipt_for(manifest, reference, **overrides):
+    from safira.dataset import DatasetManifestReceipt
+
+    values = {
+        "status": "accepted",
+        "receipt_ref": "synthetic-custodian-receipt",
+        "manifest_reference": reference,
+        "manifest_digest": manifest.digest,
+        "dataset_id": manifest.dataset_id,
+        "protocol_id": manifest.protocol_id,
+        "protocol_version": manifest.protocol_version,
+        "builder_version": manifest.builder_version,
+        "custodian_id": "synthetic-custodian",
+        "verification_method": "exact-manifest-store-readback",
+        "evidence_ref": "synthetic-readback-evidence",
+    }
+    values.update(overrides)
+    return DatasetManifestReceipt(**values)
+
+
+def _manifest_for_receipt(dataset_id="dataset-a", protocol_version="v1"):
+    from safira.dataset import DatasetManifest
+
+    return DatasetManifest(dataset_id, "synthetic-protocol", protocol_version, "builder-v1",
+                           {"opaque-group": "train"})
+
+
+def test_f2_receipt_for_another_manifest_is_rejected():
+    from safira.dataset.verification import validate_manifest_receipt
+    from safira.dataset.exceptions import DatasetVerificationFailed
+
+    submitted = _manifest_for_receipt()
+    other = _manifest_for_receipt("dataset-b")
+    with pytest.raises(DatasetVerificationFailed, match="manifest_handoff_failed"):
+        validate_manifest_receipt(_receipt_for(other, "manifest:" + other.digest), submitted,
+                                  "manifest:" + submitted.digest)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("manifest_digest", "0" * 64),
+    ("manifest_reference", "manifest:stale-reference"),
+])
+def test_f2_incorrect_manifest_digest_or_reference_is_rejected(field, value):
+    from safira.dataset.verification import validate_manifest_receipt
+    from safira.dataset.exceptions import DatasetVerificationFailed
+
+    submitted = _manifest_for_receipt()
+    with pytest.raises(DatasetVerificationFailed, match="manifest_handoff_failed"):
+        validate_manifest_receipt(_receipt_for(submitted, "manifest:" + submitted.digest,
+                                               **{field: value}), submitted,
+                                  "manifest:" + submitted.digest)
+
+
+def test_f2_missing_manifest_binding_fields_are_rejected():
+    from safira.dataset import DatasetManifestReceipt
+    from safira.dataset.verification import validate_manifest_receipt
+    from safira.dataset.exceptions import DatasetVerificationFailed
+
+    submitted = _manifest_for_receipt()
+    unbound = DatasetManifestReceipt("accepted", "synthetic-receipt")
+    with pytest.raises(DatasetVerificationFailed, match="manifest_handoff_failed"):
+        validate_manifest_receipt(unbound, submitted, "manifest:" + submitted.digest)
+
+
+def test_f2_stale_or_inconsistent_receipt_identity_is_rejected():
+    from safira.dataset.verification import validate_manifest_receipt
+    from safira.dataset.exceptions import DatasetVerificationFailed
+
+    submitted = _manifest_for_receipt()
+    with pytest.raises(DatasetVerificationFailed, match="manifest_handoff_failed"):
+        validate_manifest_receipt(_receipt_for(submitted, "manifest:" + submitted.digest,
+                                               protocol_version="v0"), submitted,
+                                  "manifest:" + submitted.digest)
+
+
+def test_f2_self_asserted_acceptance_without_verification_evidence_is_rejected():
+    from safira.dataset.verification import validate_manifest_receipt
+    from safira.dataset.exceptions import DatasetVerificationFailed
+
+    submitted = _manifest_for_receipt()
+    with pytest.raises(DatasetVerificationFailed, match="manifest_handoff_failed"):
+        validate_manifest_receipt(_receipt_for(submitted, "manifest:" + submitted.digest,
+                                               verification_method="", evidence_ref=""),
+                                  submitted, "manifest:" + submitted.digest)
+
+
+def test_f2_correct_receipt_is_bound_to_exact_submitted_manifest():
+    from safira.dataset.verification import validate_manifest_receipt
+
+    submitted = _manifest_for_receipt()
+    receipt = _receipt_for(submitted, "manifest:" + submitted.digest)
+    validate_manifest_receipt(receipt, submitted, "manifest:" + submitted.digest)
+
+
+def test_f2_mismatched_handoff_receipt_returns_non_ready_build(registered_collection):
+    registry, register = registered_collection
+    _, _, prediction, target, binding, protocol = _setup(registry, register)
+    from safira.dataset.verification import prediction_fingerprint
+
+    class MismatchedCustodian:
+        def accept(self, manifest, protocol, manifest_reference):
+            return _receipt_for(manifest, manifest_reference, manifest_digest="0" * 64)
+
+    result = _build(registry, AdmissionLedger({prediction_fingerprint(prediction)}),
+                    MismatchedCustodian(), prediction, target, [binding], protocol,
+                    source_namespaces={prediction_fingerprint(prediction): "synthetic-live"})
+    assert result.readiness.state == "NOT_READY"
+    assert result.readiness.reason_codes == ("manifest_handoff_failed",)
+    assert not result.development.train
+
+
+def test_f2_unavailable_handoff_fails_closed(registered_collection):
+    from safira.dataset import DatasetManifestReceipt
+    registry, register = registered_collection
+    _, _, prediction, target, binding, protocol = _setup(registry, register)
+    from safira.dataset.verification import prediction_fingerprint
+
+    class UnavailableCustodian:
+        def accept(self, manifest, protocol, manifest_reference):
+            return DatasetManifestReceipt("unavailable")
+
+    result = _build(registry, AdmissionLedger({prediction_fingerprint(prediction)}),
+                    UnavailableCustodian(), prediction, target, [binding], protocol,
+                    source_namespaces={prediction_fingerprint(prediction): "synthetic-live"})
+    assert result.readiness.state == "NOT_READY"
+    assert result.readiness.reason_codes == ("manifest_handoff_failed",)
+    assert not result.development.train
+
+
+def test_f2_omitted_handoff_is_in_memory_only(registered_collection):
+    registry, register = registered_collection
+    _, _, prediction, target, binding, protocol = _setup(registry, register)
+    from safira.dataset.verification import prediction_fingerprint
+
+    result = _build(registry, AdmissionLedger({prediction_fingerprint(prediction)}), None,
+                    prediction, target, [binding], protocol,
+                    source_namespaces={prediction_fingerprint(prediction): "synthetic-live"})
+    assert result.readiness.state == "ready"
+    assert result.manifest_receipt is None
+    assert result.manifest_reference.startswith("manifest:")
+    assert "assignments" not in result.to_dict()
 
 
 def test_f3_per_label_adequacy_is_checked_per_exact_contributor(registered_collection):

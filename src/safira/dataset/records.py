@@ -414,11 +414,26 @@ class ProtectedArtifactReceipt:
 class DatasetManifestReceipt:
     status: str
     receipt_ref: str = ""
+    manifest_reference: str = ""
+    manifest_digest: str = ""
+    dataset_id: str = ""
+    protocol_id: str = ""
+    protocol_version: str = ""
+    builder_version: str = ""
+    custodian_id: str = ""
+    verification_method: str = ""
+    evidence_ref: str = ""
     def __post_init__(self):
         if self.status not in ("accepted", "unavailable", "rejected"):
             raise InvalidDatasetInput("manifest_receipt_status")
-        if self.status == "accepted":
+        if self.receipt_ref:
             _text(self.receipt_ref, "manifest_receipt_ref")
+        for name in ("manifest_reference", "manifest_digest", "dataset_id", "protocol_id",
+                     "protocol_version", "builder_version", "custodian_id", "verification_method",
+                     "evidence_ref"):
+            value = getattr(self, name)
+            if value:
+                _text(value, "manifest_receipt_" + name)
 
 
 @dataclass(frozen=True)
@@ -456,4 +471,4 @@ class DatasetBuildResult:
         _text(self.manifest_reference,"manifest_reference")
         object.__setattr__(self,"exclusions",tuple(self.exclusions))
         object.__setattr__(self,"summary",_freeze(self.summary))
-    def to_dict(self): return {"development":self.development.to_dict(),"readiness":{"state":self.readiness.state,"reason_codes":list(self.readiness.reason_codes),"scope":self.readiness.scope},"exclusions":[{"source_ref":x.source_ref,"reason_code":x.reason_code,"stage":x.stage} for x in self.exclusions],"manifest_ref":self.manifest_reference,"protected_receipt":None if self.protected_receipt is None else {"status":self.protected_receipt.status,"receipt_ref":self.protected_receipt.receipt_ref},"manifest_receipt":None if self.manifest_receipt is None else {"status":self.manifest_receipt.status,"receipt_ref":self.manifest_receipt.receipt_ref},"summary":_thaw(self.summary)}
+    def to_dict(self): return {"development":self.development.to_dict(),"readiness":{"state":self.readiness.state,"reason_codes":list(self.readiness.reason_codes),"scope":self.readiness.scope},"exclusions":[{"source_ref":x.source_ref,"reason_code":x.reason_code,"stage":x.stage} for x in self.exclusions],"manifest_ref":self.manifest_reference,"protected_receipt":None if self.protected_receipt is None else {"status":self.protected_receipt.status,"receipt_ref":self.protected_receipt.receipt_ref},"manifest_receipt":None if self.manifest_receipt is None else {"status":self.manifest_receipt.status,"receipt_ref":self.manifest_receipt.receipt_ref,"manifest_reference":self.manifest_receipt.manifest_reference,"manifest_digest":self.manifest_receipt.manifest_digest,"dataset_id":self.manifest_receipt.dataset_id,"protocol_id":self.manifest_receipt.protocol_id,"protocol_version":self.manifest_receipt.protocol_version,"builder_version":self.manifest_receipt.builder_version,"custodian_id":self.manifest_receipt.custodian_id,"verification_method":self.manifest_receipt.verification_method,"evidence_ref":self.manifest_receipt.evidence_ref},"summary":_thaw(self.summary)}

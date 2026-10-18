@@ -51,8 +51,17 @@ def validate_prediction_admission(check, prediction):
         raise DatasetVerificationFailed("prediction_admission_failed")
 
 
-def validate_manifest_receipt(receipt):
-    if type(receipt) is not DatasetManifestReceipt or receipt.status != "accepted" or not receipt.receipt_ref:
+def validate_manifest_receipt(receipt, manifest, manifest_reference):
+    if type(receipt) is not DatasetManifestReceipt or receipt.status != "accepted":
+        raise DatasetVerificationFailed("manifest_handoff_failed")
+    expected_reference = "manifest:" + manifest.digest
+    expected = (expected_reference, manifest.digest, manifest.dataset_id,
+                manifest.protocol_id, manifest.protocol_version, manifest.builder_version)
+    actual = (receipt.manifest_reference, receipt.manifest_digest, receipt.dataset_id,
+              receipt.protocol_id, receipt.protocol_version, receipt.builder_version)
+    if (manifest_reference != expected_reference or actual != expected
+            or not all((receipt.receipt_ref, receipt.custodian_id,
+                        receipt.verification_method, receipt.evidence_ref))):
         raise DatasetVerificationFailed("manifest_handoff_failed")
 
 

@@ -28,7 +28,9 @@ The trusted verifier must implement `verify_prediction_admission(prediction)`. I
 
 For live records, provide an exact source namespace in the verified linkage declaration when that patient reference maps to one namespace, or pass `source_namespaces={prediction_fingerprint: namespace}` to disambiguate it. Do not use `unknown`. `group_attributes` supplies only the opaque site, timezone-qualified timestamp, or stratum values required by declared partition constraints.
 
-When the research custodian needs the reproducibility artifact, pass an explicit `manifest_handoff` implementing `accept(manifest, protocol, manifest_reference)`. It receives the complete immutable, restricted `DatasetManifest`; the ordinary result contains only the handoff receipt and digest reference. Without this handoff, Feature 003 does not retain or expose the manifest for later recovery.
+When the research custodian needs the reproducibility artifact, pass an explicit `manifest_handoff` implementing `accept(manifest, protocol, manifest_reference)`. It receives the complete immutable, restricted `DatasetManifest`. Its accepted receipt must bind the exact manifest reference and digest, dataset ID, protocol ID/version, and builder version, and include custodian, verification-method, evidence, and receipt references. The builder checks these values against the exact submitted manifest; missing or mismatched bindings make the build `NOT_READY`. The ordinary result contains only the detached receipt and digest reference. Without this handoff, Feature 003 constructs in memory and retains no recoverable manifest.
+
+A correctly bound receipt records the authorized integration's acceptance of that exact manifest; it does not independently prove durable storage. Only claim persistence when the custodian integration itself performs and verifies that guarantee. Feature 003 provides no storage service and makes no persistence claim on its own.
 
 ## Verified commands and results
 
@@ -64,7 +66,7 @@ No classifier or adapter prediction method runs during dataset construction. A t
 ## Integration limits
 
 - There is no authorized real outcome, model-development lineage, patient-linkage, timing, transform-lineage, or prior-history source configured in this repository. Synthetic passing tests establish software behavior only; they do not establish clinical validity, adequate real-world sample size, or safety.
-- The builder returns only a manifest reference and safe aggregates. To obtain and persist the complete controlled manifest, the authorized custodian supplies `manifest_handoff`; Feature 003 adds no store or access-control service. The handoff receipt must be non-sensitive.
+- The builder returns only a manifest reference and safe aggregates. The authorized custodian may receive the complete controlled manifest through `manifest_handoff`; Feature 003 adds no store or access-control service. Receipt references and verification metadata must be non-sensitive. A receipt does not establish durable persistence unless the custodian integration performs and verifies it.
 - Supported constraints are site isolation (`same_partition`), timezone-qualified time windows, and declared strata membership. Unknown constraints return `NOT_READY`; missing group attributes return `NOT_READY`; unsatisfied supported constraints return `INSUFFICIENT_EVIDENCE`. Deterministic allocation uses exactly the approved seed with no alternatives.
 - Per-label adequacy criteria apply independently to each exact model/version/label contributor. `adequacy_by_source` can declare additional exact-key counts, including correct/incorrect support; no contributor's counts are combined solely by label name.
 - Protected rows are omitted from ordinary results and serialization. When required, a per-build custodian handoff receives them and returns only a safe accepted status.

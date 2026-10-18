@@ -226,7 +226,7 @@ class DatasetBuilder:
         if manifest_handoff is not None:
             try:
                 manifest_receipt=manifest_handoff.accept(manifest,protocol,ref)
-                validate_manifest_receipt(manifest_receipt)
+                validate_manifest_receipt(manifest_receipt,manifest,ref)
             except Exception:
                 return self._empty(protocol,"NOT_READY","manifest_handoff_failed",exclusions)
         if protocol.require_protected_handoff and protected:
