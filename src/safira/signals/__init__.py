@@ -1,6 +1,7 @@
 """Feature 004 safety signal extraction primitives."""
 
-from safira.signals.base import SignalDimension, SignalInputVerifier, SignalState
+from safira.signals.base import (DatasetInputVerifier, ProtectedSignalApplyHandoff,
+                                 SignalDimension, SignalInputVerifier, SignalState)
 from safira.signals.exceptions import (
     SignalCompatibilityError,
     SignalError,
@@ -11,19 +12,31 @@ from safira.signals.exceptions import (
     SignalVerificationError,
 )
 from safira.signals.records import (
+    Feature003DatasetReference,
     FittedStateReference,
+    ProtectedApplyReceipt,
+    ProtectedApplyRequest,
+    SignalDatasetCheck,
+    SignalDatasetRowCheck,
+    SignalFeatureRecord,
+    SignalFeatureSet,
     SignalInputCheck,
     SignalMethodConfig,
     SignalProtocol,
     SignalResult,
+    SignalRowKey,
+    SignalRunManifest,
     SignalSourceKey,
 )
 from safira.signals.service import SignalExtractor
 
 __all__ = [
-    "SignalDimension", "SignalState", "SignalInputVerifier", "SignalError", "SignalInputError",
+    "SignalDimension", "SignalState", "SignalInputVerifier", "DatasetInputVerifier",
+    "ProtectedSignalApplyHandoff", "SignalError", "SignalInputError",
     "SignalVerificationError", "SignalProtocolError", "SignalCompatibilityError",
     "SignalNotReady", "SignalPrivacyError", "SignalSourceKey", "SignalMethodConfig",
     "SignalProtocol", "SignalInputCheck", "SignalResult", "FittedStateReference",
-    "SignalExtractor",
+    "SignalExtractor", "Feature003DatasetReference", "SignalDatasetRowCheck",
+    "SignalDatasetCheck", "SignalRowKey", "SignalFeatureRecord", "SignalFeatureSet",
+    "SignalRunManifest", "ProtectedApplyRequest", "ProtectedApplyReceipt",
 ]

@@ -1,6 +1,6 @@
 # Python Contract: Feature 004 Signals
 
-In-process library contract for the clarified Feature 004 V1. Names are planning-level, but behaviors and data boundaries are normative. This contract adds no fields/methods to Features 001–003 or existing adapter/context/assessment types.
+In-process library contract for the implemented Feature 004 V1. These interfaces add no fields or methods to Features 001–003 or existing adapter/context/assessment types.
 
 ## Proposed public surface
 
@@ -9,7 +9,12 @@ class SignalInputVerifier(Protocol):
     def verify_prediction(self, record: PredictionRecord) -> SignalInputCheck: ...
     def verify_dataset(
         self, result: DatasetBuildResult, reference: Feature003DatasetReference
-    ) -> SignalInputCheck: ...
+    ) -> SignalDatasetCheck: ...
+
+class DatasetInputVerifier(Protocol):
+    def verify_dataset(
+        self, result: DatasetBuildResult, reference: Feature003DatasetReference
+    ) -> SignalDatasetCheck: ...
 
 class SignalExtractor:
     def __init__(
@@ -18,6 +23,7 @@ class SignalExtractor:
         protocol: SignalProtocol,
         verifier: SignalInputVerifier,
         *,
+        dataset_verifier: DatasetInputVerifier | None = None,
         protected_apply: ProtectedSignalApplyHandoff | None = None,
     ) -> None: ...
 
@@ -34,6 +40,16 @@ class SignalExtractor:
         request: ProtectedApplyRequest,
     ) -> ProtectedApplyReceipt: ...
 ```
+
+The implementation accepts `dataset_verifier=` as an explicit independent injection. When omitted, the explicitly supplied `verifier` may serve both operations only if it implements `verify_dataset`; no global discovery or payload-selected verifier is used. Dataset protocol ID/version must equal the `SignalProtocol` ID/version. Reference-based configs declare `fold_count`, one `seed`, `evidence_schema`, and `preprocessing_identity`; all reference methods in a protocol use the same fold configuration, and preprocessing identity must equal the exact Feature 001 registration.
+
+`SignalDatasetCheck` is checked against the actual complete `DatasetBuildResult.to_dict()` fingerprint, exact dataset/protocol/manifest/builder reference, optional manifest digest, ready status, the exact train/validation/calibration authorization tuple, and the complete row inventory. Each actual row must match by fingerprint, source key, association/occurrence and partition. Safira then executes the injected `verify_prediction` for every embedded prediction and validates each exact Feature 001 registration before any reference fitting. Same-patient group references may occur across rows and contributors within one role, but a group crossing train/validation/calibration is rejected. A typed check or digest assertion alone is not trusted.
+
+`SignalFeatureSet` exposes immutable `training`, `validation`, and `calibration` tuples of `SignalFeatureRecord`, a privacy-safe `SignalRunManifest`, and exact-source training patient-group counts. These are descriptive counts only; the builder does not claim adequacy or disclose correctness-class counts because Feature 003's ordinary result does not convey authorization for those summaries. Each feature record has an opaque content-derived `SignalRowKey`, exact source key, and predictor `SignalResult` tuple. It contains no outcome, correctness, patient/group/assessment/occurrence identifier, group reference, or dataset partition field. Reference signals carry hashed evidence/state lineage; raw vector and category vocabulary remain internal.
+
+Every generated `SignalResult.primary_output` is a detached copy of the Feature 002 primary value, kind, scale, positive direction, class mapping, predicted class and calibration metadata. It remains explicitly the primary classifier output; no signal method relabels it as Safira reliability.
+
+`ProtectedApplyRequest` contains only `fitted_state_references`, `Feature003DatasetReference`, and an exact `method_scope`, with a canonical request fingerprint. `ProtectedApplyReceipt` must repeat the exact request fingerprint, dataset reference, state IDs and method scope, and include the custodian authority and evidence reference. An accepted status alone is rejected. The receipt establishes only what the injected custodian actually checks; it does not imply durable storage.
 
 `SignalInputVerifier` must be an application-owned, explicitly injected integration. `verify_prediction` executes a check against independently controlled Feature 002 admission evidence and binds the exact prediction content fingerprint, source key, association occurrence, provenance mode and input scope. `verify_dataset` binds the exact detached Feature 003 development input fingerprint, ready state, dataset/protocol/manifest reference and train/validation/calibration scopes, and independently establishes Feature 002 admission for every embedded development `PredictionRecord`. Its verified row inventory binds each row's exact canonical prediction/evidence content or fingerprint, Feature 002 source key, association/occurrence, model/version/label, admission lineage, dataset identity and authorized partition. A trusted aggregate attestation is sufficient only if independently controlled evidence covers the complete exact row inventory and each row's Feature 002 admission lineage; otherwise the integration verifies every row individually. The verifier rejects rows that are missing, duplicated, substituted, altered after admission, stale, or inconsistent in source identity, association, dataset or partition. No row lacking this check may contribute to signal values, cohort-support claims, reference fitting, or a published feature set. An `accepted` status, typed dataclass, caller Boolean, digest assertion, manifest reference or source field alone is not evidence. The integration performs the external check; Safira validates exact returned scope and fails closed. There is no hidden global verifier or payload-selected implementation.
 
@@ -77,7 +93,7 @@ For each exact source key and reference method:
 
 Cross-fit assignment algorithm: UTF-8 encode protocol seed and opaque group reference; compute `SHA256(seed || NUL || group_ref)`; interpret digest as unsigned big-endian integer; fold is integer modulo the protocol's `fold_count`. Algorithm version and seed are recorded. If the approved assignment scheme is explicitly supplied in the protocol, verify it covers every training patient group exactly once and use it; do not supplement missing assignments or reassign to improve adequacy.
 
-`fit_reference(dataset, reference, protocol) -> SignalFitResult` and `apply_reference(state, record, reference) -> SignalResult` may be exposed internally or as separate public calls; tasks may settle the exact wrapper. They must enforce the same input check, partition, identity, and state-compatibility rules as `build_feature_set`.
+Reference fitting and application are composed internally by `build_feature_set`; the package does not expose a separate public fit or apply operation for Feature 003 records. `extract_record` reports a configured reference method as `not_ready`, because an isolated prediction cannot establish a compatible training reference.
 
 ### Compatibility check
 

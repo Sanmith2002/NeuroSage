@@ -21,6 +21,8 @@ Feature 003 may return a reference without durable persistence. Feature 004 reco
 
 Result of an explicitly injected trusted `DatasetInputVerifier` call. Binds the canonical detached development input fingerprint, readiness, exact dataset/protocol/manifest reference, exact training/validation/calibration partition scopes and verification authority/method/evidence reference. It also binds the complete exact inventory of embedded development predictions. For each row, the independently controlled check establishes canonical record/evidence content or fingerprint, exact Feature 002 source key, association/occurrence, model/version/label, Feature 002 admission lineage, exact Feature 003 dataset identity, and authorized partition. A trusted aggregate attestation is sufficient only when its independent evidence binds the complete row inventory and every row's Feature 002 admission lineage; otherwise each row is checked individually. The check rejects row substitution, post-admission mutation, wrong association/source identity, and missing or stale admission evidence. A boolean, outer accepted status, digest supplied by the caller, manifest reference, or caller-created typed value is not independently verified evidence. The host integration must check against independently controlled Feature 002 admission and Feature 003 build/custodian evidence. Missing, mismatched, stale, incomplete or unverifiable checks yield `not_ready`; no affected row contributes to signal values, cohort support, reference fitting or feature publication.
 
+The implemented contract includes the exact full-input fingerprint, dataset/protocol/version/manifest/builder references, optional manifest digest, `ready` status, the exact ordered authorization tuple `("train", "validation", "calibration")`, and one row entry for every embedded prediction. Safira compares all returned values to the actual input and independently executes `verify_prediction` for each row. It rejects a patient-group reference appearing in more than one development partition.
+
 The ordinary Feature 003 result does not include protected rows or the complete sensitive manifest. The verifier boundary does not change that contract.
 
 ## Method and fitting configuration
@@ -58,6 +60,7 @@ One assignment is made per patient group and reused across all that patient's vi
 One result for one exact source key, assessment occurrence, dimension and method version:
 
 - `source_key`, `dimension`, `method_id/version`, signal-level `state`;
+- exact primary output value, value kind, scale, direction, class mapping, predicted class, and calibration metadata, copied from the admitted Feature 002 record without relabeling it;
 - optional immutable scalar/structured `value` with explicit semantics/units or representation;
 - lineage references to Feature 002 evidence and (when fitted) the exact reference state;
 - method parameters/version, preprocessing/evidence schema, applicable timing/scope;
@@ -104,7 +107,7 @@ Immutable collection of training, validation and calibration feature records; so
 
 ### SignalRunManifest
 
-Privacy-safe reproducibility record: dataset/protocol/manifest reference, exact source keys, method/state versions and parameter identifiers, preprocessing/schema identities, one cross-fit seed/fold config, safe counts, state references/digests and exclusions. It contains no protected rows, patient IDs/group keys, raw input, outcome/correctness values or restricted manifest content.
+Privacy-safe reproducibility record: dataset/protocol/manifest reference, exact source keys, method/state versions and parameter identifiers, preprocessing/schema identities, the fixed `sha256_seed_nul_group_mod_v1` fold algorithm when applicable, one cross-fit seed/fold config, safe counts, state references/digests and safe exclusions. It contains no protected rows, patient IDs/group keys, raw input, outcome/correctness values or restricted manifest content.
 
 ### ProtectedApplyRequest and ProtectedApplyReceipt
 

@@ -7,7 +7,9 @@ from typing import Protocol, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from safira.collection.records import PredictionRecord
-    from safira.signals.records import SignalInputCheck
+    from safira.dataset.records import DatasetBuildResult
+    from safira.signals.records import (Feature003DatasetReference, ProtectedApplyReceipt,
+                                        ProtectedApplyRequest, SignalDatasetCheck, SignalInputCheck)
 
 
 class SignalDimension(str, Enum):
@@ -34,4 +36,23 @@ class SignalInputVerifier(Protocol):
 
     def verify_prediction(self, record: PredictionRecord) -> SignalInputCheck:
         """Return a content-, identity-, association- and scope-bound check."""
+        ...
+
+    def verify_dataset(self, result, reference):
+        """Check full Feature 003 development inventory against independent evidence."""
+        ...
+
+
+class DatasetInputVerifier(Protocol):
+    """Independently verifies complete Feature 003 development inputs."""
+
+    def verify_dataset(self, result: DatasetBuildResult,
+                       reference: Feature003DatasetReference) -> SignalDatasetCheck:
+        ...
+
+
+class ProtectedSignalApplyHandoff(Protocol):
+    """Custodian-side apply-only bridge; accepts references, never protected rows."""
+
+    def apply_frozen_state(self, request: ProtectedApplyRequest) -> ProtectedApplyReceipt:
         ...

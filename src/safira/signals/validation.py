@@ -7,10 +7,12 @@ import json
 import re
 
 from safira.collection.records import PredictionRecord
+from safira.dataset.records import CorrectnessExample, DatasetBuildResult
 from safira.collection.validation import validate_evidence_item, validate_primary_output
 from safira.signals.base import SignalInputVerifier
 from safira.signals.exceptions import SignalInputError, SignalVerificationError
-from safira.signals.records import SignalInputCheck, SignalProtocol, SignalSourceKey
+from safira.signals.records import (Feature003DatasetReference, SignalDatasetCheck, SignalInputCheck,
+                                    SignalProtocol, SignalSourceKey, SignalDatasetRowCheck)
 
 
 _ASSOCIATION_FIELDS = ("patient_ref", "assessment_ref", "occurrence_ref")
@@ -152,6 +154,76 @@ def validate_registered_record(registry, protocol: SignalProtocol, record: Predi
 def verify_and_validate_record(registry, protocol, verifier, record):
     check = verify_record_admission(verifier, record)
     validate_registered_record(registry, protocol, record)
+    return check
+
+
+def dataset_fingerprint(result: DatasetBuildResult) -> str:
+    """Digest the full detached ordinary input, including sensitive fields internally."""
+    if type(result) is not DatasetBuildResult:
+        raise SignalInputError("dataset_type_invalid")
+    try:
+        body = json.dumps(result.to_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256(body.encode("utf-8")).hexdigest()
+    except Exception:
+        raise SignalInputError("dataset_not_canonical") from None
+
+
+def _dataset_rows(result):
+    inventory = []
+    group_roles = {}
+    for role in ("train", "validation", "calibration"):
+        for example in getattr(result.development, role):
+            if type(example) is not CorrectnessExample or example.partition_role != role:
+                raise SignalVerificationError("dataset_partition_invalid")
+            if type(example.prediction) is not PredictionRecord:
+                raise SignalVerificationError("dataset_prediction_invalid")
+            record = example.prediction
+            previous_role = group_roles.setdefault(example.patient_group_ref, role)
+            if previous_role != role:
+                raise SignalVerificationError("dataset_patient_group_split")
+            inventory.append(SignalDatasetRowCheck(
+                prediction_fingerprint(record), tuple(record.source_key), _association_tuple(record), role,
+            ))
+    identities = [row.record_fingerprint for row in inventory]
+    if len(identities) != len(set(identities)):
+        raise SignalVerificationError("dataset_row_duplicate")
+    return tuple(inventory)
+
+
+def verify_dataset_admission(dataset_verifier, prediction_verifier, result, reference):
+    """Require an executed exact-scope dataset check and admission of every embedded prediction.
+
+    The independent host integration is the trust root. Safira checks its response against
+    the complete actual input and separately executes each Feature 002 admission check.
+    """
+    if type(result) is not DatasetBuildResult or type(reference) is not Feature003DatasetReference:
+        raise SignalInputError("dataset_input_invalid")
+    if result.readiness.state != "ready" or result.manifest_reference != reference.manifest_reference:
+        raise SignalVerificationError("dataset_scope_unverified")
+    if dataset_verifier is None or not callable(getattr(dataset_verifier, "verify_dataset", None)):
+        raise SignalVerificationError("dataset_verifier_required")
+    try:
+        check = dataset_verifier.verify_dataset(result, reference)
+    except Exception:
+        raise SignalVerificationError("dataset_check_failed") from None
+    if type(check) is not SignalDatasetCheck:
+        raise SignalVerificationError("dataset_check_invalid")
+    expected_scope = (reference.dataset_id, reference.protocol_id, reference.protocol_version,
+                      reference.manifest_reference, reference.builder_version)
+    actual_scope = (check.dataset_id, check.protocol_id, check.protocol_version,
+                    check.manifest_reference, check.builder_version)
+    expected_rows = _dataset_rows(result)
+    if (check.dataset_fingerprint != dataset_fingerprint(result) or actual_scope != expected_scope
+            or (reference.manifest_digest and check.manifest_digest != reference.manifest_digest)
+            or check.authorized_partitions != ("train", "validation", "calibration")
+            or check.readiness != "ready" or not all((check.authority, check.method, check.evidence_ref))
+            or check.rows != expected_rows):
+        raise SignalVerificationError("dataset_scope_unverified")
+    for role in ("train", "validation", "calibration"):
+        for example in getattr(result.development, role):
+            # Checks exact row content and source, and returns the verified lineage
+            # consumed by stateless/reference results.
+            verify_record_admission(prediction_verifier, example.prediction)
     return check
 
 

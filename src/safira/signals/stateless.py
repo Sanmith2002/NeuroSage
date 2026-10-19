@@ -96,6 +96,7 @@ def _result(record, dimension, method_id, parameters, state, value, meaning,
         SignalSourceKey(*record.source_key), dimension, method_id, method_version,
         parameters, state, value, meaning, tuple(evidence_sources),
         _provenance(record, admission_check, evidence_sources), reason,
+        record.primary.to_dict(),
     )
 
 
@@ -300,3 +301,34 @@ def _repeated_output_variance(record, *, admission_check=None):
                    "repeated_output_variance",
                    {**params_base, "repeat_count": len(normalized)},
                    SignalState.AVAILABLE, variance, meaning, ("repeated_outputs",), admission_check=admission_check)
+
+
+def _explanation_applicability(record, *, admission_check=None):
+    """Preserve explanation provenance without scoring explanation reliability."""
+    meaning = "Explanation metadata and applicability only; no numeric reliability score is defined in V1."
+    item, state, reason = _lookup_state(record, "explanation")
+    if state is not SignalState.AVAILABLE:
+        return _nonvalue(record, SignalDimension.EXPLANATION_RELIABILITY,
+                         "explanation_applicability", {}, state, ("explanation",), reason,
+                         meaning, admission_check=admission_check)
+    info = item.interpretation
+    required = ("method", "target_label", "target_output", "output_space", "calibrated")
+    if (any(name not in info for name in required) or info.get("target_label") != record.label_id
+            or type(info.get("calibrated")) is not bool):
+        return _nonvalue(record, SignalDimension.EXPLANATION_RELIABILITY,
+                         "explanation_applicability", {}, SignalState.INVALID,
+                         ("explanation",), "explanation_metadata_invalid", meaning,
+                         admission_check=admission_check)
+    value = {
+        "applicability": "metadata_only",
+        "method": info["method"],
+        "target_label": info["target_label"],
+        "target_output": info["target_output"],
+        "output_space": info["output_space"],
+        "calibrated": info["calibrated"],
+        "calibration_relation": info.get("calibration_relation", "not_declared"),
+        "truncated": info.get("truncated", False),
+    }
+    return _result(record, SignalDimension.EXPLANATION_RELIABILITY,
+                   "explanation_applicability", {"numeric_score": False}, SignalState.AVAILABLE,
+                   value, meaning, ("explanation",), admission_check=admission_check)
