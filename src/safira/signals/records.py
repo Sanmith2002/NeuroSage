@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+import json
 from enum import Enum
 from math import isfinite
 from types import MappingProxyType
@@ -93,12 +94,38 @@ class SignalMethodConfig:
 
 
 @dataclass(frozen=True)
+class CohortAdequacyCriteria:
+    """Protocol-owned support requirements for one exact model/version/label."""
+    minimum_unique_patient_groups: int
+    correctness_class_minimums: Mapping[int, int] = field(default_factory=dict)
+
+    def __post_init__(self):
+        minimum = self.minimum_unique_patient_groups
+        if type(minimum) is not int or minimum < 1:
+            raise ValueError("cohort_adequacy")
+        if not isinstance(self.correctness_class_minimums, Mapping):
+            raise ValueError("cohort_adequacy")
+        copied = {}
+        for target, count in self.correctness_class_minimums.items():
+            if type(target) is not int or target not in (0, 1) or type(count) is not int or count < 1:
+                raise ValueError("cohort_adequacy")
+            copied[target] = count
+        object.__setattr__(self, "correctness_class_minimums", MappingProxyType(copied))
+
+    def to_dict(self):
+        return {"minimum_unique_patient_groups": self.minimum_unique_patient_groups,
+                "correctness_class_minimums": {str(key): value
+                                                for key, value in self.correctness_class_minimums.items()}}
+
+
+@dataclass(frozen=True)
 class SignalProtocol:
     protocol_id: str
     protocol_version: str
     source_keys: tuple[SignalSourceKey, ...]
     method_configs: Mapping[str, SignalMethodConfig]
     evidence_prerequisites: Mapping[str, tuple[str, ...]]
+    cohort_adequacy: Mapping[SignalSourceKey, CohortAdequacyCriteria] = field(default_factory=dict)
 
     def __post_init__(self):
         _identifier(self.protocol_id, "protocol_id")
@@ -109,6 +136,14 @@ class SignalProtocol:
         if any(type(key) is not SignalSourceKey for key in keys) or len(set(keys)) != len(keys):
             raise ValueError("source_keys")
         object.__setattr__(self, "source_keys", keys)
+        if not isinstance(self.cohort_adequacy, Mapping):
+            raise ValueError("cohort_adequacy")
+        adequacy = dict(self.cohort_adequacy)
+        if any(type(key) is not SignalSourceKey or key not in keys
+               or type(criteria) is not CohortAdequacyCriteria
+               for key, criteria in adequacy.items()):
+            raise ValueError("cohort_adequacy")
+        object.__setattr__(self, "cohort_adequacy", MappingProxyType(adequacy))
         if not isinstance(self.method_configs, Mapping):
             raise ValueError("method_configs")
         configs = dict(self.method_configs)
@@ -136,7 +171,9 @@ class SignalProtocol:
         return {"protocol_id": self.protocol_id, "protocol_version": self.protocol_version,
                 "source_keys": [key.to_dict() for key in self.source_keys],
                 "method_configs": {key: cfg.to_dict() for key, cfg in self.method_configs.items()},
-                "evidence_prerequisites": _plain(self.evidence_prerequisites)}
+                "evidence_prerequisites": _plain(self.evidence_prerequisites),
+                "cohort_adequacy": {json.dumps(key.to_tuple(), separators=(",", ":")): value.to_dict()
+                                    for key, value in self.cohort_adequacy.items()}}
 
 
 @dataclass(frozen=True)

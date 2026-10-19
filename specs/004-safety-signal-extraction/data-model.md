@@ -82,6 +82,8 @@ Controlled, non-predictor metadata for one exact `SignalSourceKey` and Feature 0
 
 It never pools different contributors, versions or labels. Counts are not appended to patient-level predictor rows and are disclosed only where protocol/privacy rules permit.
 
+`CohortAdequacyCriteria` is an immutable protocol value keyed by exact `SignalSourceKey`, with a positive protocol-approved minimum for unique training patient groups and optional per-class minima for correctness targets `0` and/or `1`. No default or universal minimum is implied. Repeated visits count once. When one patient has conflicting verified correctness targets for the same exact source, that group remains in the total unique-group count but is excluded from every correctness-class count. Missing criteria produces `not_ready`; failure to meet a declared criterion produces `insufficient_evidence`. These summaries are published only after Feature 003 dataset and every embedded Feature 002 record pass trusted admission.
+
 ### SignalRowKey and SignalFeatureRecord
 
 `SignalRowKey` is a run-scoped opaque key for aligning one Feature 003 example to its extracted result. It is not a Feature 002 source contract change and contains no patient/group identity. The row mapping is retained separately from predictor values.

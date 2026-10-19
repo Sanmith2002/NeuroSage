@@ -11,6 +11,8 @@ Feature 004 now provides synthetic-verifiable signal extraction and a verified d
 - An explicitly injected independent integration implementing `verify_prediction` and, for dataset building, `verify_dataset`. The dataset check must bind the canonical whole input, dataset/protocol/manifest/builder scope, authorized partitions, complete row inventory, and each row's exact Feature 002 admission. Synthetic test ledgers demonstrate this contract; no real verifier is configured.
 - A custodian integration only if `apply_protected` is used. No real custodian is configured.
 
+The application host controls `SignalExtractor` construction and selects the injected verifier and custodian. Providers must be selected by trusted host configuration and consult independently controlled evidence. The library checks exact returned scope and fails closed for missing or mismatched responses, but cannot authenticate a malicious provider injected by code that already controls the Python process. The repository has no application entrypoint that lets an untrusted request choose these providers. Synthetic ledgers validate expected provider behavior; they are not deployment authentication.
+
 ## Public interfaces
 
 The public package is `safira.signals`. The implemented methods are:
@@ -41,7 +43,28 @@ signals = extractor.extract_record(prediction_record)
 feature_set = extractor.build_feature_set(dataset_build_result, dataset_reference)
 ```
 
-`dataset_verifier` may be omitted only when the explicitly injected prediction verifier itself implements `verify_dataset`. No global verifier or payload-selected implementation is used. A missing or inconsistent verifier fails closed. Dataset protocol ID/version must match the signal protocol.
+`dataset_verifier` may be omitted only when the explicitly injected prediction verifier itself implements `verify_dataset`. No global verifier or payload-selected implementation is used. A missing or inconsistent verifier fails closed. Dataset protocol ID/version must match the signal protocol. The dataset verifier must check the exact complete dataset and row inventory; the record verifier must independently establish every embedded record's Feature 002 admission lineage.
+
+Optional cohort adequacy criteria are declared by exact source in `SignalProtocol`:
+
+```python
+from safira.signals import CohortAdequacyCriteria, SignalSourceKey
+
+source = SignalSourceKey("model-a", "v1", "label-a")
+# Illustrative protocol choices only; Safira defines no universal minima.
+criteria = CohortAdequacyCriteria(
+    minimum_unique_patient_groups=20,
+    correctness_class_minimums={0: 5, 1: 5},
+)
+protocol = SignalProtocol(
+    protocol_id="study-protocol", protocol_version="v1",
+    source_keys=(source,), method_configs=approved_method_configs,
+    evidence_prerequisites={"data_sufficiency": ("feature_representation",)},
+    cohort_adequacy={source: criteria},
+)
+```
+
+Use only research-owner-approved criteria. If correctness-class support is not required, omit `correctness_class_minimums`. The builder counts unique patient groups per exact source, counts each patient at most once per correctness class, and excludes a group with conflicting correctness observations from class support. Missing criteria is `not_ready`; unmet declared support is `insufficient_evidence`. Support summaries are separate controlled metadata, never predictor values, and appear only after trusted Feature 003 and embedded prediction admission succeeds.
 
 ## Expected output meaning
 
@@ -87,5 +110,6 @@ The Feature 004 focused suite contains **85 passing tests** (all tests selected 
 - Protected final-test processing is only a custodian-controlled apply-only interface. The custodian owns authorization and restricted processing/storage. A matching accepted receipt does not prove durable storage unless that integration verifies and attests durability; no such integration is configured.
 - Optional evidence availability depends on adapters and source contracts. Representation vectors, domain categories, repeated outputs, modality scores and explanations are not guaranteed.
 - Reference methods require study-approved parameters and exact registered preprocessing/evidence compatibility. Small or incompatible references return explicit non-value states. No alternate seed search, universal sample minimum, clinical threshold or automatic transfer across models/labels is supported.
-- `cohort_support` contains per-source unique training patient-group counts only. Feature 003 does not currently provide authorization for correctness-class support summaries in its ordinary result, so the feature set does not expose them or claim protocol adequacy from counts alone.
+- `cohort_support` is immutable controlled metadata keyed by exact source. It reports unique training patient-group support and correctness-class support only when protocol criteria require it. Repeated visits do not inflate patient counts; conflicting within-patient correctness observations are excluded from class counts. These summaries do not enter predictors and are not published until the complete trusted dataset and per-record admission checks pass.
+- Injected verifiers and custodians are trusted-host boundaries, not in-process authenticated services. A process owner can supply a fabricated provider; the library cannot distinguish it from an authorized integration without an external trust mechanism. No such real integration is configured here.
 - The research method set has not been empirically validated for clinical use. Generic numerical explanation reliability, population-level distribution tests, safety-estimator training, reliability calibration and TRUST/CAUTION/DEFER policy remain outside Feature 004.

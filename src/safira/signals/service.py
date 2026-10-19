@@ -36,17 +36,15 @@ _EVIDENCE_CATEGORIES = frozenset({
 })
 
 
-def _cohort_support_by_source(examples, *, required_correctness_classes=()):
-    """Internal pure summary; not an admitted/public cohort-adequacy claim.
+def _cohort_support_by_source(examples, *, criteria_by_source, source_keys):
+    """Summarize verified training support per exact model/version/label scope.
 
-    Feature 003 inputs cannot be published through a public Feature 004 path before
-    T028's trusted exact-dataset and embedded-prediction admission gate exists.
+    Callers must first pass the complete Feature 003 and embedded prediction
+    admission gate. Correctness class support counts a patient only when that
+    patient's rows agree on one class; conflicting groups count toward neither.
     """
-    classes = tuple(required_correctness_classes)
-    if any(type(value) is not int or value not in (0, 1) for value in classes):
-        raise ValueError("correctness_classes")
     group_sets = {}
-    class_sets = {}
+    group_targets = {}
     for example in examples:
         if type(example) is not CorrectnessExample:
             raise ValueError("cohort_example")
@@ -57,17 +55,46 @@ def _cohort_support_by_source(examples, *, required_correctness_classes=()):
         if type(example.patient_group_ref) is not str or not example.patient_group_ref:
             raise ValueError("cohort_group")
         group_sets.setdefault(source, set()).add(example.patient_group_ref)
-        if example.correctness_target in classes:
-            class_sets.setdefault((source, example.correctness_target), set()).add(example.patient_group_ref)
+        target = example.correctness_target
+        if type(target) is not int or target not in (0, 1):
+            raise ValueError("cohort_target")
+        group_targets.setdefault((source, example.patient_group_ref), set()).add(target)
     summary = {}
-    for source, groups in group_sets.items():
-        class_counts = {
-            str(value): len(class_sets.get((source, value), set())) for value in classes
-        }
-        summary[source] = MappingProxyType({
-            "unique_patient_groups": len(groups),
-            "correctness_class_patient_groups": MappingProxyType(class_counts),
-        })
+    for source_key in source_keys:
+        source = source_key.to_tuple()
+        groups = group_sets.get(source, set())
+        criteria = criteria_by_source.get(source_key)
+        if criteria is None:
+            summary[source] = MappingProxyType({
+                "state": "not_ready", "reason_code": "adequacy_criteria_missing",
+                "unique_patient_groups": len(groups),
+            })
+            continue
+        item = {"state": "available", "reason_code": "adequacy_criteria_met",
+                "unique_patient_groups": len(groups),
+                "minimum_unique_patient_groups": criteria.minimum_unique_patient_groups}
+        class_minimums = criteria.correctness_class_minimums
+        if class_minimums:
+            counts = {str(target): 0 for target in class_minimums}
+            conflicts = 0
+            for group in groups:
+                targets = group_targets.get((source, group), set())
+                if len(targets) > 1:
+                    conflicts += 1
+                elif len(targets) == 1:
+                    target = next(iter(targets))
+                    if target in class_minimums:
+                        counts[str(target)] += 1
+            item["correctness_class_patient_groups"] = counts
+            item["correctness_class_minimums"] = {
+                str(target): count for target, count in class_minimums.items()}
+            item["conflicting_correctness_patient_groups"] = conflicts
+            if any(counts[str(target)] < minimum
+                   for target, minimum in class_minimums.items()):
+                item.update(state="insufficient_evidence", reason_code="correctness_class_support_insufficient")
+        if len(groups) < criteria.minimum_unique_patient_groups:
+            item.update(state="insufficient_evidence", reason_code="patient_group_support_insufficient")
+        summary[source] = MappingProxyType(item)
     return MappingProxyType(summary)
 
 
@@ -360,12 +387,13 @@ class SignalExtractor:
                 result_rows.append(SignalFeatureRecord(row_keys[id(example)], source, tuple(signals)))
             return tuple(result_rows)
 
-        support = {}
-        for source in sorted(sources):
-            count = len({example.patient_group_ref for example in partitions["train"]
-                         if tuple(example.prediction.source_key) == source.to_tuple()})
-            support[json.dumps(source.to_tuple(), separators=(",", ":"))] = {
-                "training_patient_groups": count}
+        support = {
+            json.dumps(source, separators=(",", ":")): values
+            for source, values in _cohort_support_by_source(
+                partitions["train"], criteria_by_source=self.protocol.cohort_adequacy,
+                source_keys=self.protocol.source_keys,
+            ).items()
+        }
         seeds = {cfg.parameters["seed"] for key, cfg in self.protocol.method_configs.items()
                  if key in _REFERENCE_METHODS}
         folds = {cfg.parameters["fold_count"] for key, cfg in self.protocol.method_configs.items()

@@ -5,6 +5,7 @@ import pytest
 from safira.collection import EvidenceItem
 from safira.dataset import CorrectnessExample
 from safira.signals.exceptions import SignalInputError
+from safira.signals.records import CohortAdequacyCriteria, SignalSourceKey
 from safira.signals.service import _cohort_support_by_source
 from safira.signals.stateless import _evidence_coverage
 
@@ -62,9 +63,17 @@ def test_internal_cohort_support_is_exactly_scoped_and_patient_grouped(registere
         CorrectnessExample(first, "target", "v1", 1, 1, "group-b", "train"),
         CorrectnessExample(second, "target", "v1", 1, 1, "group-a", "train"),
     )
-    summary = _cohort_support_by_source(examples, required_correctness_classes=(0, 1))
+    first_key = SignalSourceKey(first_def.model_id, "v1", "shared")
+    second_key = SignalSourceKey(second_def.model_id, "v1", "shared")
+    summary = _cohort_support_by_source(
+        examples,
+        criteria_by_source={first_key: CohortAdequacyCriteria(2, {0: 1, 1: 1}),
+                            second_key: CohortAdequacyCriteria(1)},
+        source_keys=(first_key, second_key),
+    )
     assert summary[(first_def.model_id, "v1", "shared")]["unique_patient_groups"] == 2
-    assert summary[(first_def.model_id, "v1", "shared")]["correctness_class_patient_groups"] == {"0": 1, "1": 2}
+    assert summary[(first_def.model_id, "v1", "shared")]["correctness_class_patient_groups"] == {"0": 0, "1": 1}
+    assert summary[(first_def.model_id, "v1", "shared")]["conflicting_correctness_patient_groups"] == 1
     assert summary[(second_def.model_id, "v1", "shared")]["unique_patient_groups"] == 1
     assert len(summary) == 2
     with pytest.raises(TypeError):

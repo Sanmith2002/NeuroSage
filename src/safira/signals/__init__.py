@@ -12,6 +12,7 @@ from safira.signals.exceptions import (
     SignalVerificationError,
 )
 from safira.signals.records import (
+    CohortAdequacyCriteria,
     Feature003DatasetReference,
     FittedStateReference,
     ProtectedApplyReceipt,
@@ -35,7 +36,7 @@ __all__ = [
     "ProtectedSignalApplyHandoff", "SignalError", "SignalInputError",
     "SignalVerificationError", "SignalProtocolError", "SignalCompatibilityError",
     "SignalNotReady", "SignalPrivacyError", "SignalSourceKey", "SignalMethodConfig",
-    "SignalProtocol", "SignalInputCheck", "SignalResult", "FittedStateReference",
+    "SignalProtocol", "CohortAdequacyCriteria", "SignalInputCheck", "SignalResult", "FittedStateReference",
     "SignalExtractor", "Feature003DatasetReference", "SignalDatasetRowCheck",
     "SignalDatasetCheck", "SignalRowKey", "SignalFeatureRecord", "SignalFeatureSet",
     "SignalRunManifest", "ProtectedApplyRequest", "ProtectedApplyReceipt",

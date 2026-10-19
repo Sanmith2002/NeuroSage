@@ -126,6 +126,20 @@ def test_dataset_gate_rejects_caller_constructed_check_without_executed_verifier
         verify_dataset_admission(AssertionOnly(), record_verifier, result, reference)
 
 
+def test_exact_dataset_inventory_cannot_replace_missing_prediction_admission(registered_collection):
+    """A complete dataset echo is insufficient when its prediction is absent from the trusted ledger."""
+    from signals_fixtures import SyntheticSignalVerifier
+
+    record_verifier = SyntheticSignalVerifier()  # Deliberately contains no record entry.
+    record = _example_record(registered_collection)
+    result = make_synthetic_feature003_result({"train": ((record, "opaque-g1"),)})
+    reference = _reference(result)
+    exact_inventory = DatasetLedger(record_verifier, reference)
+
+    with pytest.raises(SignalVerificationError):
+        verify_dataset_admission(exact_inventory, record_verifier, result, reference)
+
+
 def test_dataset_gate_rejects_same_patient_group_crossing_development_partitions(registered_collection):
     from signals_fixtures import SyntheticSignalVerifier
     record_verifier = SyntheticSignalVerifier()
