@@ -215,7 +215,7 @@ class SignalResult:
         "comparison_semantics_invalid", "modality_semantics_mismatch",
         "modality_semantics_incomparable", "modality_probability_invalid",
         "repeat_provenance_incomplete", "repeat_probability_invalid",
-        "repeat_identity_invalid", "fewer_than_two_repeats",
+    "repeat_identity_invalid", "fewer_than_two_repeats", "reference_not_ready",
     })
 
     def __post_init__(self):

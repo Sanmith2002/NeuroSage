@@ -153,3 +153,23 @@ def verify_and_validate_record(registry, protocol, verifier, record):
     check = verify_record_admission(verifier, record)
     validate_registered_record(registry, protocol, record)
     return check
+
+
+def _validate_fitted_reference(state, expected_key):
+    """Fail closed unless an internal fitted state matches every scope field."""
+    # Local imports avoid coupling the stateless admission module to reference
+    # fitting during package initialization.
+    from safira.signals.reference import FittedReferenceState, ReferenceCompatibilityKey
+
+    if type(state) is not FittedReferenceState or type(expected_key) is not ReferenceCompatibilityKey:
+        from safira.signals.exceptions import SignalCompatibilityError
+        raise SignalCompatibilityError("reference_identity_invalid")
+    if state.compatibility_key != expected_key:
+        from safira.signals.exceptions import SignalCompatibilityError
+        raise SignalCompatibilityError("reference_scope_mismatch")
+    if (state.method_config.method_id != expected_key.method_id
+            or state.method_config.method_version != expected_key.method_version
+            or dict(state.method_config.parameters) != dict(expected_key.parameters)):
+        from safira.signals.exceptions import SignalCompatibilityError
+        raise SignalCompatibilityError("reference_method_mismatch")
+    return True
