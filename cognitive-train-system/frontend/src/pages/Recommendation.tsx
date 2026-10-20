@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { postRecommend, type RecommendResponse, type Exercise } from '../api'
 import { NS_PROFILE_KEY, type NsProfile } from '../types'
+import { saveRecommendForActive } from '../storage'
 
 interface AssessCache {
   domain_z: Record<string, number | null>
@@ -132,6 +133,7 @@ export default function Recommendation() {
         })
         setResult(res)
         try { localStorage.setItem('ns_recommend', JSON.stringify(res)) } catch { /* ignore */ }
+        saveRecommendForActive(res)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not reach the backend.')
       } finally {

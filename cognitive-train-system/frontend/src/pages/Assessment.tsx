@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { postAssess, type AssessResponse } from '../api'
 import { NS_PROFILE_KEY, type NsProfile } from '../types'
+import { saveAssessForActive } from '../storage'
 
 // ── Test catalogue ────────────────────────────────────────────────────────────
 interface TestDef {
@@ -180,8 +181,9 @@ export default function Assessment() {
     try {
       const res = await postAssess(rawTests)
       setResult(res)
-      // save to localStorage for Screen 3
+      // save to localStorage for Screen 3 (+ per-patient copy)
       try { localStorage.setItem('ns_assess', JSON.stringify(res)) } catch { /* ignore */ }
+      saveAssessForActive(res)
       // scroll to results
       setTimeout(() => document.getElementById('results-anchor')?.scrollIntoView({ behavior: 'smooth' }), 100)
     } catch (e) {

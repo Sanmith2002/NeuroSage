@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { DIAGNOSIS_PRESETS, NS_PROFILE_KEY, type Diagnosis, type NsProfile } from '../types'
+import { DIAGNOSIS_PRESETS, type Diagnosis, type NsProfile } from '../types'
+import { createPatient, patientExists } from '../storage'
 
 interface FormErrors {
   name?: string
@@ -23,6 +24,7 @@ export default function ProfileSetup() {
   function validate(): boolean {
     const e: FormErrors = {}
     if (!name.trim())                     e.name      = 'Please enter the patient name.'
+    else if (patientExists(name))         e.name      = 'A patient with this name already exists. Open them from the profiles page.'
     const ageNum = Number(age)
     if (!age || ageNum < 18 || ageNum > 100) e.age    = 'Age must be between 18 and 100.'
     const eduNum = Number(education)
@@ -46,12 +48,8 @@ export default function ProfileSetup() {
       probabilities: DIAGNOSIS_PRESETS[diagnosis].probabilities,
     }
 
-    try {
-      localStorage.setItem(NS_PROFILE_KEY, JSON.stringify(profile))
-    } catch {
-      // localStorage unavailable — proceed anyway
-    }
-
+    // Register the patient and log them in as Session 1.
+    createPatient(profile)
     navigate('/assess')
   }
 
@@ -75,7 +73,16 @@ export default function ProfileSetup() {
 
       {/* Form card */}
       <div className="card">
-        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>Patient Profile</h2>
+        <button
+          onClick={() => navigate('/')}
+          style={{
+            background: 'transparent', border: 'none', color: 'var(--brand)',
+            fontSize: '.82rem', cursor: 'pointer', padding: 0, marginBottom: '.75rem',
+          }}
+        >
+          ← Back to profiles
+        </button>
+        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>New Patient Profile</h2>
 
         {/* Name */}
         <div className="field">
