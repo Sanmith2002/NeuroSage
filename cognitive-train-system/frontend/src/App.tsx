@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import Landing from './pages/Landing'
 import ProfileSetup from './pages/ProfileSetup'
 import Assessment from './pages/Assessment'
 import Recommendation from './pages/Recommendation'
@@ -9,7 +10,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<ProfileSetup />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/new" element={<ProfileSetup />} />
         <Route path="/assess" element={<Assessment />} />
         <Route path="/recommend" element={<Recommendation />} />
         <Route path="/exercise" element={<ExercisePlayer />} />
