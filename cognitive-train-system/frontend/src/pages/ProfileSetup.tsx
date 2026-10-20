@@ -164,21 +164,25 @@ export default function ProfileSetup() {
 
         <hr className="divider" />
 
-        {/* Diagnosis preset */}
+        {/* Diagnosis */}
         <div className="field">
-          <label>Diagnosis</label>
-          <div className="preset-grid">
+          <label htmlFor="diagnosis">Diagnosis</label>
+          <select
+            id="diagnosis"
+            value={diagnosis}
+            onChange={e => setDiagnosis(e.target.value as Diagnosis | '')}
+            style={{
+              height: 42, padding: '0 .875rem', borderRadius: 8,
+              border: '1.5px solid var(--border)', fontSize: '.95rem',
+              background: 'var(--surface)', color: diagnosis ? 'var(--text)' : 'var(--muted)',
+              maxWidth: 400, width: '100%',
+            }}
+          >
+            <option value="">Select a diagnosis…</option>
             {(Object.keys(DIAGNOSIS_PRESETS) as Diagnosis[]).map(key => (
-              <button
-                key={key}
-                className={`preset-btn${diagnosis === key ? ' selected' : ''}`}
-                onClick={() => setDiagnosis(key)}
-                type="button"
-              >
-                {DIAGNOSIS_PRESETS[key].label}
-              </button>
+              <option key={key} value={key}>{DIAGNOSIS_PRESETS[key].label}</option>
             ))}
-          </div>
+          </select>
           {errors.diagnosis && <span className="field-error">{errors.diagnosis}</span>}
         </div>
 
