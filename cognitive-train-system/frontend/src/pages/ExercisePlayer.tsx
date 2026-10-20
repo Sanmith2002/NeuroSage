@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import WordRecall from '../games/WordRecall'
 import DigitSpan from '../games/DigitSpan'
@@ -6,6 +6,8 @@ import NBack from '../games/NBack'
 import VerbalFluency from '../games/VerbalFluency'
 import VisualSearch from '../games/VisualSearch'
 import type { Exercise } from '../api'
+import { saveResult } from '../storage'
+import { exerciseTask } from '../exerciseCatalog'
 
 const DOMAIN_LABELS: Record<string, string> = {
   memory: 'Memory', attention: 'Attention', executive: 'Executive Function',
@@ -17,24 +19,20 @@ const DOMAIN_ICONS: Record<string, string> = {
 
 interface GameResult { score: number; maxScore: number }
 
-function saveResult(ex: Exercise, score: number, maxScore: number) {
-  try {
-    const prev = JSON.parse(localStorage.getItem('ns_results') ?? '[]') as object[]
-    prev.push({
-      date: new Date().toISOString(),
-      domain: ex.domain,
-      exercise: ex.exercise,
-      score,
-      maxScore,
-      pct: maxScore > 0 ? Math.round((score / maxScore) * 100) : 0,
-    })
-    localStorage.setItem('ns_results', JSON.stringify(prev))
-  } catch { /* ignore */ }
+function recordResult(ex: Exercise, score: number, maxScore: number) {
+  saveResult({
+    domain: ex.domain,
+    exercise: ex.exercise,
+    score,
+    maxScore,
+    pct: maxScore > 0 ? Math.round((score / maxScore) * 100) : 0,
+  })
 }
 
 export default function ExercisePlayer() {
   const navigate = useNavigate()
   const [done, setDone] = useState<GameResult | null>(null)
+  const savedRef = useRef(false)   // guard: a play saves its result at most once
 
   let ex: Exercise | null = null
   try {
@@ -55,7 +53,9 @@ export default function ExercisePlayer() {
   }
 
   function handleComplete(score: number, maxScore: number) {
-    saveResult(ex!, score, maxScore)
+    if (savedRef.current) return   // ignore duplicate completion calls
+    savedRef.current = true
+    recordResult(ex!, score, maxScore)
     setDone({ score, maxScore })
   }
 
@@ -93,7 +93,7 @@ export default function ExercisePlayer() {
               : 'Every session counts. Try again to see improvement over time.'}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
-            <button className="btn-primary" onClick={() => { setDone(null) }}>
+            <button className="btn-primary" onClick={() => { savedRef.current = false; setDone(null) }}>
               Play Again
             </button>
             <button className="btn-primary" style={{ background: 'var(--muted)' }}
@@ -111,7 +111,12 @@ export default function ExercisePlayer() {
         <>
           <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: 0 }}>
             <div style={{ fontWeight: 700 }}>{ex.exercise}</div>
-            <div style={{ fontSize: '.82rem', color: 'var(--muted)', marginTop: '.2rem' }}>{ex.reason}</div>
+            {exerciseTask(ex.exercise_id, ex.exercise) && (
+              <div style={{ fontSize: '.82rem', color: 'var(--text)', marginTop: '.35rem' }}>
+                <strong>What it trains:</strong> {exerciseTask(ex.exercise_id, ex.exercise)}
+              </div>
+            )}
+            <div style={{ fontSize: '.82rem', color: 'var(--muted)', fontStyle: 'italic', marginTop: '.35rem' }}>{ex.reason}</div>
           </div>
 
           {ex.domain === 'memory'      && <WordRecall    onComplete={handleComplete} />}
