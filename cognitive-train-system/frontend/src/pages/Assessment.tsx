@@ -57,6 +57,48 @@ const DOMAIN_LABELS: Record<string, string> = {
   language: 'Language', visuospatial: 'Visuospatial',
 }
 
+// ── Sample patients ───────────────────────────────────────────────────────────
+// Validated raw-score sets (all within each test's valid range) derived from the
+// healthy z-reference means/SDs. Each profile targets a different weak-domain
+// pattern so one click demonstrates a full, realistic assessment — and across the
+// profiles every exercise domain gets exercised.
+interface Sample {
+  key: string
+  label: string
+  blurb: string
+  scores: Record<string, number>
+}
+
+const SAMPLES: Sample[] = [
+  {
+    key: 'healthy', label: 'Healthy adult', blurb: 'all domains near average',
+    scores: {
+      CRAFTVRS: 24, CRAFTURS: 18, CRAFTDVR: 22, CRAFTDRE: 17, UDSBENTD: 12,
+      DIGFORCT: 9, DIGFORSL: 7, DIGBACCT: 8, DIGBACLS: 5, TRAILA: 29,
+      TRAILB: 74, UDSVERFC: 16, UDSVERLC: 15, UDSVERTN: 32,
+      MINTTOTS: 31, ANIMALS: 23, VEG: 16, UDSBENTC: 16,
+    },
+  },
+  {
+    key: 'ad', label: "Alzheimer's-type", blurb: 'memory weakest',
+    scores: {
+      CRAFTVRS: 7, CRAFTURS: 8, CRAFTDVR: 5, CRAFTDRE: 6, UDSBENTD: 4,
+      DIGFORCT: 6, DIGFORSL: 5, DIGBACCT: 5, DIGBACLS: 4, TRAILA: 46,
+      TRAILB: 139, UDSVERFC: 10, UDSVERLC: 9, UDSVERTN: 20,
+      MINTTOTS: 27, ANIMALS: 14, VEG: 9, UDSBENTC: 14,
+    },
+  },
+  {
+    key: 'lbd', label: 'Lewy-body-type', blurb: 'visuospatial + attention weakest',
+    scores: {
+      CRAFTVRS: 16, CRAFTURS: 13, CRAFTDVR: 14, CRAFTDRE: 12, UDSBENTD: 9,
+      DIGFORCT: 4, DIGFORSL: 4, DIGBACCT: 3, DIGBACLS: 3, TRAILA: 61,
+      TRAILB: 154, UDSVERFC: 9, UDSVERLC: 8, UDSVERTN: 18,
+      MINTTOTS: 28, ANIMALS: 16, VEG: 11, UDSBENTC: 12,
+    },
+  },
+]
+
 // ── Domain z-score result card ────────────────────────────────────────────────
 function ZCard({ domain, z, isWeak }: { domain: string; z: number | null; isWeak: boolean }) {
   const label = DOMAIN_LABELS[domain] ?? domain
@@ -110,6 +152,20 @@ export default function Assessment() {
     setScores(s => ({ ...s, [code]: val }))
   }
 
+  function fillSample(sample: Sample) {
+    setScores(Object.fromEntries(
+      allCodes.map(c => [c, sample.scores[c] != null ? String(sample.scores[c]) : ''])
+    ))
+    setResult(null)
+    setError(null)
+  }
+
+  function clearScores() {
+    setScores(Object.fromEntries(allCodes.map(c => [c, ''])))
+    setResult(null)
+    setError(null)
+  }
+
   async function handleAssess() {
     setLoading(true)
     setError(null)
@@ -158,10 +214,50 @@ export default function Assessment() {
 
       <div className="card">
         <h2 style={{ fontSize: '1.2rem', marginBottom: '.4rem' }}>Cognitive Assessment</h2>
-        <p style={{ fontSize: '.85rem', color: 'var(--muted)', marginBottom: '1.5rem' }}>
+        <p style={{ fontSize: '.85rem', color: 'var(--muted)', marginBottom: '1rem' }}>
           Enter available test scores below. Leave any untested fields blank — the system
           will use whichever scores are provided.
         </p>
+
+        {/* Quick-fill sample patients */}
+        <div style={{
+          background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8,
+          padding: '.85rem 1rem', marginBottom: '1.5rem',
+        }}>
+          <div style={{ fontSize: '.78rem', fontWeight: 600, marginBottom: '.6rem', color: 'var(--text)' }}>
+            Quick fill with a validated sample patient
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem' }}>
+            {SAMPLES.map(s => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => fillSample(s)}
+                title={s.blurb}
+                style={{
+                  flex: '1 1 150px', minWidth: 140, padding: '.5rem .75rem',
+                  borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--surface)',
+                  cursor: 'pointer', textAlign: 'left', lineHeight: 1.25,
+                }}
+              >
+                <span style={{ fontSize: '.85rem', fontWeight: 600, color: 'var(--brand)' }}>{s.label}</span>
+                <br />
+                <span style={{ fontSize: '.72rem', color: 'var(--muted)' }}>{s.blurb}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={clearScores}
+              style={{
+                padding: '.5rem .75rem', borderRadius: 8, border: '1.5px solid var(--border)',
+                background: 'var(--surface)', cursor: 'pointer', fontSize: '.8rem', color: 'var(--muted)',
+                alignSelf: 'stretch',
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
 
         {DOMAINS.map(dom => (
           <div key={dom.key} style={{ marginBottom: '1.5rem' }}>
