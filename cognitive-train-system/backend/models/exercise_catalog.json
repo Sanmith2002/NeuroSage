@@ -1,0 +1,298 @@
+{
+  "$schema": "neurosage.exercise-catalog/v1",
+  "meta": {
+    "name": "NeuroSage exercise catalog",
+    "version": "0.1-draft",
+    "status": "DRAFT — not clinically validated; requires domain-expert sign-off before use (per proposal IT23242722, Objective I).",
+    "design_rules": [
+      "The cognitive TARGET is fixed per exercise and never changed by theme or difficulty.",
+      "DIFFICULTY is controlled separately by the adaptive staircase (see difficulty_axes); it is NOT encoded here as fixed levels.",
+      "THEME/CONTENT is a personalization wrapper applied AFTER an exercise is selected; it changes context only, not the task.",
+      "Exercises are drawn from established programs/paradigms — none are invented.",
+      "Effect sizes are population averages (Hill et al. 2017) with wide CIs; treat as a trainability prior, not a per-patient guarantee."
+    ],
+    "saw_criteria_mapping": {
+      "domain_relevance": "exercise.domain",
+      "pathology_fit": "exercise.arm_emphasis",
+      "difficulty_match": "exercise.difficulty_axes (varied by staircase)",
+      "language": "exercise.language_dependency",
+      "engagement": "personalization.theme (relevance-first)"
+    }
+  },
+
+  "exercises": [
+    {
+      "id": "MEM-01",
+      "domain": "memory",
+      "name": "Spaced retrieval",
+      "task": "Recall target information (e.g., a name–object pair, a fact) over gradually expanding time intervals.",
+      "strategy": "compensatory",
+      "arm_emphasis": ["AD"],
+      "expected_benefit_g": 0.42,
+      "benefit_note": "verbal memory g=0.42 (Hill 2017)",
+      "language_dependency": "medium",
+      "difficulty_axes": ["interval_length", "number_of_targets", "interference"],
+      "sources": ["USMART/SMART spaced-retrieval RCT (2017)", "Cicerone 2019"]
+    },
+    {
+      "id": "MEM-02",
+      "domain": "memory",
+      "name": "Errorless learning",
+      "task": "Learn/relearn target information while errors during encoding are prevented (cues given before any guess).",
+      "strategy": "compensatory",
+      "arm_emphasis": ["AD"],
+      "expected_benefit_g": 0.42,
+      "benefit_note": "supports encoding in AD; evidence mixed in MCI",
+      "language_dependency": "medium",
+      "difficulty_axes": ["cue_fading", "number_of_targets", "delay"],
+      "sources": ["Clare et al. errorless-learning (AD)", "Cicerone 2019"]
+    },
+    {
+      "id": "MEM-03",
+      "domain": "memory",
+      "name": "Sequence / list recall",
+      "task": "Recall a sequence of items or everyday events in order after a delay.",
+      "strategy": "restorative",
+      "arm_emphasis": ["AD", "LBD"],
+      "expected_benefit_g": 0.42,
+      "benefit_note": "verbal memory g=0.42; working memory g=0.74 when span-based",
+      "language_dependency": "medium",
+      "difficulty_axes": ["set_size", "delay", "distractors"],
+      "sources": ["Hill 2017 (CCT programs: COGPACK, CogniPlus)"]
+    },
+
+    {
+      "id": "ATT-01",
+      "domain": "attention",
+      "name": "Speed-of-processing / Useful Field of View",
+      "task": "Rapidly identify and locate briefly shown targets across the visual field; speeded responses.",
+      "strategy": "restorative",
+      "arm_emphasis": ["LBD"],
+      "expected_benefit_g": 0.44,
+      "benefit_note": "attention g=0.44; processing-speed g=0.09 (LOW — flag)",
+      "language_dependency": "low",
+      "difficulty_axes": ["exposure_time", "display_size", "distractor_load"],
+      "sources": ["Ball et al. 2002 JAMA (ACTIVE)", "Posit Science / BrainHQ"]
+    },
+    {
+      "id": "ATT-02",
+      "domain": "attention",
+      "name": "Cancellation / visual search",
+      "task": "Find and mark all target items among distractors; sustained and selective attention.",
+      "strategy": "restorative",
+      "arm_emphasis": ["LBD"],
+      "expected_benefit_g": 0.44,
+      "benefit_note": "attention g=0.44 (Hill 2017)",
+      "language_dependency": "low",
+      "difficulty_axes": ["target_density", "distractor_similarity", "time_limit"],
+      "sources": ["CogniPlus / RehaCom modules (Hill 2017)"]
+    },
+    {
+      "id": "ATT-03",
+      "domain": "attention",
+      "name": "Digit span / divided attention",
+      "task": "Hold and reproduce sequences; or respond to two streams at once (divided attention).",
+      "strategy": "restorative",
+      "arm_emphasis": ["AD", "LBD"],
+      "expected_benefit_g": 0.44,
+      "benefit_note": "attention g=0.44; overlaps working memory g=0.74",
+      "language_dependency": "low",
+      "difficulty_axes": ["span_length", "dual_task_load", "pace"],
+      "sources": ["standard neuropsychological paradigm (CogniPlus)"]
+    },
+
+    {
+      "id": "EXE-01",
+      "domain": "executive",
+      "name": "n-back / working-memory updating",
+      "task": "Indicate when the current stimulus matches the one n steps earlier; continuous updating.",
+      "strategy": "restorative",
+      "arm_emphasis": ["AD", "LBD"],
+      "expected_benefit_g": 0.74,
+      "benefit_note": "working memory g=0.74 (STRONG responder)",
+      "language_dependency": "low",
+      "difficulty_axes": ["n_level", "pace", "stimulus_set_size"],
+      "sources": ["restorative cognitive-training model (Simon et al.)", "Hill 2017"]
+    },
+    {
+      "id": "EXE-02",
+      "domain": "executive",
+      "name": "Task-switching / set-shifting",
+      "task": "Alternate between two rules/categories on cue; measures cognitive flexibility.",
+      "strategy": "restorative",
+      "arm_emphasis": ["LBD"],
+      "expected_benefit_g": 0.20,
+      "benefit_note": "executive function g=0.20 (LOW — flag)",
+      "language_dependency": "low",
+      "difficulty_axes": ["switch_frequency", "rule_complexity", "pace"],
+      "sources": ["COGPACK / CogniPlus (Hill 2017)"]
+    },
+    {
+      "id": "EXE-03",
+      "domain": "executive",
+      "name": "Planning / inhibition",
+      "task": "Plan a multi-step solution (Tower-type) or suppress a prepotent response (Stroop-type).",
+      "strategy": "restorative",
+      "arm_emphasis": ["AD", "LBD"],
+      "expected_benefit_g": 0.20,
+      "benefit_note": "executive function g=0.20 (LOW — flag)",
+      "language_dependency": "low",
+      "difficulty_axes": ["steps_required", "conflict_level", "time_limit"],
+      "sources": ["standard executive paradigms (COGPACK)"]
+    },
+
+    {
+      "id": "LAN-01",
+      "domain": "language",
+      "name": "Verbal fluency",
+      "task": "Generate as many words as possible in a category or starting letter within a time limit.",
+      "strategy": "restorative",
+      "arm_emphasis": ["AD"],
+      "expected_benefit_g": 0.41,
+      "benefit_note": "language g=0.41 but wide CI (uncertain — flag)",
+      "language_dependency": "high",
+      "difficulty_axes": ["time_limit", "category_constraint"],
+      "localization_note": "High language dependency — requires Sinhala/Tamil adaptation (ITC guidelines) before counting as validated in-language.",
+      "sources": ["COGPACK / Smart Brain language modules (Hill 2017)"]
+    },
+    {
+      "id": "LAN-02",
+      "domain": "language",
+      "name": "Confrontation naming / word-finding",
+      "task": "Name depicted objects/actions; retrieve the correct word under cueing if needed.",
+      "strategy": "restorative",
+      "arm_emphasis": ["AD"],
+      "expected_benefit_g": 0.41,
+      "benefit_note": "language g=0.41 (wide CI)",
+      "language_dependency": "high",
+      "difficulty_axes": ["item_frequency", "cue_availability"],
+      "localization_note": "Images and target words must be culturally/linguistically familiar in Sinhala/Tamil.",
+      "sources": ["Sociable / COGPACK (Hill 2017)"]
+    },
+    {
+      "id": "LAN-03",
+      "domain": "language",
+      "name": "Semantic categorization / association",
+      "task": "Sort words/pictures into categories or match related concepts.",
+      "strategy": "restorative",
+      "arm_emphasis": ["AD", "LBD"],
+      "expected_benefit_g": 0.41,
+      "benefit_note": "language g=0.41 (wide CI)",
+      "language_dependency": "high",
+      "difficulty_axes": ["category_overlap", "set_size", "time_limit"],
+      "sources": ["Smart Brain (Hill 2017)"]
+    },
+
+    {
+      "id": "VIS-01",
+      "domain": "visuospatial",
+      "name": "Figure copying / construction",
+      "task": "Reproduce or assemble a geometric figure/arrangement from a model.",
+      "strategy": "restorative",
+      "arm_emphasis": ["LBD"],
+      "expected_benefit_g": 0.18,
+      "benefit_note": "visuospatial g=0.18 (LOW — flag)",
+      "language_dependency": "low",
+      "difficulty_axes": ["figure_complexity", "element_count", "time_limit"],
+      "sources": ["CogniPlus / Posit Science InSight (Hill 2017)"]
+    },
+    {
+      "id": "VIS-02",
+      "domain": "visuospatial",
+      "name": "Mental rotation / spatial reasoning",
+      "task": "Decide whether rotated shapes match; reason about spatial relations.",
+      "strategy": "restorative",
+      "arm_emphasis": ["LBD"],
+      "expected_benefit_g": 0.18,
+      "benefit_note": "visuospatial g=0.18 (LOW — flag)",
+      "language_dependency": "low",
+      "difficulty_axes": ["rotation_angle", "shape_complexity", "pace"],
+      "sources": ["RehaCom / CogniPlus (Hill 2017)"]
+    },
+    {
+      "id": "VIS-03",
+      "domain": "visuospatial",
+      "name": "Visual search / spatial puzzle",
+      "task": "Locate targets by spatial layout, or complete a jigsaw/matching puzzle.",
+      "strategy": "restorative",
+      "arm_emphasis": ["LBD"],
+      "expected_benefit_g": 0.18,
+      "benefit_note": "visuospatial g=0.18 (LOW — flag)",
+      "language_dependency": "low",
+      "difficulty_axes": ["piece_count", "similarity", "time_limit"],
+      "sources": ["Posit Science InSight / CogniPlus (Hill 2017)"]
+    }
+  ],
+
+  "personalization": {
+    "principle": "Relevance-first. Personal history and interests carry the reminiscence/person-centred benefit; age is a secondary proxy. Theme changes CONTENT only — never the cognitive target or the difficulty.",
+    "age_bands": [
+      {
+        "id": "early_onset",
+        "label": "Young / early-onset (< 65)",
+        "basis": "Young-onset dementia = onset before 65 (convention based on retirement age, not biology).",
+        "content_framing": "Working-age life: work schedules, family logistics, finances, active roles. Avoid retirement/household-only content (can feel irrelevant/infantilising)."
+      },
+      {
+        "id": "late_onset",
+        "label": "Late-onset (>= 65)",
+        "basis": "Typical dementia population; remote autobiographical memory relatively preserved.",
+        "content_framing": "Household routines, appointments, remote life history / reminiscence themes.",
+        "sub_bands": ["young_old_65_74", "middle_old_75_84", "old_old_85_plus (stronger accessibility defaults)"]
+      }
+    ],
+    "relevance_factors": {
+      "interests": ["gardening", "cooking", "music", "sports", "religion", "travel", "crafts"],
+      "personal_history": "occupation, hometown, family, notable life events (user/carer supplied)",
+      "culture_language": ["Sinhala", "Tamil", "English", "locally familiar objects, foods, festivals"]
+    },
+    "theme_examples": {
+      "note": "EXAMPLES ONLY — confirm with supervisor/clinician; not validated themes.",
+      "memory_sequence": {
+        "early_onset": "work task order / family schedule",
+        "late_onset": "medication & appointment routine; shopping list",
+        "interest:cooking": "recipe step order"
+      },
+      "attention_search": {
+        "late_onset": "find items in a familiar kitchen scene",
+        "interest:gardening": "find specific plants/tools in a garden scene"
+      }
+    },
+    "gender_policy": "Do not auto-assign themes by gender. Record only if a justified research reason exists. Drive themes from stated interests (person-centred).",
+    "presentation_profiles": {
+      "note": "Accessibility layer; independent of cognitive target and difficulty. User override always available.",
+      "default_working_age": {"font_min_px": 16, "contrast_min": "4.5:1", "motion": "standard"},
+      "default_older": {"font_min_px": 20, "contrast_min": "7:1 (AAA)", "palette": "high-contrast; avoid blue/green distinctions; prefer red/orange/yellow", "font": "sans-serif", "line_height": 1.5, "motion": "reduced", "touch_targets": "large", "labels": "text over icon"},
+      "user_override": ["font_size", "contrast", "theme/palette"]
+    }
+  },
+
+  "cross_cutting": {
+    "cognitive_stimulation_therapy": "CST / reminiscence (reality orientation, themed quiz, autobiographical content) — broad engagement layer, NICE-recommended for mild-moderate dementia. Feeds the engagement criterion; not a single-domain exercise.",
+    "sources": ["Reminiscence therapy meta-analysis (2025)", "Digital RT meta-analysis (personalization drives benefit)"]
+  },
+
+  "governance": {
+    "validation_status": "Draft catalog. Exercises are evidence-based paradigms; the domain/arm/theme tagging is NOT yet clinically validated.",
+    "required_signoff": "Domain expert / clinician must confirm tagging is clinically appropriate before deployment (proposal Objective I & II).",
+    "honest_flags": [
+      "LBD-priority domains (visuospatial 0.18, executive 0.20, processing speed 0.09) are the WEAKEST CCT responders — keep as targets but set low expected benefit; lean on working memory (0.74) and attention (0.44) and compensatory strategies.",
+      "Memory strategy training shows mixed/negative results in MCI; prefer errorless learning / spaced retrieval (compensatory) for the AD arm.",
+      "High-language exercises (fluency, naming, semantic) need proper Sinhala/Tamil adaptation before counting as validated in-language."
+    ]
+  },
+
+  "references": {
+    "hill_2017": "Hill NTM et al. Computerized cognitive training in older adults with MCI or dementia. Am J Psychiatry 2017;174(4):329-340.",
+    "ball_2002": "Ball K et al. Effects of cognitive training interventions with older adults (ACTIVE). JAMA 2002;288:2271-2281.",
+    "mckeith_2017": "McKeith IG et al. Diagnosis and management of DLB: 4th consensus report. Neurology 2017;89(1):88-100.",
+    "cicerone_2019": "Cicerone KD et al. Evidence-based cognitive rehabilitation: systematic review. 2019.",
+    "bahar_fuchs": "Bahar-Fuchs A et al. Cognitive training & rehabilitation in mild-moderate dementia (restorative vs compensatory).",
+    "spaced_retrieval_2017": "USMART/SMART spaced-retrieval RCT in MCI, 2017.",
+    "reminiscence_meta_2025": "Reminiscence therapy meta-analysis (cognition, mood, QoL), 2025.",
+    "digital_rt_meta": "Digital reminiscence therapy meta-analysis — content personalization drives benefit.",
+    "yod_review": "Young-onset dementia narrative review (<65 definition).",
+    "wcag_22": "W3C WCAG 2.2 (contrast 4.5:1 / 7:1 AAA).",
+    "nia_nlm": "NIA/NLM senior-friendly digital content guidelines."
+  }
+}

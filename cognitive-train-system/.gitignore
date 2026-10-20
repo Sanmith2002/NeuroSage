@@ -21,6 +21,5 @@ data/
 .DS_Store
 Thumbs.db
 
-# exercise catalog stays local (draft, per owner)
-exercise_catalog.json
-exercise_catalog.md
+# ...except the backend runtime copy, which the engine + Docker deploy require
+!backend/models/exercise_catalog.json
