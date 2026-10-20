@@ -1,11 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DIAGNOSIS_PRESETS } from '../types'
-import { listPatients, loginPatient, deletePatient, hasSavedPlan, type PatientRecord } from '../storage'
+import { listPatients, loginPatient, deletePatient, hasSavedPlan, cleanupDuplicateResults, type PatientRecord } from '../storage'
 
 export default function Landing() {
   const navigate = useNavigate()
   const [patients, setPatients] = useState<PatientRecord[]>(() => listPatients())
+
+  // One-time cleanup of duplicate rows from the old double-save bug.
+  useEffect(() => { cleanupDuplicateResults() }, [])
 
   function openPatient(p: PatientRecord) {
     loginPatient(p.name)
