@@ -2,7 +2,8 @@
 
 **Feature Branch**: `feature-06/Independent-calibration`
 **Created**: 2026-10-21
-**Status**: Clarified — ready for technical planning
+**Status**: Completed — adversarially verified; closed within approved research-software scope.
+**Closed**: 2026-10-21
 **Input**: Independently calibrate a frozen Feature 005 correctness estimator using only its authorized Feature 003 calibration targets and exactly aligned Feature 004 calibration signals.
 
 ## Purpose and Scope
