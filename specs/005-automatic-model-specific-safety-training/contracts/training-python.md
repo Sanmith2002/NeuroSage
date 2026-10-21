@@ -1,8 +1,8 @@
 # Proposed Python Contract — Feature 005
 
-**Status:** Planning contract, not implemented. It adds a `safira.training` surface and does not change public Features 001–004, `ModelAdapter`, `AdapterCapabilities`, `SafetyContext` or `SafetyAssessment`. [Data model](../data-model.md) defines invariant details.
+**Status:** Batch A (T001–T017) implemented; later batches remain planned. It adds a `safira.training` surface and does not change public Features 001–004, `ModelAdapter`, `AdapterCapabilities`, `SafetyContext` or `SafetyAssessment`. [Data model](../data-model.md) defines invariant details.
 
-## Public orchestration surface
+## Planned full orchestration surface
 
 ```python
 class SafetyTrainingService:
@@ -20,6 +20,8 @@ class SafetyTrainingService:
     ) -> tuple[TrainingOutcome, ...]: ...
 ```
 
+**Batch A implementation note:** T001–T017 currently implement `SafetyTrainingService.prepare(dataset, signals)`, which performs complete trusted admission, exact alignment, registry compatibility and per-scope eligibility only. The `train(dataset, signals)` operation above remains planned for later batches. No candidate is fitted and no successful estimator artifact can be published in Batch A.
+
 `train` verifies the **complete** paired inputs before it returns any successful scope outcome, cohort-support assertion, selected estimator or artifact. It returns one outcome per protocol-authorized exact `(model_id, model_version, label_id)` scope in deterministic source-key order. It does not call primary classifiers, Feature 003 target builders, Feature 004 extractors or protected-test APIs. All ordinary outputs are privacy filtered. A top-level failed shared admission returns/raises a typed safe failure for all affected scopes; it never continues from an unverifiable partial inventory.
 
 ## Injected trusted-host verifier
@@ -31,6 +33,12 @@ class TrainingInputVerifier(Protocol):
         dataset: DatasetBuildResult,
         signals: SignalFeatureSet,
     ) -> TrainingInputCheck: ...
+
+    def verify_dataset(
+        self,
+        dataset: DatasetBuildResult,
+        reference: Feature003DatasetReference,
+    ) -> SignalDatasetCheck: ...
 
     def verify_prediction(self, record: PredictionRecord) -> SignalInputCheck: ...
 ```
