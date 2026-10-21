@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [x] CHK005 No unresolved `[NEEDS CLARIFICATION]` markers are embedded; unresolved decisions A–E are separately listed for the clarification stage.
+- [x] CHK005 No unresolved `[NEEDS CLARIFICATION]` markers remain; the five research decisions A–E have been clarified and approved.
 - [x] CHK006 Requirements specify exact inputs, scope identity, behavior, forbidden data, and expected outcomes in testable terms.
 - [x] CHK007 Success criteria define observable synthetic verification outcomes and measurable zero-leakage/compatibility checks without inventing universal model-performance thresholds.
 - [x] CHK008 Success criteria avoid implementation-specific performance claims and clinical effectiveness claims.
@@ -32,14 +32,14 @@
 
 ## Open Research Decisions
 
-- [x] CHK018 Candidate algorithms and their selection criteria are left for evidence-based clarification (Decision A).
-- [x] CHK019 Per-label versus shared label-aware estimator architecture is explicitly unresolved (Decision B).
-- [x] CHK020 Missing and heterogeneous signal-feature treatment is explicitly unresolved (Decision C).
-- [x] CHK021 Patient-grouped model selection and small-cohort feasibility are explicitly unresolved without universal minima (Decision D).
-- [x] CHK022 Estimator freezing and validation evidence reuse for later calibration/policy work are explicitly unresolved (Decision E).
+- [x] CHK018 Decision A is resolved: the training-prevalence baseline and fixed L2 logistic candidate, scikit-learn dependency, Brier-first selection, secondary metrics, tie rule, and single-class limitation are recorded in the specification.
+- [x] CHK019 Decision B is resolved: training, eligibility, candidate comparison, and artifacts are independent for each exact `(model_id, model_version, label_id)` scope.
+- [x] CHK020 Decision C is resolved: the protocol-approved finite feature schema, seven distinct states, non-predictive metadata, and training-only preprocessing rules are recorded.
+- [x] CHK021 Decision D is resolved: Feature 003 train fits and validation selects once; calibration and protected final-test remain unavailable, with no added CV or seed search.
+- [x] CHK022 Decision E is resolved: artifacts are immutable, exact-scope, uncalibrated and non-deployable, and validation is marked spent for selection.
 
 ## Notes
 
 - Checklist items are marked complete for specification quality, not implementation completion or scientific/clinical validation.
 - The separate proposal referenced in the request was not present in the repository; the user-provided Feature 005 description is the proposal of record.
-- `$speckit-clarify` should resolve Decisions A–E before technical planning.
+- Decisions A–E are approved and integrated. Technical planning and task generation are complete. Cross-artifact analysis identified targeted documentation corrections; implementation and empirical/scientific validation have not begun.

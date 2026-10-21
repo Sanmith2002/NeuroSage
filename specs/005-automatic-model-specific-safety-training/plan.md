@@ -42,6 +42,8 @@ Rechecked after Phase 1 design: no constitutional exception is needed.
 - Feature 003 `DatasetBuildResult.development` contains train/validation/calibration `CorrectnessExample` rows with the verified binary `correctness_target` and restricted group references. Protected final-test data remain outside the ordinary result.
 - Feature 004 `SignalFeatureSet` contains `training`, `validation`, `calibration` `SignalFeatureRecord` tuples, a dataset reference and `SignalRunManifest`. Each feature row has opaque `SignalRowKey`, exact `SignalSourceKey` and predictor `SignalResult`s. Feature 004 derives a row key from SHA-256 of `dataset_id + NUL + manifest_reference + NUL + complete prediction fingerprint`. Training reference signals are patient-group cross-fitted; validation signals use the frozen full-training reference. The feature-set dataclass itself is not trusted admission proof.
 
+Feature 003 does not define a separate `dataset_version` field. Wherever Feature 005 says “dataset version,” it means the exact manifest-bound build identity: `dataset_id`, `manifest_reference`, the independently verified manifest digest, `protocol_id`/`protocol_version`, and `builder_version`, bound to the complete admitted row inventory. This does not add or assume a Feature 003/004 API field; a digest alone remains insufficient evidence of origin.
+
 ## Architecture and Data Flow
 
 ```text
@@ -62,7 +64,7 @@ Feature 004 SignalFeatureSet ──────┘                     │
 
 ### Trusted admission before matrix construction
 
-An explicit host-owned `TrainingInputVerifier` is injected into each trainer. It checks independently controlled Feature 003 dataset evidence, Feature 004 run/feature-set evidence and Feature 002 admission lineage for **every embedded prediction**. The library requires an executed typed result bound to actual complete content, exact dataset/protocol/version/manifest/builder, source inventory, signal method/configuration and fitted-reference identities, and full train/validation/calibration row inventory. It recomputes fingerprints and row keys, requires a bijection by role and unique rows, checks the exact Feature 001 registration, and verifies group disjointness. Caller-created checks, Booleans and matching digests alone establish no authority. Missing, incomplete, stale or mismatched independent evidence fails before target/predictor use. Host-owned provider injection is the trust root; core code cannot authenticate arbitrary malicious host-injected Python. No real clinical ledger is configured here.
+An explicit host-owned `TrainingInputVerifier` is injected into each trainer. It checks independently controlled Feature 003 dataset evidence, Feature 004 run/feature-set evidence and Feature 002 admission lineage for **every embedded prediction**. The library requires an executed typed result bound to actual complete content, exact manifest-bound dataset-build identity (`dataset_id`, `manifest_reference`, independently verified manifest digest, `protocol_id`/`protocol_version`, `builder_version` and complete inventory), source inventory, signal method/configuration and fitted-reference identities, and full train/validation/calibration row inventory. It recomputes fingerprints and row keys, requires a bijection by role and unique rows, checks the exact Feature 001 registration, and verifies group disjointness. Caller-created checks, Booleans and matching digests alone establish no authority. Missing, incomplete, stale or mismatched independent evidence fails before target/predictor use. Host-owned provider injection is the trust root; core code cannot authenticate arbitrary malicious host-injected Python. No real clinical ledger is configured here.
 
 The verifier may use opaque patient-group keys internally for eligibility/disjointness. Only ordered encoded predictors and Feature 003 `correctness_target` reach candidate fitting. Group keys, outcomes, association IDs, roles and verification evidence cannot enter predictors, preprocessing, candidate scoring or ordinary artifacts. Calibration is inventoried for admission completeness only; Feature 005 never builds its training matrix from it. Protected rows are outside the interface.
 
@@ -122,10 +124,12 @@ These are cohesive ownership areas, not mandated public modules. [contracts/trai
 ## Verification and Dependencies
 
 1. Test frozen records, nested immutability and serialization privacy.
-2. Test forged/missing/stale admission, changed target/predictor, extra/missing/duplicate/wrong-role rows and group/source/reference mismatch before implementing verification.
+2. Test forged/missing/stale admission, changed target/predictor, extra/missing/duplicate/wrong-role rows and group/source/reference mismatch before implementing verification. Include rejection of unknown model IDs, wrong model versions, unknown/incompatible labels, incorrect registered adapter or preprocessing identity, and incompatible source-qualified prediction semantics.
 3. Test all seven states, numeric/category encoding, train-only preprocessing, constant/all-missing columns and forbidden predictor fields.
 4. Test baseline/logistic fit and failure, Brier/tie/undefined AUROC/AP, patient grouping, no refit, no calibration/test access and source isolation.
 5. Test artifact compatibility, safe export/load, lifecycle labels, privacy and three-configurations end-to-end; run Features 001–004 and full pytest regression plus `git diff --check`.
+
+For train-only fitting isolation, distinguish admission from fitting behavior: a changed validation/calibration record without fresh independent authorization must fail the full-service admission gate. To prove fitting independence, either independently reauthorize each changed synthetic full-service fixture or call isolated train-only preprocessing/candidate helpers directly with unchanged approved training inputs and protocol; then assert the fitted preprocessing and candidate state are unchanged. Never bypass admission with a mutated, previously admitted record.
 
 Synthetic tests establish software boundaries, not scientific calibration, transport authentication or clinical effectiveness. A real trusted evidence ledger and approved protocol are external prerequisites.
 

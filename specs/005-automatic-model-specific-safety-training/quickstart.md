@@ -10,6 +10,8 @@
 - An approved **versioned synthetic** `TrainingProtocol` with exact source-scoped feature allowlist, non-value/optional policy, independent-patient and correctness-class adequacy, comparison prerequisites, fixed logistic `C`/`tol`/`max_iter`, preprocessing and safe aggregate policy.
 - A fixture host-owned verifier with an independently maintained ledger of accepted Feature 003 dataset, Feature 004 run/feature set and Feature 002 admissions. No production clinical ledger or artifact custodian is configured in the repository. A caller-created check, digest or Boolean is insufficient.
 
+Feature 003/004 do not expose a separate `dataset_version` property. Exact build/version matching uses `dataset_id`, `manifest_reference` plus independently verified manifest digest, `protocol_id`/`protocol_version`, `builder_version`, and the complete admitted row inventory. Do not invent a new version field or treat a digest alone as provenance.
+
 ## Proposed synthetic workflow
 
 1. Register synthetic standalone binary, multi-label and independent multi-model classifiers through Feature 001. Keep each model/version/label distinct, including two contributors that share a label name.
