@@ -1,5 +1,7 @@
 from tests.training_fixtures import SyntheticTrainingLedger, build_inputs
 
+import pytest
+
 
 def test_service_returns_per_scope_outcome_without_training(registered_collection):
     from hashlib import sha256
@@ -162,3 +164,104 @@ def test_required_signal_state_controls_explicit_scope_outcome(registered_collec
         ledger.admit(dataset, changed_signals, reference)
         outcome = SafetyTrainingService(registry, protocol, ledger).prepare(dataset, changed_signals)[0]
         assert outcome.status is expected
+
+
+@pytest.mark.parametrize("missing_policy", ("feature_policies", "preprocessing_policies"))
+def test_missing_mandatory_training_policy_is_not_ready_before_candidate_work(
+        registered_collection, missing_policy, monkeypatch):
+    from dataclasses import replace
+    from safira.training.records import TrainingStatus
+    from safira.training.service import SafetyTrainingService
+    from test_training_acceptance import _make_service
+
+    registry, dataset, signals, protocol, ledger, _ = _make_service(registered_collection)
+    incomplete = replace(protocol, **{missing_policy: {}})
+    service = SafetyTrainingService(registry, incomplete, ledger)
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("non-ready protocol reached matrix construction or candidate work")
+
+    import safira.training.service as service_module
+    for name in ("build_feature_schema", "fit_preprocessing", "transform_rows",
+                 "fit_prevalence_baseline", "fit_logistic_candidate", "compare_candidates"):
+        monkeypatch.setattr(service_module, name, forbidden)
+
+    prepared = service.prepare(dataset, signals)[0]
+    trained = service.train(dataset, signals)[0]
+    # `prepare` remains eligibility-only; candidate-specific policy approval is
+    # enforced by `train` after the same independent source admission.
+    assert prepared.status is TrainingStatus.ELIGIBLE_FOR_CANDIDATE_FITTING
+    assert trained.status is TrainingStatus.NOT_READY
+    assert trained.artifact is None
+
+
+def test_missing_policy_isolated_to_its_exact_scope(registered_collection):
+    from dataclasses import replace
+    from safira.training.records import TrainingStatus
+    from safira.training.service import SafetyTrainingService
+    from test_training_acceptance import _make_service
+
+    labels = ("eligible-label", "unapproved-label")
+    partitions = {
+        "train": (("a0", 0), ("b0", 0), ("a1", 0), ("b1", 0),
+                  ("a2", 1), ("b2", 1), ("a3", 1), ("b3", 1)),
+        "validation": (("av0", 0), ("bv0", 0), ("av1", 0), ("bv1", 0),
+                       ("av2", 1), ("bv2", 1), ("av3", 1), ("bv3", 1)),
+        "calibration": (("ca", 0), ("cb", 1)),
+    }
+    registry, dataset, signals, protocol, ledger, _ = _make_service(
+        registered_collection, labels=labels, partitions=partitions)
+    scope_by_label = {scope.label_id: scope.source_key for scope in protocol.scopes}
+    ready_key = scope_by_label["eligible-label"]
+    unready_key = scope_by_label["unapproved-label"]
+    policies = dict(protocol.feature_policies)
+    del policies[unready_key]
+    protocol = replace(protocol, feature_policies=policies)
+
+    outcomes = SafetyTrainingService(registry, protocol, ledger).train(dataset, signals)
+    by_scope = {outcome.scope.source_key: outcome for outcome in outcomes}
+    assert by_scope[ready_key].status in (TrainingStatus.SELECTED_BASELINE, TrainingStatus.SELECTED_LOGISTIC)
+    assert by_scope[ready_key].artifact is not None
+    assert by_scope[unready_key].status is TrainingStatus.NOT_READY
+    assert by_scope[unready_key].artifact is None
+
+
+def test_missing_training_policy_does_not_mask_unauthorized_input_mutation(registered_collection):
+    from dataclasses import replace
+    from safira.training.exceptions import TrainingVerificationError
+    from safira.training.records import TrainingStatus
+    from safira.training.service import SafetyTrainingService
+    from test_training_acceptance import _make_service
+
+    registry, dataset, signals, protocol, ledger, _ = _make_service(registered_collection)
+    incomplete = replace(protocol, feature_policies={})
+    service = SafetyTrainingService(registry, incomplete, ledger)
+    changed_example = replace(dataset.development.train[0],
+                              correctness_target=1 - dataset.development.train[0].correctness_target)
+    changed_dataset = replace(dataset, development=replace(
+        dataset.development, train=(changed_example,) + dataset.development.train[1:]))
+
+    with pytest.raises(TrainingVerificationError):
+        service.train(changed_dataset, signals)
+
+    # The original independently admitted inputs still reach the ordinary protocol result.
+    assert service.train(dataset, signals)[0].status is TrainingStatus.NOT_READY
+
+
+def test_malformed_supplied_preprocessing_policy_remains_invalid_input(registered_collection):
+    from dataclasses import replace
+    from safira.training.records import PreprocessingPolicy, TrainingStatus
+    from safira.training.service import SafetyTrainingService
+    from test_training_acceptance import _make_service
+
+    registry, dataset, signals, protocol, ledger, _ = _make_service(registered_collection)
+    key = protocol.scopes[0].source_key
+    malformed = PreprocessingPolicy(
+        constant_features="keep", category_encoding="one_hot_seen_unseen",
+        numeric_imputation={}, numeric_scaling={},
+    )
+    protocol = replace(protocol, preprocessing_policies={key: malformed})
+
+    outcome = SafetyTrainingService(registry, protocol, ledger).train(dataset, signals)[0]
+    assert outcome.status is TrainingStatus.INVALID_INPUT
+    assert outcome.artifact is None

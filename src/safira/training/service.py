@@ -17,8 +17,9 @@ from safira.training.features import (
     build_feature_schema, fit_preprocessing, transform_rows,
 )
 from safira.training.records import (
-    CandidateFailurePolicy, SafetyEstimatorArtifact, TrainingOutcome, TrainingProtocol,
-    TrainingScope, TrainingStatus,
+    CandidateFailurePolicy, FeaturePolicy, LogisticCandidateConfig, PreprocessingPolicy,
+    SafetyEstimatorArtifact, TrainingOutcome, TrainingProtocol, TrainingScope, TrainingStatus,
+    ValidationSupportCriteria,
 )
 from safira.training.verification import _verify_training_inputs
 
@@ -48,6 +49,9 @@ class SafetyTrainingService:
                 outcomes.append(prepared)
                 continue
             scope = prepared.scope
+            if not self._training_configuration_ready(scope):
+                outcomes.append(TrainingOutcome(scope, TrainingStatus.NOT_READY, "scope_protocol_incomplete"))
+                continue
             try:
                 outcome = self._train_scope(dataset, signals, scope, verified)
             except Exception:
@@ -62,6 +66,17 @@ class SafetyTrainingService:
         # This independently executes the Feature 002/003/004 admission boundary.
         return _verify_training_inputs(self._registry, dataset, signals, signals.dataset_reference,
                                        self._verifier, scopes=self._protocol.scopes)
+
+    def _training_configuration_ready(self, scope):
+        key = scope.source_key
+        return (
+            type(self._protocol.feature_policies.get(key)) is FeaturePolicy
+            and type(self._protocol.preprocessing_policies.get(key)) is PreprocessingPolicy
+            and type(self._protocol.logistic_configs.get(key)) is LogisticCandidateConfig
+            and self._protocol.logistic_configs[key].approved
+            and type(self._protocol.validation_adequacy.get(key)) is ValidationSupportCriteria
+            and type(self._protocol.candidate_failure_policies.get(key)) is CandidateFailurePolicy
+        )
 
     def _prepare_admitted(self, dataset, signals):
         examples_by_scope = {scope.source_key: [] for scope in self._protocol.scopes}

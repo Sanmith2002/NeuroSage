@@ -43,4 +43,4 @@
 
 ## Verified test checkpoints
 
-Synthetic test-first checks cover adversarial trust/alignment, schema and train-only preprocessing, candidate metrics/feasibility/ties, independent scopes and lifecycle, and artifact compatibility/immutability/privacy/safe loading. The verified Batch C results are 88 Feature 005 tests, 566 relevant Feature 001–004/adapter/context/assessment regression tests, 654 full-suite tests, and a passing `git diff --check`. These are software checks only; no scientific or clinical validation is claimed.
+Synthetic test-first checks cover adversarial trust/alignment, schema and train-only preprocessing, candidate metrics/feasibility/ties, independent scopes and lifecycle, artifact compatibility/immutability/privacy/safe loading, and protocol-readiness outcomes. The verified results are 93 Feature 005 tests, 566 relevant Feature 001–004/adapter/context/assessment regression tests, 659 full-suite tests, and a passing `git diff --check`. These are software checks only; no scientific or clinical validation is claimed.

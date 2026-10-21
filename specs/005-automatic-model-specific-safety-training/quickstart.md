@@ -110,9 +110,9 @@ git diff --check
 
 On the implementation environment above:
 
-- Feature 005 training tests: **88 passed**.
+- Feature 005 training tests: **93 passed**.
 - Relevant Features 001–004 and adapter/context/assessment regression tests: **566 passed**.
-- Full pytest suite: **654 passed, 0 failed, 0 skipped**.
+- Full pytest suite: **659 passed, 0 failed, 0 skipped**.
 - `git diff --check`: passed.
 
 The synthetic tests exercise standalone binary, multi-label and independent multi-model scopes; logistic and baseline selection including an exact tie; one insufficient label beside an eligible label; train-only fitting; exact admission and artifact compatibility; immutable/private export; untrusted origin rejection; test-only numerical reproduction; and guards against invoking primary prediction, target construction, signal extraction, protected evaluation or assessment APIs.

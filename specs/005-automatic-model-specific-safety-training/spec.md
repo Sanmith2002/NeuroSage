@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-21
 
-**Status**: Draft — scientific and technical clarification complete; ready for planning
+**Status**: Draft — implementation and targeted adversarial remediation complete; awaiting focused re-verification
 
 **Input**: User description: automatic model-specific supervised safety-estimator training using trusted Feature 003 correctness supervision and Feature 004 safety features.
 
@@ -160,7 +160,7 @@ A research user reviews a completed or failed training run and can determine its
 
 The status and approved scope of each research decision are recorded below. The technical plan must preserve these decisions and document remaining implementation choices without broadening them.
 
-**A. Candidate estimator families and selection criteria — resolved**: The approved V1 candidates, dependency, fixed-configuration rule, Brier primary metric, conditional secondary metrics, tie-break, single-class behavior, and train/validation boundary are recorded in the Clarifications section and FR-013, FR-014, and FR-019. Compatible scikit-learn version pinning remains a technical-planning decision.
+**A. Candidate estimator families and selection criteria — resolved**: The approved V1 candidates, dependency, fixed-configuration rule, Brier primary metric, conditional secondary metrics, tie-break, single-class behavior, and train/validation boundary are recorded in the Clarifications section and FR-013, FR-014, and FR-019. The scikit-learn runtime dependency and exact `scikit-learn==1.7.1` implementation pin were approved through clarification and technical planning, then added to the project dependencies. Installation and environment compatibility are verified during implementation. Dependency approval and compatibility do not establish scientific or clinical validity.
 
 **B. Multi-label estimator architecture — resolved**: V1 uses independent estimators per exact model/version/label scope and does not pool examples, targets, or support across labels, versions, or contributors. Shared label-aware estimators are deferred; see the Clarifications section and FR-006/FR-010.
 
