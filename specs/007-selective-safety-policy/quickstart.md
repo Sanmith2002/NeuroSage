@@ -1,58 +1,56 @@
 # Feature 007 Quickstart and Verification Guide
 
-Feature 007 is planned but not implemented yet. These commands are the expected verification entry points after implementation; results must be recorded from the actual run and must not be represented as already executed.
+Feature 007 provides a **cohort-level research workflow** that selects and freezes one empirical TRUST cutoff per exact `(model_id, model_version, label_id)` scope. It does not provide per-patient inference, runtime status assignment, independent policy evaluation, clinical validation, or deployment readiness.
 
-## Prerequisites
+## Public operation
 
-- Python 3.11+ with the repository's approved development environment.
-- Synthetic Feature 001 registry/classifier fixtures and synthetic Feature 002/003/004 records.
-- Independently injected synthetic trusted verifiers for prediction admission, dataset/ground-truth verification, artifact origin, and patient disjointness.
-- Synthetic Feature 005/006 artifacts with their original compatible provenance and a distinct synthetic policy-selection Feature 003 build.
-- A versioned protocol with explicit synthetic risk ceiling, one patient index rule, support, candidate, equality, tie, and disclosure settings. These values are test-only fixtures and are not recommended clinical values.
+The public entry point is `PolicySelectionService.select`. Construct its protocol and evidence references from approved, independently verified inputs, then supply the exact Feature 001 registry and frozen Feature 005/006 artifacts:
 
-## Commands
+```python
+from safira.policy import PolicySelectionService
 
-Focused Feature 007 verification:
-
-```powershell
-python -m pytest tests/test_policy_*.py -q
+service = PolicySelectionService(registry, approved_policy_protocol, trusted_host_verifier)
+outcomes = service.select(
+    policy_dataset=new_policy_feature003_dataset,
+    original_training_dataset=original_feature003_dataset,
+    original_signal_protocol=original_feature004_protocol,
+    estimator_artifacts={("model-a", "v1", "label-a"): frozen_estimator},
+    calibrator_artifacts={("model-a", "v1", "label-a"): frozen_calibrator},
+    prior_history=authoritative_prior_assignment_history,
+)
 ```
 
-Feature 001–006 compatibility regression:
+`trusted_host_verifier` is explicitly injected by the host. It must execute and bind prediction admission, full dataset/target checks, protocol approval, artifact origin, and cross-source patient-disjointness checks. A constructed record, Boolean, digest, status, or check object supplied by an untrusted caller is not proof. The core validates returned typed checks against the exact submitted content and scope. The core library cannot authenticate hostile code controlling its trusted Python host. Because V1 success serialization includes cutoff, empirical risk/coverage, and eligible/selected counts, the approved protocol must explicitly set `disclose_support=True`; otherwise the service returns scope-local `NOT_READY` with no summary or artifact.
+
+Shared admission failures raise privacy-safe `PolicyVerificationError`/`PolicyInputError`; the service does not publish scope results before the complete shared gate. Once shared admission succeeds, each exact scope produces a `PolicySelectionOutcome`: `SELECTED_UNEVALUATED` with an aggregate immutable artifact, or a safe non-success such as `INSUFFICIENT_EVIDENCE`, `NOT_READY`, `INVALID_INPUT`, `INCOMPATIBLE_INPUT`, or `NO_FEASIBLE_CUTOFF`.
+
+## Evidence and selection boundary
+
+- The policy input must be a new, independently authorized Feature 003 build whose validation partition was reserved for policy selection before outcomes were examined. Feature 005 validation and Feature 006 calibration evidence are spent and cannot be reused. Protected final-test evidence is never supplied or read.
+- Original Feature 005/006 artifacts retain their original dataset and Feature 004 provenance. Feature 007 independently verifies their origin and reconstructs original Feature 004 references using only the original verified training predictors. Reference digests must match exactly; policy records are never used for fitting or refitting.
+- Feature 007 independently verifies every original and policy Feature 002 prediction, every target, complete inventories, exact manifests, exact classifier/version/label scope, and authoritative patient-group disjointness before privately applying the frozen Feature 005 schema/preprocessing/estimator and Feature 006 mapping.
+- Private scores, target values, patient-group keys, row keys, and intermediate signal records are ephemeral. They are not returned through public outcomes, artifacts, `repr`, or serialization.
+- The protocol fixes one index assessment per patient/scope, the empirical risk ceiling, eligible/support rules, candidate cutoffs, comparison semantics, tie rule, and allowed aggregate disclosure before outcomes are accessed. Risk is incorrect TRUST-selected eligible patients divided by TRUST-selected eligible patients; coverage is TRUST-selected eligible patients divided by all eligible patients. Empty TRUST selection has undefined risk and cannot produce a successful artifact. Constant scores support only protocol-authorized all-or-none selection.
+- Success means `SELECTED_UNEVALUATED`; policy evidence is spent. The selection-set empirical risk is not a statistical guarantee or an independent performance estimate. A later feature must evaluate the frozen policy on separately authorized independent evidence.
+
+## Verification commands
+
+From the Feature 007 worktree root in PowerShell, the tested environment used Python 3.11 with the approved `scikit-learn==1.7.1` dependency available ephemerally through `uv`:
 
 ```powershell
-python -m pytest tests -q
-```
-
-Whitespace/diff validation:
-
-```powershell
+$env:PYTHONPATH = 'src;tests'
+uv run --no-project --with pytest --with scikit-learn==1.7.1 python -m pytest -q tests -k policy
+uv run --no-project --with pytest --with scikit-learn==1.7.1 python -m pytest -q tests -k "not policy"
+uv run --no-project --with pytest --with scikit-learn==1.7.1 python -m pytest -q
 git diff --check
 ```
 
-## Expected synthetic scenario
+Verified during this implementation run: Feature 007 focused selection suite **45 passed**; unchanged Feature 001–006 regression selection **743 passed**; full suite **788 passed, 0 failed, 0 skipped**. These are synthetic software tests, not empirical clinical evaluation. `git diff --check` is performed at the final checkpoint.
 
-1. Build a synthetic exact-scope Feature 005 estimator and Feature 006 calibrator, record their original Feature 003/004 bindings, and add them to a test-only trusted origin ledger.
-2. Produce original Feature 004 reference outputs from synthetic original training rows. Construct a separate synthetic Feature 003 build whose validation partition is policy-only, patient-disjoint from every upstream/protected membership, and independently admitted before synthetic outcomes are released to selection.
-3. Verify Feature 007 reconstructs the exact original Feature 004 reference digest, derives each policy signal row from its admitted prediction using the original method configuration, and applies the exact frozen Feature 005 schema/preprocessing and Feature 006 mapping. Caller-constructed signal rows are not trusted, no refitting occurs on policy evidence, and no individual score is returned.
-4. Calculate patient-level empirical risk/coverage, apply the frozen protocol's candidate/equality/tie rules, and select maximum feasible coverage under the test-only empirical ceiling.
-5. Freeze an immutable `SELECTED_UNEVALUATED` artifact with separated original vs policy provenance, marked policy evidence spent, non-deployable, not independently evaluated, and not clinically validated.
+## Known limitations
 
-Expected output: one scope-level outcome/artifact or an explicit safe non-success; no patient rows, patient scores, targets, group identifiers, raw evidence, restricted manifests, or protected content.
-
-## Required negative checks
-
-- Reject spent Feature 005 validation and Feature 006 calibration evidence.
-- Reject missing or assertion-only verification, altered prediction or ground-truth content, stale/mismatched manifest, incomplete inventory, invalid row alignment, cross-scope/version artifact, changed preprocessing/method/reference digest, and unknown patient overlap.
-- Return `NOT_READY` if original Feature 004 reconstruction inputs, trusted artifact-origin evidence, independent policy cohort, or approved protocol settings are absent.
-- Ensure policy evidence never changes original fitted state, estimator, schema, preprocessing, or calibration mapping.
-- Treat empty TRUST risk as undefined and fail rather than report zero risk. Constant scores may only produce all-or-none selection under the same empirical ceiling and support rule.
-- Inspect every ordinary result and serialization surface for patient data, row-level outcomes/scores, protected data, and verifier payloads.
-- Confirm there is no public per-patient `predict`, `apply`, calibrated-score, `SafetyContext`, `SafetyAssessment`, or runtime operation.
-
-## Current limitations
-
-- No real policy-selection dataset, numeric protocol, trusted origin ledger, patient linkage service, or custodian integration is configured.
-- Existing Features 004–006 public interfaces do not provide the new-cohort scoring path. Feature 007 must implement the documented private bridge and prove exact original reference reproduction; otherwise it returns `NOT_READY`.
-- The policy-selection empirical risk ceiling is not a statistical guarantee. Policy-selection data are spent. A separate later feature must evaluate the frozen policy on independent final-test evidence.
-- No clinical or deployment validity is established. Feature 008 runtime assessment remains provisional and is outside this feature.
+- No production policy-selection cohort, trusted policy/provenance ledger, cross-source patient linkage service, or custodian integration is configured. Without those inputs and an approved versioned protocol, shared admission fails closed; no successful operation is claimed.
+- Existing Feature 004–006 public APIs deliberately do not expose reusable reference state or inference. The Feature 007 private bridge is coupled to their exact artifact schemas and internal frozen transformation semantics. It reconstructs and checks state rather than changing upstream contracts; incompatible or unreproducible state is rejected.
+- The Feature 005 estimator and Feature 006 calibrator remain bound to their original training/calibration evidence. Feature 007 adds separate policy-selection evidence provenance and does not refit either artifact.
+- No numerical ceiling, patient minimum, clinical cutoff, statistical risk guarantee, clinical validity, or deployment readiness is established by this implementation.
+- Feature 008 runtime assessment and separate independent final evaluation remain outside Feature 007.

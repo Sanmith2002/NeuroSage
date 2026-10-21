@@ -8,15 +8,16 @@ This contract specifies a cohort-level research workflow. It does not expose per
 class PolicyInputVerifier(Protocol):
     def verify_prediction(self, record: PredictionRecord) -> SignalInputCheck: ...
     def verify_dataset(self, dataset: DatasetBuildResult,
-                       reference: PolicyEvidenceReference) -> PolicyDatasetAdmission: ...
+                       reference: Feature003DatasetReference) -> SignalDatasetCheck: ...
     def verify_ground_truth(self, example: CorrectnessExample,
                             prediction: PredictionRecord,
-                            scope: PolicyScope) -> PolicyOutcomeAdmission: ...
+                            scope: PolicyScope) -> PolicyGroundTruthCheck: ...
     def verify_patient_disjointness(self, policy_reference: PolicyEvidenceReference,
                                     prior_history: tuple[PriorAssignmentManifest, ...],
                                     protected_scope: object) -> PatientDisjointnessCheck: ...
-    def verify_artifact_origin(self, kind: str, digest: str,
-                               scope: tuple[str, str, str], version: str) -> ArtifactOriginCheck: ...
+    def verify_artifact(self, payload_digest: str, scope_key: tuple[str, str, str],
+                        artifact_version: str) -> ArtifactOriginCheck: ...
+    def verify_protocol(self, protocol: PolicySelectionProtocol) -> PolicyProtocolCheck: ...
 
 
 class PolicySelectionService:
@@ -26,12 +27,12 @@ class PolicySelectionService:
     def select(self, *, policy_dataset: DatasetBuildResult,
                original_training_dataset: DatasetBuildResult,
                original_signal_protocol: SignalProtocol,
-               estimator_artifacts: Mapping[PolicyScope, SafetyEstimatorArtifact],
-               calibrator_artifacts: Mapping[PolicyScope, CalibratorArtifact],
-               prior_history: tuple[PriorAssignmentManifest, ...]) -> tuple[PolicySelectionOutcome, ...]: ...
+               estimator_artifacts: Mapping[tuple[str, str, str], SafetyEstimatorArtifact],
+               calibrator_artifacts: Mapping[tuple[str, str, str], CalibratorArtifact],
+               prior_history: tuple[PriorAssignmentManifest, ...] = ()) -> tuple[PolicySelectionOutcome, ...]: ...
 ```
 
-The verifier is explicitly injected and selected by trusted host construction, never caller input. `verify_prediction` returns the existing Feature 004 `SignalInputCheck` contract after the trusted provider checks Feature 002 admission; the core recomputes fingerprints, matches exact inventories, executions and scopes, and validates returned checks against submitted inputs. A caller-supplied Boolean, digest, prebuilt check or `accepted` field is not proof. If no trusted provider or required independent evidence is configured, the service returns `NOT_READY` or raises a stable typed shared verification exception before any scope outcome is published.
+The verifier is explicitly injected by trusted host construction. The repository defines the provider protocol and checks its executed responses; it does not configure or authenticate a production provider. `verify_prediction` returns the existing Feature 004 `SignalInputCheck` after the trusted provider checks Feature 002 admission; the core recomputes fingerprints, validates exact inventory and scope, and checks the result against submitted inputs. A caller-supplied Boolean, digest, prebuilt check or `accepted` field is not proof. Missing, rejected or mismatched shared evidence raises a stable privacy-safe `PolicyVerificationError`/`PolicyInputError` before any scope outcome is published. After the shared gate, scope-local outcomes may be `NOT_READY`, `INSUFFICIENT_EVIDENCE`, `INVALID_INPUT`, `INCOMPATIBLE_INPUT`, or `NO_FEASIBLE_CUTOFF`.
 
 The exact host evidence contract must bind:
 
@@ -65,7 +66,7 @@ The frozen `PolicySelectionProtocol` supplies the risk ceiling, exact scope, one
 
 For each candidate cutoff, compute empirical patient risk only if selected patient count is positive, and coverage only if eligible patient count is positive. A candidate is feasible only if its empirical risk is within the approved ceiling and all protocol support criteria are met. Choose maximum coverage. Tied cutoffs follow the protocol's frozen deterministic rule. Empty selection has undefined risk and never yields success. A constant score permits only all-or-none selection; nonempty TRUST is allowed only if it satisfies the same empirical rule and support.
 
-The selection result and artifact carry aggregate selection statistics only when disclosure is approved. They do not contain individual q values or statuses. A successful artifact state is `SELECTED_UNEVALUATED`, `selection_evidence_spent=true`, `independent_evaluation_complete=false`, `protected_test_accessed=false`, `deployable=false`, and `clinical_validity_established=false`.
+The selection result and artifact carry aggregate selection statistics only when disclosure is approved. Current V1 serialization includes the selected cutoff, empirical risk/coverage, and eligible/selected counts; accordingly, `PolicySelectionProtocol.disclose_support` must be true for a successful artifact. If false, the service returns scope-local `NOT_READY` with no summary or artifact (`aggregate_disclosure_not_authorized`). No individual q values or statuses are included. A successful artifact state is `SELECTED_UNEVALUATED`, `selection_evidence_spent=true`, `independent_evaluation_complete=false`, `protected_test_accessed=false`, `deployable=false`, and `clinical_validity_established=false`.
 
 ## Data and errors
 
