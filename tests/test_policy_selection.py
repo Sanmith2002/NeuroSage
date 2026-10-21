@@ -27,6 +27,17 @@ def test_equal_coverage_cutoff_tie_uses_protocol_rule():
     assert result.summary.cutoff == .9
 
 
+def test_non_monotonic_empirical_risk_selects_later_feasible_cutoff():
+    # The risk at .8 is worse than at .9, but a broader .6 set is feasible.
+    result = _choose_cutoff((.9, .8, .7, .6), (1, 0, 1, 1),
+                            ("g1", "g2", "g3", "g4"),
+                            protocol((.9, .8, .6), .3, support={1: 1}))
+    assert result.status is PolicyStatus.SELECTED_UNEVALUATED
+    assert result.summary.cutoff == .6
+    assert result.summary.empirical_risk == .25
+    assert result.summary.coverage == 1.0
+
+
 def test_empty_set_is_undefined_and_never_successful():
     result = _choose_cutoff((.4, .3, .2), (0, 1, 1), ("a", "b", "c"), protocol((.8, .9), .2))
     assert result.status is PolicyStatus.NO_FEASIBLE_CUTOFF

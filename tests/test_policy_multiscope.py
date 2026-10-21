@@ -1,6 +1,9 @@
 """Synthetic multi-label policy selection stays independent by exact scope."""
 
+import pytest
+
 from hashlib import sha256
+import json
 
 from policy_fixtures import PolicyTestLedger, policy_dataset
 from safira.calibration.records import CalibrationProtocol, CalibrationStatus
@@ -22,7 +25,11 @@ from signals_fixtures import SyntheticSignalVerifier
 from test_calibration_bundle_gate import OriginLedger
 
 
-def test_multilabel_scopes_return_success_beside_insufficient_scope(registered_collection):
+@pytest.mark.parametrize("scope_failure", (
+    "ambiguous_index", "reference_reconstruction", "scoring_failure", "insufficient_support",
+    "shared_admission_failure"))
+def test_multilabel_scopes_return_success_beside_scope_local_failure(
+        registered_collection, monkeypatch, scope_failure):
     registry, register = registered_collection
     _, adapter = register(model_id="two-label-model", labels=("label-a", "label-b"), scores=(.4, .8))
     sources = (("two-label-model", "v1", "label-a"), ("two-label-model", "v1", "label-b"))
@@ -118,13 +125,20 @@ def test_multilabel_scopes_return_success_beside_insufficient_scope(registered_c
             {"synthetic-feature": [float(index)]}).records
         policy_rows.append(CorrectnessExample(records[0], "synthetic-target", "v1", 1, 1,
             f"policy-group-{index}", "validation", "synthetic-ground-truth", "synthetic-independence"))
-    for index in range(2):
-        association = CollectionAssociation(f"policy-small-patient-{index}", f"small-assessment-{index}",
+    for index in range(2 if scope_failure == "insufficient_support" else 4):
+        # The first two B rows share a patient and the same index-assessment
+        # reference, which the approved index rule must reject as ambiguous.
+        group_index = (0 if index < 2 else index - 1) if scope_failure == "ambiguous_index" else index
+        group = f"policy-small-group-{group_index}"
+        association = CollectionAssociation(f"policy-small-patient-{index}", f"policy-small-assessment-{group_index}",
                                             f"small-occurrence-{index}")
+        if scope_failure == "ambiguous_index" and index == 1:
+            association = CollectionAssociation("policy-small-patient-0", "policy-small-assessment-0",
+                                                "small-occurrence-1")
         record = collect_live(registry, association, [LiveRequest(*sources[1])],
             {"synthetic-feature": [float(index)]}).records[0]
         policy_rows.append(CorrectnessExample(record, "synthetic-target", "v1", 1, 1,
-            f"policy-small-group-{index}", "validation", "synthetic-ground-truth", "synthetic-independence"))
+            group, "validation", "synthetic-ground-truth", "synthetic-independence"))
     policy_data, policy_ref = policy_dataset(policy_rows, dataset_id="new-policy-cohort")
     host.admit_dataset(policy_data, policy_ref)
     bindings = {calibration_key(source): ("synthetic-target", "v1") for source in sources}
@@ -135,7 +149,34 @@ def test_multilabel_scopes_return_success_beside_insufficient_scope(registered_c
         bindings, 1.0, (0.0, 1.0), 4, 1, {1: 1}, ">=", "lowest_cutoff",
         "lexicographic_assessment_ref_v1", True, "synthetic-policy-approval", True)
     host.admit_protocol(protocol)
-    outcomes = PolicySelectionService(registry, protocol, host).select(
+    service = PolicySelectionService(registry, protocol, host)
+    if scope_failure == "reference_reconstruction":
+        import safira.policy.service as service_module
+        from safira.policy.exceptions import PolicyVerificationError
+        reconstruct = service_module.reconstruct_original_references
+        def one_scope_unavailable(dataset, reference, original_protocol, feature_set, *, source_key=None):
+            if source_key is None or source_key == sources[1]:
+                raise PolicyVerificationError("reference_reproduction_failed")
+            return reconstruct(dataset, reference, original_protocol, feature_set, source_key=source_key)
+        monkeypatch.setattr(service_module, "reconstruct_original_references", one_scope_unavailable)
+    elif scope_failure == "scoring_failure":
+        import safira.policy.service as service_module
+        from safira.policy.exceptions import PolicyVerificationError
+        score = service_module.reconstruct_calibrated_scores
+        def one_scope_numerical_failure(estimator, calibrator, rows, parameters):
+            if tuple(estimator.scope.source_key) == sources[1]:
+                raise PolicyVerificationError("numerical_failure")
+            return score(estimator, calibrator, rows, parameters)
+        monkeypatch.setattr(service_module, "reconstruct_calibrated_scores", one_scope_numerical_failure)
+    elif scope_failure == "shared_admission_failure":
+        from safira.policy.exceptions import PolicyVerificationError
+        host.complete_history = False
+        with pytest.raises(PolicyVerificationError):
+            service.select(policy_dataset=policy_data, original_training_dataset=original,
+                original_signal_protocol=signal_protocol, estimator_artifacts=estimators,
+                calibrator_artifacts=calibrators)
+        return
+    outcomes = service.select(
         policy_dataset=policy_data, original_training_dataset=original,
         original_signal_protocol=signal_protocol, estimator_artifacts=estimators,
         calibrator_artifacts=calibrators)
@@ -143,5 +184,19 @@ def test_multilabel_scopes_return_success_beside_insufficient_scope(registered_c
     by_source = {outcome.scope.source_key: outcome for outcome in outcomes}
     assert by_source[sources[0]].status is PolicyStatus.SELECTED_UNEVALUATED
     assert by_source[sources[0]].artifact is not None
-    assert by_source[sources[1]].status is PolicyStatus.INSUFFICIENT_EVIDENCE
+    expected = {
+        "ambiguous_index": (PolicyStatus.INVALID_INPUT, "input_invalid"),
+        "reference_reconstruction": (PolicyStatus.NOT_READY, "reference_reproduction_failed"),
+        "scoring_failure": (PolicyStatus.INVALID_INPUT, "numerical_failure"),
+        "insufficient_support": (PolicyStatus.INSUFFICIENT_EVIDENCE, "insufficient_evidence"),
+    }
+    expected_status, expected_reason = expected[scope_failure]
+    assert by_source[sources[1]].status is expected_status
+    assert by_source[sources[1]].reason_code == expected_reason
     assert by_source[sources[1]].artifact is None
+    assert tuple(outcome.scope.source_key for outcome in outcomes) == tuple(sorted(sources))
+    failure_surface = repr(by_source[sources[1]]) + str(by_source[sources[1]]) + json.dumps(
+        by_source[sources[1]].to_dict(), sort_keys=True)
+    for private_value in ("policy-small-patient", "policy-small-group", "small-occurrence",
+                          "correctness_target", "patient_group_ref"):
+        assert private_value not in failure_surface

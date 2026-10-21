@@ -17,12 +17,17 @@ def _policy_row_key(reference, prediction):
 
 
 def build_policy_signal_rows(dataset, reference, signal_protocol, extractor,
-                             fitted_states, evidence_verifier):
+                             fitted_states, evidence_verifier, *, source_key=None):
     """Create validation rows only; no reference fitting uses this dataset."""
     from safira.signals.reference import apply_domain_reference, apply_knn_reference
 
     rows = []
-    examples = tuple(dataset.development.validation)
+    scope_filter = None if source_key is None else tuple(source_key)
+    expected_sources = {item.to_tuple() for item in signal_protocol.source_keys}
+    if scope_filter is not None and scope_filter not in expected_sources:
+        raise PolicyVerificationError("scope_incompatible")
+    examples = tuple(example for example in dataset.development.validation
+                     if scope_filter is None or tuple(example.prediction.source_key) == scope_filter)
     seen = set()
     for example in examples:
         record = example.prediction
@@ -41,6 +46,16 @@ def build_policy_signal_rows(dataset, reference, signal_protocol, extractor,
             state = fitted_states.get((source_tuple, method_id))
             if state is None:
                 raise PolicyVerificationError("reference_reproduction_failed")
+            evidence_category = ("feature_representation" if method_id == "knn_distance"
+                                 else "domain_metadata")
+            evidence_item = next((item for item in record.evidence
+                                  if item.category == evidence_category), None)
+            if (evidence_item is not None and evidence_item.state == "available"
+                    and (evidence_item.interpretation.get("evidence_schema")
+                         != config.parameters["evidence_schema"]
+                         or evidence_item.interpretation.get("preprocessing_identity")
+                         != config.parameters["preprocessing_identity"])):
+                raise PolicyVerificationError("scope_incompatible")
             observation = SignalExtractor._reference_query(example, key, source, method_id, config.parameters)
             if method_id == "knn_distance":
                 applied = apply_knn_reference(state, observation.vector, state.compatibility_key,
@@ -66,7 +81,6 @@ def build_policy_signal_rows(dataset, reference, signal_protocol, extractor,
         ordered = tuple(checks[item.method_id] for item in signal_protocol.method_configs.values()
                         if item.method_id in checks)
         rows.append(SignalFeatureRecord(key, source, ordered))
-    expected_sources = {item.to_tuple() for item in signal_protocol.source_keys}
     if any(row.source_key.to_tuple() not in expected_sources for row in rows):
         raise PolicyVerificationError("scope_incompatible")
     return tuple(rows)

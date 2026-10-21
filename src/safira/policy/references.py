@@ -15,7 +15,7 @@ def _row_key(reference, prediction):
     return SignalRowKey(sha256(material).hexdigest())
 
 
-def reconstruct_original_references(dataset, reference, signal_protocol, feature_set):
+def reconstruct_original_references(dataset, reference, signal_protocol, feature_set, *, source_key=None):
     """Re-fit exactly the declared references from original training predictors only."""
     from safira.signals.reference import (ReferenceCompatibilityKey, ReferenceFitConfig,
         fit_domain_reference, fit_knn_reference)
@@ -23,13 +23,19 @@ def reconstruct_original_references(dataset, reference, signal_protocol, feature
 
     if dataset.readiness.state != "ready" or dataset.manifest_reference != reference.manifest_reference:
         raise PolicyVerificationError("reference_reproduction_failed")
+    scope_filter = None if source_key is None else tuple(source_key)
+    if scope_filter is not None and scope_filter not in {
+            tuple(item.to_tuple()) for item in signal_protocol.source_keys}:
+        raise PolicyVerificationError("scope_incompatible")
     expected_states = {(state.source_key.to_tuple(), state.method_id): state
-                       for state in feature_set.manifest.fitted_state_references}
+                       for state in feature_set.manifest.fitted_state_references
+                       if scope_filter is None or state.source_key.to_tuple() == scope_filter}
     reconstructed = {}
     for method_id in sorted(_REFERENCE_METHODS.intersection(signal_protocol.method_configs)):
         config = signal_protocol.method_configs[method_id]
         params = config.parameters
-        for source in sorted({tuple(item.to_tuple()) for item in signal_protocol.source_keys}):
+        for source in sorted({tuple(item.to_tuple()) for item in signal_protocol.source_keys
+                              if scope_filter is None or item.to_tuple() == scope_filter}):
             training = tuple(example for example in dataset.development.train
                              if tuple(example.prediction.source_key) == source)
             if not training:

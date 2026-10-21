@@ -18,6 +18,8 @@ from safira.policy.selection import _choose_cutoff, _index_assessments
 from safira.policy.signals import build_policy_signal_rows
 from safira.policy.verification import (_verify_dataset, _verify_targets,
     verify_artifact_bundle, verify_patient_disjointness, verify_protocol_approval)
+from safira.signals.exceptions import (SignalCompatibilityError, SignalInputError,
+                                       SignalNotReady)
 
 
 def _feature003_reference(values):
@@ -159,61 +161,102 @@ class PolicySelectionService:
         extractor = SignalExtractor(self._registry, original_signal_protocol,
                                     self._input_verifier, dataset_verifier=self._input_verifier)
         original_signals = extractor.build_feature_set(original_training_dataset, original_reference)
-        fitted_states = reconstruct_original_references(original_training_dataset,
-            original_reference, original_signal_protocol, original_signals)
-        for source in expected_sources:
-            estimator, calibrator = estimator_map[source], calibrator_map[source]
-            _validate_artifact_bindings(estimator, calibrator, original_training_dataset,
-                                        original_reference, original_signals)
-
         policy_extractor = SignalExtractor(self._registry, policy_signal_protocol,
                                            self._input_verifier, dataset_verifier=self._input_verifier)
-        policy_rows = build_policy_signal_rows(policy_dataset, policy_reference,
-            policy_signal_protocol, policy_extractor, fitted_states, self._input_verifier)
         method_parameters = {method.method_id: method.parameters
                              for method in original_signal_protocol.method_configs.values()}
         outcomes = []
-        by_row = {row.row_key.value: row for row in policy_rows}
         for scope in sorted(scopes, key=lambda item: item.source_key):
             source = scope.source_key
-            examples = tuple(example for example in policy_dataset.development.validation
-                             if tuple(example.prediction.source_key) == source)
-            rows = tuple(by_row[_row_key(policy_reference, example.prediction)]
-                         for example in examples)
-            score_batch = reconstruct_calibrated_scores(estimator_map[source], calibrator_map[source],
-                                                        rows, method_parameters)
-            scores_by_key = dict(zip(score_batch.row_keys, score_batch.values))
-            indexes = _index_assessments(examples, source)
-            selected_scores, targets, groups = [], [], []
-            for example in indexes:
-                key = _row_key(policy_reference, example.prediction)
-                if key not in scores_by_key:
+            try:
+                # Each scope is independently reconstructed and processed only
+                # after the complete shared trust/admission gate above passed.
+                fitted_states = reconstruct_original_references(original_training_dataset,
+                    original_reference, original_signal_protocol, original_signals,
+                    source_key=source)
+                estimator, calibrator = estimator_map[source], calibrator_map[source]
+                _validate_artifact_bindings(estimator, calibrator, original_training_dataset,
+                                            original_reference, original_signals)
+                policy_rows = build_policy_signal_rows(policy_dataset, policy_reference,
+                    policy_signal_protocol, policy_extractor, fitted_states, self._input_verifier,
+                    source_key=source)
+                by_row = {row.row_key.value: row for row in policy_rows}
+                examples = tuple(example for example in policy_dataset.development.validation
+                                 if tuple(example.prediction.source_key) == source)
+                try:
+                    indexes = _index_assessments(examples, source)
+                except ValueError as error:
+                    if str(error) != "index_assessment_ambiguous":
+                        raise
+                    outcomes.append(PolicySelectionOutcome(scope, PolicyStatus.INVALID_INPUT,
+                                                          "input_invalid"))
+                    continue
+                row_keys = tuple(_row_key(policy_reference, example.prediction)
+                                 for example in examples)
+                if any(key not in by_row for key in row_keys):
                     raise PolicyVerificationError("inventory_mismatch")
-                selected_scores.append(scores_by_key[key])
-                targets.append(example.correctness_target)
-                groups.append(example.patient_group_ref)
-            result = _choose_cutoff(selected_scores, targets, groups, self._protocol, scope=scope)
-            if result.status is not PolicyStatus.SELECTED_UNEVALUATED:
-                outcomes.append(PolicySelectionOutcome(scope, result.status, result.reason_code))
-                continue
-            estimator, calibrator = estimator_map[source], calibrator_map[source]
-            artifact = freeze_policy_artifact(scope=scope, protocol_id=self._protocol.protocol_id,
-                protocol_version=self._protocol.version, protocol_digest=self._protocol.digest,
-                estimator_digest=estimator.digest, calibrator_digest=calibrator.digest,
-                original_dataset_reference=estimator.dataset_reference,
-                original_signal_reference=estimator.signal_run_reference,
-                policy_evidence=self._protocol.policy_evidence,
-                selection_configuration={"risk_ceiling": self._protocol.risk_ceiling,
-                    "candidate_cutoffs": self._protocol.candidate_cutoffs,
-                    "target_bindings": {key: value for key, value in self._protocol.target_bindings.items()},
-                    "minimum_eligible_patients": self._protocol.minimum_eligible_patients,
-                    "minimum_selected_patients": self._protocol.minimum_selected_patients,
-                    "correctness_support": {str(k): v for k, v in self._protocol.correctness_support.items()},
-                    "comparison": self._protocol.comparison, "tie_rule": self._protocol.tie_rule,
-                    "index_rule": self._protocol.index_rule, "valid_below_cutoff_status": "CAUTION",
-                    "invalid_input_status": "DEFER"}, selection=result.summary)
-            outcomes.append(PolicySelectionOutcome(scope, PolicyStatus.SELECTED_UNEVALUATED,
-                                                  "selection_complete", artifact, result.summary))
+                rows = tuple(by_row[key] for key in row_keys)
+                score_batch = reconstruct_calibrated_scores(estimator, calibrator,
+                                                            rows, method_parameters)
+                scores_by_key = dict(zip(score_batch.row_keys, score_batch.values))
+                selected_scores, targets, groups = [], [], []
+                for example in indexes:
+                    key = _row_key(policy_reference, example.prediction)
+                    if key not in scores_by_key:
+                        raise PolicyVerificationError("inventory_mismatch")
+                    selected_scores.append(scores_by_key[key])
+                    targets.append(example.correctness_target)
+                    groups.append(example.patient_group_ref)
+                result = _choose_cutoff(selected_scores, targets, groups, self._protocol, scope=scope)
+                if result.status is not PolicyStatus.SELECTED_UNEVALUATED:
+                    outcomes.append(PolicySelectionOutcome(scope, result.status, result.reason_code))
+                    continue
+                artifact = freeze_policy_artifact(scope=scope, protocol_id=self._protocol.protocol_id,
+                    protocol_version=self._protocol.version, protocol_digest=self._protocol.digest,
+                    estimator_digest=estimator.digest, calibrator_digest=calibrator.digest,
+                    original_dataset_reference=estimator.dataset_reference,
+                    original_signal_reference=estimator.signal_run_reference,
+                    policy_evidence=self._protocol.policy_evidence,
+                    selection_configuration={"risk_ceiling": self._protocol.risk_ceiling,
+                        "candidate_cutoffs": self._protocol.candidate_cutoffs,
+                        "target_bindings": {key: value for key, value in self._protocol.target_bindings.items()},
+                        "minimum_eligible_patients": self._protocol.minimum_eligible_patients,
+                        "minimum_selected_patients": self._protocol.minimum_selected_patients,
+                        "correctness_support": {str(k): v for k, v in self._protocol.correctness_support.items()},
+                        "comparison": self._protocol.comparison, "tie_rule": self._protocol.tie_rule,
+                        "index_rule": self._protocol.index_rule, "valid_below_cutoff_status": "CAUTION",
+                        "invalid_input_status": "DEFER"}, selection=result.summary)
+                outcomes.append(PolicySelectionOutcome(scope, PolicyStatus.SELECTED_UNEVALUATED,
+                                                      "selection_complete", artifact, result.summary))
+            except PolicyVerificationError as error:
+                scope_failures = {
+                    "reference_reproduction_failed": (PolicyStatus.NOT_READY,
+                                                       "reference_reproduction_failed"),
+                    "scope_incompatible": (PolicyStatus.INCOMPATIBLE_INPUT, "scope_incompatible"),
+                    "inventory_mismatch": (PolicyStatus.INCOMPATIBLE_INPUT, "inventory_mismatch"),
+                    "artifact_invalid": (PolicyStatus.INCOMPATIBLE_INPUT, "artifact_invalid"),
+                    "numerical_failure": (PolicyStatus.INVALID_INPUT, "numerical_failure"),
+                }
+                failure = scope_failures.get(error.reason_code)
+                if failure is None:
+                    # Admission, authorization, provenance, and target failures
+                    # remain atomic even if observed again during projection.
+                    raise
+                outcomes.append(PolicySelectionOutcome(scope, failure[0], failure[1]))
+            except PolicyInputError as error:
+                if error.reason_code != "artifact_invalid":
+                    raise
+                outcomes.append(PolicySelectionOutcome(scope, PolicyStatus.INCOMPATIBLE_INPUT,
+                                                      "artifact_invalid"))
+            except SignalNotReady:
+                outcomes.append(PolicySelectionOutcome(scope, PolicyStatus.NOT_READY,
+                                                      "reference_reproduction_failed"))
+            except SignalCompatibilityError:
+                outcomes.append(PolicySelectionOutcome(scope, PolicyStatus.INCOMPATIBLE_INPUT,
+                                                      "scope_incompatible"))
+            except SignalInputError:
+                outcomes.append(PolicySelectionOutcome(scope, PolicyStatus.INVALID_INPUT,
+                                                      "input_invalid"))
         return tuple(outcomes)
 
 

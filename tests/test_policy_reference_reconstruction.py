@@ -136,3 +136,90 @@ def test_policy_signal_row_applies_original_reference_and_uses_new_row_identity(
     assert rows[0].row_key.value != feature_set.training[0].row_key.value
     assert rows[0].predictors[0].provenance["query_evidence_ref"] == sha256(
         f"{prediction_fingerprint(policy_predictions[0])}\0domain_metadata".encode()).hexdigest()
+
+
+def test_knn_original_reference_reconstruction_is_training_only_and_equivalent(registered_collection):
+    from safira.policy.signals import build_policy_signal_rows
+
+    registry, register = registered_collection
+    _, adapter = register(model_id="policy-knn-reference", labels=("label-a",),
+        capabilities=AdapterCapabilities(prediction_probability=True, feature_representation=True))
+    source = ("policy-knn-reference", "v1", "label-a")
+    admission = SyntheticSignalVerifier()
+    host = PolicyTestLedger(admission)
+    interpretation = {"feature_representation": {"meaning": "synthetic numeric vector",
+        "shape": [2], "evidence_schema": "knn-repr-v1", "preprocessing_identity": "none"}}
+
+    def example(role, index, vector):
+        adapter.evidence = {"feature_representation": vector}
+        association = CollectionAssociation(f"{role}-patient-{index}",
+            f"{role}-assessment-{index}", f"{role}-occurrence-{index}")
+        prediction = collect_live(registry, association, [LiveRequest(*source,
+            evidence_interpretation=interpretation)], {"synthetic-feature": [float(index)]}).records[0]
+        partition = "train" if role == "train" else "validation"
+        return CorrectnessExample(prediction, "target", "v1", 1, 1,
+            f"{role}-group-{index}", partition, "synthetic-ground-truth", "synthetic-lineage")
+
+    training = tuple(example("train", index, vector) for index, vector in enumerate(
+        ([0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0])))
+    original = DatasetBuildResult(PartitionedDataset(training, (), ()),
+        DatasetReadiness("ready", scope="synthetic"), (), "knn-original-manifest")
+    original_ref = Feature003DatasetReference("knn-original-data", "knn-original-protocol", "v1",
+        "knn-original-manifest", "builder-v1", sha256(b"knn-original-manifest").hexdigest())
+    host.admit_dataset(original, original_ref)
+    method = SignalMethodConfig("knn_distance", "v1", {"k": 1, "metric": "euclidean",
+        "fold_count": 2, "seed": "approved-knn-seed", "evidence_schema": "knn-repr-v1",
+        "preprocessing_identity": "none"})
+    original_protocol = SignalProtocol("knn-original-protocol", "v1",
+        (SignalSourceKey(*source),), {method.method_id: method}, {})
+    feature_set = SignalExtractor(registry, original_protocol, host,
+        dataset_verifier=host).build_feature_set(original, original_ref)
+    fitted = reconstruct_original_references(original, original_ref, original_protocol, feature_set)
+    state = fitted[(source, "knn_distance")]
+    frozen_ref = next(ref for ref in feature_set.manifest.fitted_state_references
+                      if ref.method_id == "knn_distance")
+    assert state.method_config == method
+    assert state.digest == frozen_ref.state_id
+    assert set(state.vectors) == {(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)}
+    assert len(state.evidence_refs) == 4
+    assert (10.0, 10.0) not in state.vectors
+    changed_reference = replace(frozen_ref, state_id="0" * 64)
+    changed_manifest = replace(feature_set.manifest, fitted_state_references=(changed_reference,))
+    with pytest.raises(PolicyVerificationError, match="reference_reproduction_failed"):
+        reconstruct_original_references(original, original_ref, original_protocol,
+                                        replace(feature_set, manifest=changed_manifest))
+
+    policy_example = example("policy", 0, [10.0, 10.0])
+    policy_dataset = DatasetBuildResult(PartitionedDataset((), (policy_example,), ()),
+        DatasetReadiness("ready", scope="synthetic"), (), "knn-policy-manifest")
+    policy_ref = Feature003DatasetReference("knn-policy-data", "knn-policy-protocol", "v1",
+        "knn-policy-manifest", "builder-v1", sha256(b"knn-policy-manifest").hexdigest())
+    host.admit_dataset(policy_dataset, policy_ref)
+    policy_protocol = SignalProtocol("knn-policy-protocol", "v1",
+        (SignalSourceKey(*source),), {method.method_id: method}, {})
+    extractor = SignalExtractor(registry, policy_protocol, host, dataset_verifier=host)
+    rows = build_policy_signal_rows(policy_dataset, policy_ref, policy_protocol, extractor, fitted,
+                                    host)
+    assert len(rows) == 1
+    assert rows[0].predictors[0].method_id == "knn_distance"
+    assert rows[0].predictors[0].value == pytest.approx((162.0) ** 0.5)
+    assert fitted[(source, "knn_distance")].digest == frozen_ref.state_id
+
+    evidence = list(policy_example.prediction.evidence)
+    representation_index = next(index for index, item in enumerate(evidence)
+                                 if item.category == "feature_representation")
+    representation = evidence[representation_index]
+    interpretation_mismatch = dict(representation.interpretation)
+    interpretation_mismatch["evidence_schema"] = "unapproved-schema"
+    evidence[representation_index] = replace(representation, interpretation=interpretation_mismatch)
+    incompatible_prediction = replace(policy_example.prediction, evidence=tuple(evidence))
+    incompatible_example = replace(policy_example, prediction=incompatible_prediction)
+    incompatible_dataset = replace(policy_dataset,
+        development=PartitionedDataset((), (incompatible_example,), ()))
+    incompatible_ref = replace(policy_ref, dataset_id="knn-incompatible-policy-data",
+        manifest_reference="knn-incompatible-policy-manifest",
+        manifest_digest=sha256(b"knn-incompatible-policy-manifest").hexdigest())
+    host.admit_dataset(incompatible_dataset, incompatible_ref)
+    with pytest.raises(PolicyVerificationError, match="scope_incompatible"):
+        build_policy_signal_rows(incompatible_dataset, incompatible_ref, policy_protocol,
+            extractor, fitted, host)

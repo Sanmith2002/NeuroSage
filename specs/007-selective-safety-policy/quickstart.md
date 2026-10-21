@@ -35,17 +35,20 @@ Shared admission failures raise privacy-safe `PolicyVerificationError`/`PolicyIn
 
 ## Verification commands
 
-From the Feature 007 worktree root in PowerShell, the tested environment used Python 3.11 with the approved `scikit-learn==1.7.1` dependency available ephemerally through `uv`:
+From the Feature 007 worktree root in PowerShell, the tested environment used Python 3.11 with the approved `scikit-learn==1.7.1` dependency available ephemerally through `uv`. The commands below discover Feature 007 tests by their dedicated `test_policy*.py` files; this avoids counting unrelated Feature 005 tests that happen to match `-k policy`.
 
 ```powershell
 $env:PYTHONPATH = 'src;tests'
-uv run --no-project --with pytest --with scikit-learn==1.7.1 python -m pytest -q tests -k policy
-uv run --no-project --with pytest --with scikit-learn==1.7.1 python -m pytest -q tests -k "not policy"
+$env:UV_CACHE_DIR = '.uv-cache'
+$policyTests = @(Get-ChildItem tests -File -Filter 'test_policy*.py' | ForEach-Object { $_.FullName })
+uv run --no-project --with pytest --with scikit-learn==1.7.1 python -m pytest -q $policyTests
+$regressionTests = @(Get-ChildItem tests -File -Filter 'test_*.py' | Where-Object { $_.Name -notlike 'test_policy*.py' } | ForEach-Object { $_.FullName })
+uv run --no-project --with pytest --with scikit-learn==1.7.1 python -m pytest -q $regressionTests
 uv run --no-project --with pytest --with scikit-learn==1.7.1 python -m pytest -q
 git diff --check
 ```
 
-Verified during this implementation run: Feature 007 focused selection suite **45 passed**; unchanged Feature 001–006 regression selection **743 passed**; full suite **788 passed, 0 failed, 0 skipped**. These are synthetic software tests, not empirical clinical evaluation. `git diff --check` is performed at the final checkpoint.
+Verified after the focused remediation: dedicated Feature 007 suite **43 passed**; Feature 001–006 compatibility suite **751 passed**; complete suite **794 passed, 0 failed, 0 skipped**. `tests -k policy` selects **51 passed** because it includes the 43 Feature 007 tests and **8 pre-existing Feature 005 tests**; it is not the dedicated Feature 007 command. At the prior audit baseline, the corresponding counts were 37 dedicated Feature 007 tests, 45 selected by `-k policy` (including those same 8 Feature 005 tests), 751 Feature 001–006 tests, and 788 full-suite tests. These are synthetic software tests, not empirical clinical evaluation. `git diff --check` passed after this remediation.
 
 ## Known limitations
 
