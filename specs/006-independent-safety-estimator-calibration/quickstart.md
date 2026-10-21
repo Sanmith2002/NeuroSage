@@ -1,6 +1,6 @@
 # Feature 006 Quickstart and Verification Guide
 
-**Purpose**: Define the synthetic validation path for the future Feature 006 implementation. The Feature 006 package and test files described here are planned, not implemented yet; do not treat these commands as passing results.
+**Status**: Batch A (T001–T020) is implemented and verified. Batch B (T021–T035) and Batch C (T036–T048) remain planned. The executed Batch A results are recorded below; later-phase commands remain plans, not passing results.
 
 ## Prerequisites and limits
 
@@ -11,9 +11,9 @@
 
 Feature 006 does not call the original classifier, rebuild outcomes/signals, refit Feature 005, access protected final-test data, evaluate calibration quality, or expose calibrated per-patient inference. A successful artifact is `CALIBRATOR_FITTED_UNEVALUATED`; it is non-deployable and not clinically validated.
 
-## Planned synthetic validation sequence
+## Planned end-to-end synthetic validation sequence
 
-After implementation, acceptance fixtures will create a Feature 001 registration, synthetic Feature 002 admitted records, a manifest-bound Feature 003 calibration partition, aligned Feature 004 calibration records and a frozen Feature 005 selected artifact. A separately controlled test ledger will issue the admission and artifact-origin evidence independently of the submitted Python objects.
+Batch C will add the public service flow that creates a Feature 001 registration, synthetic Feature 002 admitted records, a manifest-bound Feature 003 calibration partition, aligned Feature 004 calibration records and a frozen Feature 005 selected artifact. Batch A currently supplies the immutable records and internal trusted admission/readiness gates. Synthetic test ledgers independently record admission and artifact-origin evidence before submitted Python objects are verified.
 
 The service sequence is:
 
@@ -32,9 +32,9 @@ Expected synthetic results:
 - Altered or malformed content: `INVALID_INPUT`; exact version/schema/source mismatch: `INCOMPATIBLE_INPUT`.
 - Separation, nonconvergence, non-finite fit, or non-positive slope: explicit numerical non-success; no fallback method or successful artifact.
 
-## Planned test commands
+## Planned later-phase test commands
 
-These named test modules are planned for Feature 006. They do not exist yet.
+The score, fitting, artifact, and final integration test modules below are planned for Batch B and Batch C; they do not exist yet.
 
 ```powershell
 python -m pytest -q tests/test_calibration_records.py tests/test_calibration_admission.py
@@ -44,7 +44,22 @@ python -m pytest -q tests/test_calibration_regression.py
 python -m pytest -q
 ```
 
-The first command covers immutable configuration, verifier execution, exact manifest/row inventory, Feature 002 lineage, Feature 005 origin, scope separation and fail-closed admission. The second covers frozen-score parity, baseline formula, logistic likelihood, weighting, support, separation, slope and convergence failures. The third covers safe artifacts, compatibility, full ordinary-result privacy and three classifier configurations. The last two cover Features 001–005 compatibility and the full repository regression suite.
+The planned commands cover frozen-score parity, baseline formula, logistic likelihood, weighting, support, separation, safe artifacts, final service privacy, and regression tests once those later batches are implemented.
+
+## Batch A verification record — executed 2026-10-21
+
+Commands executed with the repository virtual environment:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q tests/test_calibration_records.py tests/test_calibration_admission.py tests/test_calibration_registry_compatibility.py tests/test_calibration_dataset_admission.py tests/test_calibration_signal_alignment.py tests/test_calibration_artifact_admission.py tests/test_calibration_readiness.py tests/test_calibration_bundle_gate.py tests/test_calibration_acceptance.py
+$targets = Get-ChildItem tests -File | Where-Object { $_.Name -match '^test_(registry|collection|dataset|signals|training|model_adapter|adapter_capabilities)' } | ForEach-Object { $_.FullName }; .\.venv\Scripts\python.exe -m pytest -q $targets
+.\.venv\Scripts\python.exe -m pytest -q
+git diff --check
+```
+
+Results: **40 Batch A tests passed**; **699 repository tests passed, 0 failed, 0 skipped**. The existing Feature 001–005 compatibility suites also passed: **647 tests**. `git diff --check` passed. These are software verification results only; they do not establish scientific or clinical calibration effectiveness.
+
+Batch A verifies exact Feature 001 scope and registered prediction semantics, independently ledger-backed Feature 002 admission, complete Feature 003 ordinary inventory and prediction lineage, Feature 004 one-to-one signal alignment, Feature 005 exact artifact origin and input binding, protocol-specific support, and internal admission-only scope readiness. No score reconstruction, fitting, calibration artifact, public service, or per-patient application API is implemented in Batch A.
 
 ## Review checklist for a run report
 
