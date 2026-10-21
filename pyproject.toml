@@ -14,7 +14,7 @@ authors = [
     { name = "Dinura Sanmith" }
 ]
 
-dependencies = []
+dependencies = ["scikit-learn==1.7.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

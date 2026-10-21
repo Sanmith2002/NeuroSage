@@ -1,8 +1,8 @@
-# Proposed Python Contract — Feature 005
+# Python Contract — Feature 005
 
-**Status:** Batch A (T001–T017) implemented; later batches remain planned. It adds a `safira.training` surface and does not change public Features 001–004, `ModelAdapter`, `AdapterCapabilities`, `SafetyContext` or `SafetyAssessment`. [Data model](../data-model.md) defines invariant details.
+**Status:** Implemented through Batch C (T001–T047). It adds a `safira.training` surface and does not change public Features 001–004, `ModelAdapter`, `AdapterCapabilities`, `SafetyContext` or `SafetyAssessment`. [Data model](../data-model.md) defines invariant details.
 
-## Planned full orchestration surface
+## Public orchestration surface
 
 ```python
 class SafetyTrainingService:
@@ -20,7 +20,7 @@ class SafetyTrainingService:
     ) -> tuple[TrainingOutcome, ...]: ...
 ```
 
-**Batch A implementation note:** T001–T017 currently implement `SafetyTrainingService.prepare(dataset, signals)`, which performs complete trusted admission, exact alignment, registry compatibility and per-scope eligibility only. The `train(dataset, signals)` operation above remains planned for later batches. No candidate is fitted and no successful estimator artifact can be published in Batch A.
+`prepare(dataset, signals)` performs trusted admission, exact alignment, registry compatibility and per-scope eligibility without fitting. `train(dataset, signals)` performs the same complete admission, fits approved candidates on train, compares once on validation, and returns independent exact-scope outcomes with artifacts only for selected scopes.
 
 `train` verifies the **complete** paired inputs before it returns any successful scope outcome, cohort-support assertion, selected estimator or artifact. It returns one outcome per protocol-authorized exact `(model_id, model_version, label_id)` scope in deterministic source-key order. It does not call primary classifiers, Feature 003 target builders, Feature 004 extractors or protected-test APIs. All ordinary outputs are privacy filtered. A top-level failed shared admission returns/raises a typed safe failure for all affected scopes; it never continues from an unverifiable partial inventory.
 
@@ -53,17 +53,21 @@ For every Feature 003 `CorrectnessExample` in `train`, `validation`, `calibratio
 
 The only supervised target is Feature 003 `correctness_target`. Patient/group keys are accepted only into trusted eligibility/disjointness checks. No target, outcome, group, row key, partition role, verification record or copied primary output becomes a predictor or enters learned preprocessing or candidate scoring.
 
-## Configuration and outcome records
+## Configuration, comparison and outcomes
 
 ```python
 @dataclass(frozen=True)
 class TrainingProtocol:
     protocol_id: str
     version: str
-    source_policies: Mapping[TrainingScope, SourceTrainingPolicy]
-    # Source policy declares feature/method allowlist, state handling,
-    # independent-group/class support, preprocessing, candidate requirements,
-    # fixed logistic C/tol/max_iter and metric feasibility before validation.
+    scopes: tuple[TrainingScope, ...]
+    adequacy: Mapping[tuple[str, str, str], TrainingSupportCriteria]
+    required_signal_methods: Mapping[tuple[str, str, str], tuple[str, ...]]
+    feature_policies: Mapping[tuple[str, str, str], FeaturePolicy]
+    preprocessing_policies: Mapping[tuple[str, str, str], PreprocessingPolicy]
+    logistic_configs: Mapping[tuple[str, str, str], LogisticCandidateConfig]
+    validation_adequacy: Mapping[tuple[str, str, str], ValidationSupportCriteria]
+    candidate_failure_policies: Mapping[tuple[str, str, str], CandidateFailurePolicy]
 
 @dataclass(frozen=True)
 class TrainingOutcome:
@@ -73,6 +77,8 @@ class TrainingOutcome:
     reason_code: str | None
     limitations: tuple[str, ...]
 ```
+
+`ValidationSupportCriteria` and `CandidateFailurePolicy` are required per exact scope before comparison. The only candidate failure policies are `REQUIRE_ALL` and `ALLOW_REMAINING`; the latter permits a remaining candidate only for a candidate fit failure/nonconvergence, not for invalid, incompatible, or unapproved configuration. A single-class training baseline is descriptive and cannot be selected as a successful artifact.
 
 All nested protocol values are defensively detached. Required scientific settings have no implicit numerical fallback. `NOT_READY` denotes missing approval/trusted verification; `INSUFFICIENT_EVIDENCE` denotes approved support unmet. `UNAVAILABLE_REQUIRED_EVIDENCE` denotes a required signal cannot be constructed. `INVALID_INPUT`, `INCOMPATIBLE_INPUT`, `COMPARISON_UNDEFINED` are separate non-success outcomes. Candidate-specific `FIT_FAILED`/`NONCONVERGED` appears only as safe candidate status; another candidate may win only under a predeclared policy. `SELECTED_BASELINE` and `SELECTED_LOGISTIC` are successful **intermediate** selections after a valid comparison. A single-class baseline-only description is non-success and has no artifact.
 
@@ -86,7 +92,8 @@ When approved, `FrozenPreprocessingState` holds training-only numeric medians, m
 
 - Baseline: `p = mean(y_train)` for the exact scope.
 - Logistic: scikit-learn 1.7.1 L2 `LogisticRegression`, solver `lbfgs`, no class weighting, fixed positive protocol `C`/`tol` and positive `max_iter`, intercept enabled, no warm start. Two training correctness classes and approved group/class support are required; warnings, non-finiteness and failed convergence are explicit candidate failures.
-- Compare valid predeclared candidates once on the same authorized validation rows by mean squared Brier, lower better; exact equality chooses baseline. AUROC/AP are secondary and undefined where class support/meaning is lacking. The protocol fixes any required comparison feasibility before validation. No second CV, seed search, refit or threshold choice.
+- `compare_candidates` is an internal helper. It uses the same ordered, admitted validation matrix and targets for each fitted candidate, computes Brier `sum((p-y)^2)/n`, lower better, and uses exact floating-point equality for the baseline tie-break. No epsilon, threshold, second CV, seed search, refit or metric change is introduced.
+- AUROC and average precision are calculated for each feasible candidate when both correctness classes are present; otherwise each is explicitly `undefined` with a reason. Optional undefined secondary metrics do not invalidate a Brier comparison unless protocol-declared support requirements make the comparison infeasible. Support counts are included only when `ValidationSupportCriteria.disclose_support` is true.
 - Validation metrics are tagged `selection_evidence`, not independent final performance. Repeated rows are correlated; no row-independent uncertainty claim.
 
 ### Training-fit isolation tests
@@ -107,10 +114,15 @@ class SafetyEstimatorArtifact:
     family: Literal["prevalence_baseline", "l2_logistic"]
     feature_schema: FrozenFeatureSchema
     preprocessing: FrozenPreprocessingState
-    dataset_reference: TrainingDatasetReference
-    signal_run_reference: SignalRunReference
-    # fixed candidate configuration, finite selected state, software versions,
-    # selection evidence, lifecycle and safe limitations are mandatory.
+    training_protocol: Mapping[str, object]  # id, version, digest
+    dataset_reference: Mapping[str, object]  # actual Feature 003 identity plus content/inventory digests
+    signal_run_reference: Mapping[str, object]  # Feature 004 run, method-parameter digests, fitted states, scope
+    estimator_state: Mapping[str, object]  # finite baseline constant or logistic coefficients/intercept/classes
+    candidate_configuration: Mapping[str, object]
+    dependency_versions: Mapping[str, str]
+    training_metrics: Mapping[str, object]
+    selection_metrics: Mapping[str, object]
+    lifecycle: Literal["uncalibrated_non_deployable"]
 
     def to_dict(self) -> dict[str, object]: ...  # detached allowlisted data
 
@@ -121,7 +133,9 @@ def validate_artifact(
 ) -> SafetyEstimatorArtifact: ...
 ```
 
-The exported payload is canonical, versioned JSON-compatible data, not a pickled Python/sklearn object. Load checks exact scope, registry compatibility, the Feature 003 manifest-bound dataset-build identity (`dataset_id`, manifest reference and independently verified digest, protocol ID/version, builder version and complete admitted inventory), Feature 004 references, method/schema/preprocessing versions, finite coefficient/intercept shape or baseline probability, format digest and independently authorized origin. Feature 003/004 do not define a separate `dataset_version` field. A digest alone does not prove origin. The host controls any storage and receipt; a valid in-memory artifact/export does not establish durable persistence. Serialization excludes patient/group/row identifiers, correctness targets, raw predictors, protected data and restricted verification evidence. Training metrics and validation selection metrics are labeled separately; aggregate support/metrics are included only under the protocol's disclosure policy, otherwise a safe suppression reason is recorded. The artifact always says `uncalibrated` and `non_deployable`; it is not a `SafetyAssessment` or complete safety package.
+`ArtifactCompatibility` carries independently expected exact scope, registry adapter/classifier/preprocessing identity, Feature 003 reference, Feature 004 run reference, training protocol, feature-schema and preprocessing digests. `ArtifactOriginCheck` is the typed result of a host-controlled `verify_artifact(submitted_digest, scope_key, artifact_version)` lookup; a Boolean, digest, or caller assertion is rejected. This is an injection boundary, not a claim that the core authenticates malicious code controlling the trusted host.
+
+The exported payload is canonical, versioned JSON-compatible data, not a pickled Python/sklearn object. Load checks exact scope, registry compatibility, Feature 003 manifest-bound identity and admitted content/inventory fingerprints, Feature 004 methods/run/fitted references, Feature 005 protocol, schema and preprocessing digests, finite coefficient/intercept shape or baseline probability, canonical payload digest and independently authorized origin. Feature 003/004 do not define a separate `dataset_version` field. A digest alone does not prove origin. The host controls any storage and receipt; a valid in-memory artifact/export does not establish durable persistence. Serialization excludes patient/group/row identifiers, correctness targets, raw predictors, protected data and restricted verification evidence. Training metrics and validation selection metrics are labeled separately; aggregate support is included only when its protocol permits disclosure. The artifact is always uncalibrated and non-deployable; it is not a `SafetyAssessment` or complete safety package. Only `SafetyTrainingService.train` is an estimator workflow; artifact loading does not create a public prediction/inference operation.
 
 ## Exceptions and compatibility
 

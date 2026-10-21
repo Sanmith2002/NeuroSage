@@ -63,6 +63,36 @@ def test_training_input_check_detaches_nested_inventory_and_hides_it_from_repr()
     assert "row" not in repr(check)
 
 
+def test_batch_b_protocol_feature_and_preprocessing_configuration_is_deeply_immutable():
+    from safira.signals import SignalDimension
+    from safira.training.records import (
+        FeatureKind, FeaturePolicy, FeatureSpec, LogisticCandidateConfig, PreprocessingPolicy,
+        TrainingProtocol, TrainingScope, TrainingSupportCriteria,
+    )
+
+    scope = TrainingScope("m", "v1", "label", "a" * 64, "adapter", "v1", "b" * 64, "prep")
+    parameters = {"base": "natural"}
+    spec = FeatureSpec("entropy", "v1", "binary_predictive_entropy", SignalDimension.PREDICTION_UNCERTAINTY,
+                       FeatureKind.NUMERIC, parameters, required=True, state_indicators=False)
+    features = {scope.source_key: FeaturePolicy([spec])}
+    preprocessing = {scope.source_key: PreprocessingPolicy(
+        numeric_imputation={"entropy": "median"}, numeric_scaling={"entropy": "standard"},
+        constant_features="keep", category_encoding="one_hot_seen_unseen")}
+    candidates = {scope.source_key: LogisticCandidateConfig(True, 1.0, 1e-4, 100)}
+    protocol = TrainingProtocol("p", "v1", [scope], {scope.source_key: TrainingSupportCriteria(2)},
+                                {scope.source_key: ("entropy",)}, features, preprocessing, candidates)
+    parameters["base"] = "changed"
+    features.clear()
+    assert protocol.feature_policies[scope.source_key].features[0].method_parameters["base"] == "natural"
+    assert protocol.preprocessing_policies[scope.source_key].numeric_imputation["entropy"] == "median"
+    assert protocol.logistic_configs[scope.source_key].C == 1.0
+    with pytest.raises(TypeError):
+        protocol.logistic_configs[scope.source_key] = LogisticCandidateConfig(True, 2.0, 1e-4, 100)
+    with pytest.raises(ValueError):
+        TrainingProtocol("p", "v1", [scope], {scope.source_key: TrainingSupportCriteria(2)}, {},
+                         {("another", "v1", "label"): FeaturePolicy([spec])})
+
+
 @pytest.mark.parametrize("bad_scope", [("", "v1", "label"), ("m", "", "label"), ("m", "v1", "")])
 def test_scope_rejects_incomplete_identity(bad_scope):
     from safira.training.records import TrainingScope

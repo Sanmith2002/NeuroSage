@@ -16,6 +16,14 @@ _SAFE_CODES = frozenset({
     "patient_group_support_insufficient", "correctness_class_support_insufficient",
     "aligned_training_features_unavailable", "signal_input_invalid", "signal_provenance_not_ready",
     "required_signal_unavailable", "training_rows_unavailable",
+    "selection_protocol_not_ready", "selection_criteria_not_ready", "validation_inventory_invalid",
+    "validation_matrix_invalid", "candidate_scope_mismatch", "validation_class_support_insufficient",
+    "candidate_failure_policy_blocked", "candidate_not_comparable", "candidate_probability_invalid",
+    "artifact_payload_invalid", "artifact_schema_invalid", "artifact_preprocessing_invalid",
+    "artifact_estimator_invalid", "artifact_digest_invalid", "artifact_incompatible",
+    "artifact_origin_not_ready", "artifact_origin_rejected", "artifact_reproduction_unavailable",
+    "artifact_reproduction_shape_invalid", "artifact_reproduction_invalid", "training_scope_not_ready",
+    "training_features_invalid", "training_candidate_failed", "training_comparison_undefined",
 })
 
 

@@ -1,7 +1,9 @@
-"""Feature 005 model-specific safety-estimator training preparation.
+"""Feature 005 exact-scope correctness-estimator training.
 
-Batch A exposes only trusted admission and per-scope eligibility; it does not
-fit or publish estimator artifacts.
+The public service admits complete trusted Feature 002/003/004 inputs, trains
+and selects within the approved train/validation lifecycle, and returns only
+uncalibrated, non-deployable research artifacts. Numerical candidate helpers
+and feature-matrix builders remain internal.
 """
 
 from safira.training.exceptions import (
@@ -9,15 +11,20 @@ from safira.training.exceptions import (
     TrainingVerificationError,
 )
 from safira.training.records import (
-    TrainingInputCheck, TrainingOutcome, TrainingProtocol, TrainingScope, TrainingStatus,
-    TrainingSupportCriteria,
+    CandidateFailurePolicy, FeatureKind, FeaturePolicy, FeatureSpec, LogisticCandidateConfig,
+    PreprocessingPolicy, SafetyEstimatorArtifact, TrainingInputCheck, TrainingOutcome,
+    TrainingProtocol, TrainingScope, TrainingStatus, TrainingSupportCriteria, ValidationSupportCriteria,
 )
 from safira.training.service import SafetyTrainingService
 from safira.training.verification import TrainingInputVerifier
+from safira.training.artifacts import ArtifactCompatibility, ArtifactOriginCheck, validate_artifact
 
 __all__ = [
     "SafetyTrainingService", "TrainingScope", "TrainingSupportCriteria", "TrainingProtocol",
-    "TrainingInputCheck", "TrainingStatus", "TrainingOutcome", "TrainingError",
+    "TrainingInputCheck", "TrainingStatus", "TrainingOutcome", "SafetyEstimatorArtifact",
+    "ValidationSupportCriteria", "CandidateFailurePolicy", "ArtifactCompatibility",
+    "ArtifactOriginCheck", "validate_artifact", "TrainingError",
+    "FeatureKind", "FeatureSpec", "FeaturePolicy", "PreprocessingPolicy", "LogisticCandidateConfig",
     "TrainingInputError", "TrainingVerificationError", "TrainingCompatibilityError",
     "TrainingArtifactError", "TrainingInputVerifier",
 ]
