@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feature-08/Runtime-Safety-Assessment`  
 **Created**: 2026-10-22  
-**Status**: Approved bounded scope; ready for planning  
+**Status**: Completed — independently adversarially verified; closed within approved synthetic-only research-software scope.
 **Input**: Approved synthetic-only internal simulation of a compatible Feature 007 selected-but-unevaluated policy.
 
 ## User Scenarios & Testing
