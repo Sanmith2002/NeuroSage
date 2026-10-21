@@ -33,9 +33,6 @@ class CalibrationInputVerifier(Protocol):
     def verify_artifact(self, payload_digest: str, scope_key: tuple[str, str, str],
                         artifact_version: str): ...
 
-    def verify_bundle(self, dataset: DatasetBuildResult, signals: SignalFeatureSet,
-                      artifacts, protocol): ...
-
 
 def verify_prediction_admission(registry, protocol: SignalProtocol, verifier, record: PredictionRecord):
     """Execute Feature 002 admission and Feature 001 semantic/identity checks.

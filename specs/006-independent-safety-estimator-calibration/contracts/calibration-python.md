@@ -1,12 +1,12 @@
 # Python Contract — Feature 006 Calibration
 
-**Status**: Proposed implementation contract. It adds a narrow `safira.calibration` package and does not change Features 001–005, `ModelAdapter`, `AdapterCapabilities`, `SafetyContext`, or `SafetyAssessment`.
+**Status**: Implemented for Feature 006 T001–T048. Batch C adds the public exact-scope calibration service and safe calibrator artifact interface. Features 001–005, `ModelAdapter`, `AdapterCapabilities`, `SafetyContext`, and `SafetyAssessment` remain unchanged.
 
 ## Public orchestration surface
 
 Reuse Feature 005 `TrainingScope`, `SafetyEstimatorArtifact`, and Feature 003/004 immutable record types when their current semantics fit. Do not create parallel model registration, correctness target, prediction, signal, dataset, or preprocessing contracts.
 
-Conceptual API:
+Implemented API:
 
 ```python
 class CalibrationService:
@@ -149,3 +149,17 @@ No existing Feature 001–005 source module or public contract changes are plann
 - Preserved [methodology review](../methodology-review.md) and [architecture-feasibility review](../architecture-feasibility.md).
 - scikit-learn [LogisticRegression 1.7 API](https://scikit-learn.org/1.7/modules/generated/sklearn.linear_model.LogisticRegression.html) and [1.7.1 implementation](https://github.com/scikit-learn/scikit-learn/blob/1.7.1/sklearn/linear_model/_logistic.py).
 - Albert & Anderson (1984), [logistic MLE existence and separation](https://doi.org/10.1093/biomet/71.1.1).
+
+## Implemented Batch C surface
+
+The constructor is `CalibrationService(registry, protocol, input_verifier)` and the method is `calibrate(dataset, signals, artifacts)`. The return is a tuple ordered by `(model_id, model_version, label_id)`. Shared admission failures raise a stable typed error before any outcome is published; exact-scope failures return a non-success outcome with no artifact.
+
+The implemented `CalibrationInputVerifier` methods are `verify_prediction(record)`, `verify_dataset(dataset, reference)`, and `verify_artifact(payload_digest, scope_key, artifact_version)`. The core performs these checks and independently rechecks exact scope, full inventory, registration compatibility, and Feature 004 calibration-row alignment. No production verifier or origin ledger is configured.
+
+`CalibratorArtifact` stores only exact identity/provenance digests and references, the frozen Feature 005 artifact/schema/preprocessing identity, approved protocol digest, dependency versions, fitting configuration and family-specific finite mapping parameters. Logistic artifacts record the positive slope, intercept, exact fixed solver settings and convergence count. Baseline artifacts record the strict-interior source probability, offset, constant output and no-individualized-discrimination semantics. Both use `CALIBRATOR_FITTED_UNEVALUATED`, mark calibration data spent, and remain non-deployable and not clinically validated.
+
+`export_calibrator_artifact(artifact)` returns detached allowlisted JSON-compatible values. `validate_calibrator_artifact(payload, *, expected=None)` verifies exact payload integrity and optional expected compatibility fields. A digest does not establish authorized origin or durable persistence. There is no pickle/joblib loading or persistence adapter.
+
+Package exports include the protocol, safe status/outcome and artifact records, verifier protocol, service, safe artifact export/validation functions, and typed errors. Private score reconstruction and fitting helpers remain unexported. No `predict`, `predict_proba`, per-patient `apply`, policy, `SafetyAssessment`, or deployable inference API is provided.
+
+Completed synthetic tests cover logistic and prevalence-baseline paths, standalone and multi-label scopes, independent overlapping contributors, insufficient-scope isolation, unavailable required evidence, shared-admission short-circuiting, deterministic artifact digests, immutability, safe serialization and preservation of Features 001–005 contracts. These checks establish software behavior only; empirical calibration and clinical effectiveness remain unvalidated.
