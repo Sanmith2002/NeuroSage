@@ -13,7 +13,7 @@ Every task uses `- [ ] T### [P?] [US#?] Description with exact file path`. `[P]`
 
 **Purpose**: Provide reusable synthetic fixtures and keep all test inputs isolated from real data.
 
-- [ ] T001 Create synthetic prediction, original-training provenance, frozen artifacts, and test-only verifier builders in `tests/runtime_fixtures.py`.
+- [X] T001 Create synthetic prediction, original-training provenance, frozen artifacts, and test-only verifier builders in `tests/runtime_fixtures.py`.
 
 ---
 
@@ -21,8 +21,8 @@ Every task uses `- [ ] T### [P?] [US#?] Description with exact file path`. `[P]`
 
 **Purpose**: Define the private, immutable, privacy-safe simulation result before admission and scoring work.
 
-- [ ] T002 [P] Write immutability, lifecycle-constant, exact-scope, and allowlisted-serialization tests in `tests/test_runtime_records.py`.
-- [ ] T003 Implement internal request/result records and a non-exporting runtime package initializer in `src/safira/runtime/_records.py` and `src/safira/runtime/__init__.py`.
+- [X] T002 [P] Write immutability, lifecycle-constant, exact-scope, and allowlisted-serialization tests in `tests/test_runtime_records.py`.
+- [X] T003 Implement internal request/result records and a non-exporting runtime package initializer in `src/safira/runtime/_records.py` and `src/safira/runtime/__init__.py`.
 
 **Checkpoint**: Internal records cannot represent a deployable, independently evaluated, or clinically valid outcome.
 
@@ -36,13 +36,13 @@ Every task uses `- [ ] T### [P?] [US#?] Description with exact file path`. `[P]`
 
 ### Tests for User Story 1 — Write First
 
-- [ ] T004 [P] [US1] Test exact prediction admission, source association, registry identity, and original Feature 003 inventory in `tests/test_runtime_admission.py`.
-- [ ] T005 [P] [US1] Test forged/missing artifact origin, policy protocol mismatch, cross-scope substitution, atomic shared failure, safe error codes without upstream text, and unexpected exception distinction in `tests/test_runtime_admission.py`.
+- [X] T004 [P] [US1] Test exact prediction admission, source association, registry identity, and original Feature 003 inventory in `tests/test_runtime_admission.py`.
+- [X] T005 [P] [US1] Test forged/missing artifact origin, policy protocol mismatch, cross-scope substitution, atomic shared failure, safe error codes without upstream text, and unexpected exception distinction in `tests/test_runtime_admission.py`.
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Implement exact prediction, registry, provenance, protocol, and estimator/calibrator/policy origin checks in `src/safira/runtime/_verification.py` using existing typed host checks.
-- [ ] T007 [US1] Add documented stable runtime failure types that discard upstream exception text and preserve unexpected programming errors in `src/safira/runtime/_exceptions.py`.
+- [X] T006 [US1] Implement exact prediction, registry, provenance, protocol, and estimator/calibrator/policy origin checks in `src/safira/runtime/_verification.py` using existing typed host checks.
+- [X] T007 [US1] Add documented stable runtime failure types that discard upstream exception text and preserve unexpected programming errors in `src/safira/runtime/_exceptions.py`.
 
 ---
 
@@ -54,15 +54,15 @@ Every task uses `- [ ] T### [P?] [US#?] Description with exact file path`. `[P]`
 
 ### Tests for User Story 2 — Write First
 
-- [ ] T008 [P] [US2] Test single-record Feature 004 signal derivation, evidence and explanation availability states, original-training-only reference reconstruction, and no caller-row substitution in `tests/test_runtime_signals.py`.
-- [ ] T009 [P] [US2] Test frozen estimator and calibrator parity, numerical failures, and artifact mismatch in `tests/test_runtime_scoring.py`.
-- [ ] T010 [P] [US2] Test cutoff comparison equality, TRUST/CAUTION mapping, and DEFER for invalid/unavailable evidence in `tests/test_runtime_policy.py`.
+- [X] T008 [P] [US2] Test single-record Feature 004 signal derivation, evidence and explanation availability states, original-training-only reference reconstruction, and no caller-row substitution in `tests/test_runtime_signals.py`.
+- [X] T009 [P] [US2] Test frozen estimator and calibrator parity, numerical failures, and artifact mismatch in `tests/test_runtime_scoring.py`.
+- [X] T010 [P] [US2] Test cutoff comparison equality, TRUST/CAUTION mapping, and DEFER for invalid/unavailable evidence in `tests/test_runtime_policy.py`.
 
 ### Implementation for User Story 2
 
-- [ ] T011 [US2] Implement private one-record Feature 004 signal construction and reference-state application in `src/safira/runtime/_signals.py`.
-- [ ] T012 [US2] Implement the private frozen Feature 005 schema/preprocessing/estimator and Feature 006 mapping adapter in `src/safira/runtime/_scoring.py`.
-- [ ] T013 [US2] Implement exact Feature 007 cutoff and comparison application without fitting or mutation in `src/safira/runtime/_policy.py`.
+- [X] T011 [US2] Implement private one-record Feature 004 signal construction and reference-state application in `src/safira/runtime/_signals.py`.
+- [X] T012 [US2] Implement the private frozen Feature 005 schema/preprocessing/estimator and Feature 006 mapping adapter in `src/safira/runtime/_scoring.py`.
+- [X] T013 [US2] Implement exact Feature 007 cutoff and comparison application without fitting or mutation in `src/safira/runtime/_policy.py`.
 
 ---
 
@@ -74,14 +74,14 @@ Every task uses `- [ ] T### [P?] [US#?] Description with exact file path`. `[P]`
 
 ### Tests for User Story 3 — Write First
 
-- [ ] T014 [P] [US3] Test result `repr`, `str`, serialization, exception and diagnostic privacy in `tests/test_runtime_privacy.py`.
-- [ ] T015 [P] [US3] Test synthetic-only boundary, non-exported API, lifecycle constants, and no `SafetyAssessment` projection in `tests/test_runtime_boundaries.py`.
-- [ ] T016 [US3] Test synthetic end-to-end success, safe DEFER, atomic rejection, and non-pooled artifact handling across separate exact-scope calls in `tests/test_runtime_acceptance.py`.
+- [X] T014 [P] [US3] Test result `repr`, `str`, serialization, exception and diagnostic privacy in `tests/test_runtime_privacy.py`.
+- [X] T015 [P] [US3] Test synthetic-only boundary, non-exported API, lifecycle constants, and no `SafetyAssessment` projection in `tests/test_runtime_boundaries.py`.
+- [X] T016 [US3] Test synthetic end-to-end success, safe DEFER, atomic rejection, and non-pooled artifact handling across separate exact-scope calls in `tests/test_runtime_acceptance.py`.
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Implement the internal synthetic-only orchestration, shared-admission-before-scoring order, scoped outcomes, and cleanup of ephemeral values in `src/safira/runtime/_service.py`.
-- [ ] T018 [US3] Complete immutable result validation, safe reason allowlist, and non-reversible association binding in `src/safira/runtime/_records.py`.
+- [X] T017 [US3] Implement the internal synthetic-only orchestration, shared-admission-before-scoring order, scoped outcomes, and cleanup of ephemeral values in `src/safira/runtime/_service.py`.
+- [X] T018 [US3] Complete immutable result validation, safe reason allowlist, and non-reversible association binding in `src/safira/runtime/_records.py`.
 
 ---
 
@@ -89,9 +89,9 @@ Every task uses `- [ ] T### [P?] [US#?] Description with exact file path`. `[P]`
 
 **Purpose**: Verify the complete design boundary and document only validation actually run after implementation.
 
-- [ ] T019 Run focused Feature 008 tests and existing Feature 001–007 regression suites with the repository `uv` environment; record unique node totals in `specs/008-runtime-safety-assessment/quickstart.md`.
-- [ ] T020 Run `uv run python -m pytest -q` and `git diff --check`; record exact results in `specs/008-runtime-safety-assessment/quickstart.md`.
-- [ ] T021 Reconcile the final `specs/008-runtime-safety-assessment/quickstart.md` commands and recorded outcomes with `specs/008-runtime-safety-assessment/implementation-context.md` after verification is complete.
+- [X] T019 Run focused Feature 008 tests and existing Feature 001–007 regression suites with the repository `uv` environment; record unique node totals in `specs/008-runtime-safety-assessment/quickstart.md`.
+- [X] T020 Run `uv run python -m pytest -q` and `git diff --check`; record exact results in `specs/008-runtime-safety-assessment/quickstart.md`.
+- [X] T021 Reconcile the final `specs/008-runtime-safety-assessment/quickstart.md` commands and recorded outcomes with `specs/008-runtime-safety-assessment/implementation-context.md` after verification is complete.
 
 ## Dependencies and Execution Order
 

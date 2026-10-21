@@ -17,15 +17,16 @@ The function is private to the runtime implementation package and MUST NOT be re
 
 ## Trust-provider operations
 
-The trusted host must execute and return the existing exact-bound verification records for:
+The injected trusted host must execute and return exact-bound verification records for:
 
 - Feature 002 prediction admission (`verify_prediction`).
-- Complete original Feature 003 dataset admission and embedded prediction admission (`verify_dataset` pattern).
+- Synthetic-fixture membership of the exact submitted prediction, bound to its fingerprint and scope. No `is_synthetic` request flag is accepted.
+- Original Feature 003 training predictor inventory through a target-free host operation. The runtime submits only original training prediction fingerprints and the exact manifest/artifact inventory digests; it does not pass correctness outcomes or targets to the verifier.
 - Original Feature 004 protocol and frozen manifest identity.
 - Estimator, calibrator, and policy origin through the existing `ArtifactOriginCheck` shape, bound to each artifact digest, exact scope, and artifact version.
 - Feature 007 policy protocol approval; its verified digest must equal `policy.protocol_digest`.
 
-The local core must recompute fingerprints and compatibility relationships and reject a returned check that does not exactly match the submitted values. A Boolean, status string, digest, or caller-constructed check alone is never proof. No production trust service or origin receipt is provided by this feature.
+The local core must recompute prediction fingerprints and compatibility relationships and reject a returned typed check that does not exactly match the submitted values. A Boolean, status string, digest, or caller-constructed check alone is never proof. Test verifier implementations are available only as synthetic fixtures; no production trust service or origin receipt is provided by this feature. A Python package cannot authenticate hostile code controlling the same process, private module imports, or injected verifier.
 
 ## Result behavior
 

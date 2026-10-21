@@ -15,8 +15,8 @@ Read this handoff before exploring unrelated source. Authority order: Constituti
 
 - Feature 001: use `ModelRegistry.resolve_usable` and exact registered model/version/label, classifier, adapter, and preprocessing identity.
 - Feature 002: accept a `PredictionRecord`; execute `verify_prediction` and local registration/evidence validation against the exact prediction association.
-- Feature 003: original dataset admission is trusted-host controlled. The runtime query is not wrapped in a correctness example and no target is built.
-- Feature 004: `SignalExtractor.extract_record` handles configured stateless signals. The runtime bridge must apply reference-based signals from exact reconstructed Feature 004 state without calling `build_feature_set` on the query.
+- Feature 003: the injected host verifies an exact, target-free inventory of original training prediction records. Runtime code reads only the training partition's prediction and patient-group fields for Feature 004 reference reconstruction; it does not serialize or pass `DatasetBuildResult` to the ordinary full-dataset verifier because that contract fingerprints correctness targets. The runtime query is not wrapped in a correctness example and no target is built.
+- Feature 004: `SignalExtractor.extract_record` handles configured stateless signals. The private bridge reconstructs exact kNN/domain reference states from original training predictors and applies them to the one query without calling `build_feature_set` on the query.
 - Feature 005: `SafetyEstimatorArtifact` is a frozen intermediate artifact, not a public inference API. Use only its exact schema/preprocessing/family and reconstruction path.
 - Feature 006: `CalibratorArtifact` binds to exact Feature 005 digest/family/schema. Apply its frozen mapping only; never call the calibration fitter.
 - Feature 007: `SelectivePolicyArtifact` is exact-scope and binds estimator/calibrator digests, policy protocol digest, cutoff comparison, and selected-but-unevaluated lifecycle. Verify origin and protocol; never access the selection cohort, correctness targets, or change the cutoff.
@@ -24,9 +24,9 @@ Read this handoff before exploring unrelated source. Authority order: Constituti
 ## Critical implementation facts
 
 - `FittedStateReference` carries identity/digest metadata, not portable fitted vectors or domain vocabulary.
-- `safira.policy.references.reconstruct_original_references` rebuilds Feature 004 reference state from original training examples and verifies its frozen digest. It is private and currently accepts a dataset and a feature-set-like manifest container.
+- `safira.policy.references.reconstruct_original_references` verifies the reference algorithm but accepts a full dataset object; Feature 008 uses an equivalent private predictor-only reconstruction so the runtime path never serializes or reads supervised targets.
 - `safira.policy.signals.build_policy_signal_rows` is validation-dataset and `CorrectnessExample` oriented. Do not feed it a runtime prediction or fabricate correctness targets. Create a private single-record query bridge.
-- `safira.policy.scoring.reconstruct_calibrated_scores` consumes private signal rows and returns individual scores. Keep score and row values inside the private call; never log or serialize them.
+- `safira.calibration.scores._reconstruct_feature_state` and `_reconstruct_scores` apply the frozen Feature 005 transform to one private signal row. Feature 008 applies the Feature 006 mapping locally because the Feature 007 batch wrapper catches broad exceptions. Keep score and row values inside the private call; never log or serialize them.
 - Use existing `ArtifactOriginCheck`-shaped ledger results for estimator, calibrator, and policy. Recompute exact scope and digest bindings locally. Do not trust flags or caller-created check objects.
 - `AdapterCapabilities` declares which evidence can be supplied; only admitted `PredictionRecord` evidence proves what was supplied for this prediction.
 - Current `SafetyAssessment` is mutable and serializes its fields; `SafetyContext` can contain raw patient data. Neither belongs in the approved result path.
@@ -41,6 +41,14 @@ Read this handoff before exploring unrelated source. Authority order: Constituti
 - Multi-scope scenarios preserve independent artifacts, query associations, methods, results, and ordering.
 - Inspect result, `repr`, `str`, serializer, and exception surfaces for patient/group/assessment IDs, raw targets, individual scores, explanation payloads, and verifier response text.
 - Assert there is no public runtime export and no use of protected-test data, target construction, training, recalibration, policy selection, or `SafetyAssessment` projection.
+
+## Implementation and verification record
+
+- Private runtime modules are under `src/safira/runtime/`; public Features 001–007 source contracts were not changed.
+- The injected test host independently attests synthetic fixture membership, Feature 002 prediction admission, target-free original training predictor inventory, Feature 004 protocol/manifest identity, artifact origins, and Feature 007 protocol approval. A Python package cannot authenticate a hostile process that controls its own injected verifier or introspects private modules.
+- Dedicated Feature 008 tests: 45 passed. Existing Feature 001–007 regression tests: 794 passed. Full suite: 839 passed. No failures or skips. `git diff --check` passed.
+- Coverage exercises both frozen estimator/calibrator families, TRUST/CAUTION/DEFER simulation, exact cutoff comparisons, target-free kNN/domain state reconstruction, explanation availability states, privacy, and synthetic-only admission.
+- These tests establish software behavior for synthetic fixtures only. Production trust services, original provenance custody, independent policy evaluation, protected final-test evaluation, clinical validation, and deployment remain absent and out of scope.
 
 ## Test-first implementation order
 
