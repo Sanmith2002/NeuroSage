@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feature-07/Selective-Safety-Policy-SDD`
 **Created**: 2026-10-22
-**Status**: Approved methodology and planning artifacts
+**Status**: Completed — adversarially verified; closed within approved research-software scope.
 **Input**: User-approved Feature 007 scope and methodology decisions A–E, with Feature 006 closure at `12d1dc656e6f54f76e154d67372002bf20e439a6` as the starting point.
 
 ## User Scenarios & Testing
