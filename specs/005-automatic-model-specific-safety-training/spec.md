@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-21
 
-**Status**: Draft — implementation and targeted adversarial remediation complete; awaiting focused re-verification
+**Status**: CLOSED — Feature 005 implementation and all 47 tasks are complete. Final adversarial verification and focused remediation audit passed. Closure is limited to the approved research-software scope; scientific and clinical validity are not established.
 
 **Input**: User description: automatic model-specific supervised safety-estimator training using trusted Feature 003 correctness supervision and Feature 004 safety features.
 
