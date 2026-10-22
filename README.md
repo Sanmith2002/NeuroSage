@@ -33,6 +33,13 @@ NeuroSage/
 
 ## Run locally (Windows)
 
+Clone the repository first:
+
+```bash
+git clone https://github.com/Sanmith2002/NeuroSage.git
+cd NeuroSage
+```
+
 1. **Backend, once:** `backend\setup-service.cmd` (installs Python 3.11 and all packages into `backend\`;
    ~5–10 min).
 2. **Backend, each time:** `backend\run-service.cmd`. Leave it running. When it prints
