@@ -23,6 +23,7 @@ from . import clinical
 from .config import VERSION, configure_threads, get_settings
 from .features import engineer, to_frame
 from .form_spec import display_name, form_spec
+from .jobs import JobStore
 from .registry import Registry
 from .schema_output import DISCLAIMER, build_document
 from .schemas import AssessRequest, ClinicalRequest, Health, MriFields, MriQC, MriResult
@@ -49,6 +50,7 @@ async def lifespan(app: FastAPI):
     log.info('startup finished in %.1fs', time.perf_counter() - t0)
     from .mri.render import ArtifactStore
     app.state.artifacts = ArtifactStore(settings.artifact_ttl_s)
+    app.state.mri_jobs = JobStore(settings.artifact_ttl_s)
     app.state.mri_slot = threading.Semaphore(1)     # one CPU-heavy MRI pipeline at a time
     yield
 
@@ -183,9 +185,8 @@ def _sse(event: str, data) -> bytes:
     return f'event: {event}\ndata: {json.dumps(_clean(data))}\n\n'.encode()
 
 
-@app.post('/v1/mri/analyze', dependencies=[Depends(require_key)])
-async def mri_analyze(request: Request, file: UploadFile = File(...), fields: str = Form('{}'),
-                      reg: Registry = Depends(registry)):
+async def _save_upload(reg: Registry, file: UploadFile, fields: str) -> tuple[Path, Path, MriFields]:
+    """Validates the form and spools the scan into a fresh work dir, which the caller must delete."""
     if 'ad_clin' not in reg.adni:
         raise HTTPException(503, 'MRI models are not loaded on this deployment (LOAD_MRI=false)')
     try:
@@ -210,8 +211,72 @@ async def mri_analyze(request: Request, file: UploadFile = File(...), fields: st
     except BaseException:
         shutil.rmtree(work, ignore_errors=True)
         raise
+    return work, src, mf
 
+
+def _run_mri(request: Request, reg: Registry, work: Path, src: Path, mf: MriFields, emit) -> None:
+    """Runs the whole MRI pipeline on a worker thread, reporting through emit('stage' | 'result' | 'error', data).
+    Deletes `work` when done."""
+    from .mri import preprocess
     settings = get_settings()
+    slot = request.app.state.mri_slot
+    try:
+        if not slot.acquire(blocking=False):
+            emit('stage', {'stage': 'queued', 'progress': 0.0})
+            slot.acquire()
+        try:
+            t0 = time.perf_counter()
+            pre = preprocess.run(src, work, settings.cache_dir,
+                                 lambda s, p: emit('stage', {'stage': s, 'progress': p}), settings.hd_bet_device)
+            res = _finish_mri(request, reg, pre.x, mf, pre.qc, pre.timings_s, 'upload',
+                              lambda s, p: emit('stage', {'stage': s, 'progress': p}))
+            res.timings_s['total'] = round(time.perf_counter() - t0, 2)
+            emit('stage', {'stage': 'explain', 'progress': 1.0})
+            emit('result', res.model_dump())
+        finally:
+            slot.release()
+    except preprocess.PipelineError as e:
+        emit('error', {'code': e.code, 'message': e.message})
+    except Exception:
+        log.exception('MRI pipeline failed')          # never logs file contents or patient fields
+        emit('error', {'code': 'INTERNAL', 'message': 'MRI analysis failed on the server'})
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+@app.post('/v1/mri/jobs', status_code=202, dependencies=[Depends(require_key)])
+async def mri_job_start(request: Request, file: UploadFile = File(...), fields: str = Form('{}'),
+                        reg: Registry = Depends(registry)):
+    """Starts the MRI analysis in the background; poll GET /v1/mri/jobs/{id}. Unlike the /v1/mri/analyze stream,
+    no request outlives a proxy timeout (Container Apps ends HTTP requests after 240 s; the pipeline takes longer)."""
+    work, src, mf = await _save_upload(reg, file, fields)
+    job = request.app.state.mri_jobs.create()
+
+    def emit(event: str, data) -> None:
+        if event == 'stage':
+            job.update(status='running', stage=data['stage'], progress=data['progress'])
+        elif event == 'result':
+            job.update(status='done', result=_clean(data))
+        elif event == 'error':
+            job.update(status='error', error=data)
+
+    threading.Thread(target=_run_mri, args=(request, reg, work, src, mf, emit), daemon=True,
+                     name=f'mri-{job.id[:8]}').start()
+    return job.view()
+
+
+@app.get('/v1/mri/jobs/{job_id}', dependencies=[Depends(require_key)])
+def mri_job_status(job_id: str, request: Request):
+    job = request.app.state.mri_jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, 'MRI job not found: it expired, or the service restarted while it ran')
+    return job.view()
+
+
+@app.post('/v1/mri/analyze', dependencies=[Depends(require_key)])
+async def mri_analyze(request: Request, file: UploadFile = File(...), fields: str = Form('{}'),
+                      reg: Registry = Depends(registry)):
+    work, src, mf = await _save_upload(reg, file, fields)
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -219,30 +284,9 @@ async def mri_analyze(request: Request, file: UploadFile = File(...), fields: st
         loop.call_soon_threadsafe(queue.put_nowait, (event, data))
 
     def worker() -> None:
-        from .mri import preprocess
-        slot = request.app.state.mri_slot
         try:
-            if not slot.acquire(blocking=False):
-                emit('stage', {'stage': 'queued', 'progress': 0.0})
-                slot.acquire()
-            try:
-                t0 = time.perf_counter()
-                pre = preprocess.run(src, work, settings.cache_dir,
-                                     lambda s, p: emit('stage', {'stage': s, 'progress': p}), settings.hd_bet_device)
-                res = _finish_mri(request, reg, pre.x, mf, pre.qc, pre.timings_s, 'upload',
-                                  lambda s, p: emit('stage', {'stage': s, 'progress': p}))
-                res.timings_s['total'] = round(time.perf_counter() - t0, 2)
-                emit('stage', {'stage': 'explain', 'progress': 1.0})
-                emit('result', res.model_dump())
-            finally:
-                slot.release()
-        except preprocess.PipelineError as e:
-            emit('error', {'code': e.code, 'message': e.message})
-        except Exception:
-            log.exception('MRI pipeline failed')          # never logs file contents or patient fields
-            emit('error', {'code': 'INTERNAL', 'message': 'MRI analysis failed on the server'})
+            _run_mri(request, reg, work, src, mf, emit)
         finally:
-            shutil.rmtree(work, ignore_errors=True)
             emit('__end__', None)
 
     async def stream():

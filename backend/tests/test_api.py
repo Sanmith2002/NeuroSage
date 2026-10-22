@@ -114,3 +114,40 @@ def test_api_key(client, monkeypatch):
     monkeypatch.setattr(get_settings(), 'api_key', 'secret')
     assert client.post('/v1/clinical/predict', json=MINIMAL).status_code == 401
     assert client.post('/v1/clinical/predict', json=MINIMAL, headers={'X-API-Key': 'secret'}).status_code == 200
+
+
+def test_mri_job_rejects_bad_upload(client):
+    if 'ad_clin' not in client.app.state.registry.adni:
+        pytest.skip('ADNI bundles not loaded')
+    r = client.post('/v1/mri/jobs', files={'file': ('scan.txt', b'not a scan')})
+    assert r.status_code == 422
+    assert client.get('/v1/mri/jobs/does-not-exist').status_code == 404
+
+
+def test_mri_job_runs_in_background(client, monkeypatch):
+    """The upload returns at once with a job id; polling reaches the same MriResult the SSE stream sends."""
+    import time
+    import numpy as np
+    from app.mri import preprocess
+    if 'ad_clin' not in client.app.state.registry.adni:
+        pytest.skip('ADNI bundles not loaded')
+
+    def fake_run(src, work, cache_dir, progress, device='cpu'):
+        progress('skullstrip', 0.10)
+        x = np.random.default_rng(3).normal(0, 1, (80, 96, 80)).astype(np.float16).astype(np.float32)
+        return preprocess.Preprocessed(x, {'brain_cm3': 1200.0, 'dice_mni': 0.95, 'registration': 'AffineFast',
+                                           'passed': True}, {'convert': 0.1})
+
+    monkeypatch.setattr(preprocess, 'run', fake_run)
+    r = client.post('/v1/mri/jobs', files={'file': ('scan.nii.gz', b'\x1f\x8b')}, data={'fields': '{"age_at_scan": 74}'})
+    assert r.status_code == 202, r.text
+    job = r.json()
+    for _ in range(300):
+        if job['status'] in ('done', 'error'):
+            break
+        time.sleep(0.1)
+        job = client.get(f'/v1/mri/jobs/{job["job_id"]}').json()
+    assert job['status'] == 'done', job
+    res = job['result']
+    assert 0 <= res['p_ad_clin'] <= 1 and res['qc']['passed'] and res['source'] == 'upload'
+    assert client.get(res['qc_png']).status_code == 200

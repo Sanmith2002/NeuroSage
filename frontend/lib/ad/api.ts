@@ -15,6 +15,12 @@ const AD_API_KEY = process.env.NEXT_PUBLIC_AD_API_KEY ?? '';
 
 export const isLiveEnabled = AD_API_URL.length > 0;
 
+// Where the models run, for the UI copy: a loopback URL is backend/run-service.cmd on this computer,
+// anything else a hosted deployment (e.g. backend/deploy-azure.cmd).
+export const isLocalService = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(AD_API_URL);
+export const SERVICE_LABEL = !isLiveEnabled ? 'Model service not configured' : isLocalService ? 'Local models' : 'Cloud models';
+export const SERVICE_LOCATION = isLocalService ? 'running on this computer' : 'running on the hosted analysis service';
+
 const CLINICAL_TIMEOUT_MS = 60_000;
 const SLOW_MS = 5_000;
 export const COLD_START_MESSAGE = 'Waking up the analysis service…';
@@ -108,52 +114,60 @@ export interface MriProgress {
   progress: number;
 }
 
-/** POSTs the scan and reads the Server-Sent-Events stream (EventSource cannot POST). */
+interface MriJob {
+  job_id: string;
+  status: 'queued' | 'running' | 'done' | 'error';
+  stage: MriStage;
+  progress: number;
+  result: MriResult | null;
+  error: { code?: string; message?: string } | null;
+}
+
+const MRI_POLL_MS = 2_000;
+const MRI_UPLOAD_TIMEOUT_MS = 230_000; // hosted proxies end a request at 240 s
+const MRI_MAX_POLL_FAILURES = 5;
+
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => { clearTimeout(t); reject(signal.reason); }, { once: true });
+  });
+
+/**
+ * Uploads the scan as a background job and polls it. The pipeline takes several minutes on CPU, longer than a
+ * hosted proxy keeps one request open, so no single request spans the whole analysis.
+ */
 export async function analyzeMri(
   file: File,
   fields: MriFields,
   { onStage, signal }: { onStage?: (p: MriProgress) => void; signal?: AbortSignal } = {},
 ): Promise<MriResult> {
-  if (!isLiveEnabled) throw new AdApiError('The AD analysis service is not configured.');
   const form = new FormData();
   form.append('file', file);
   form.append('fields', JSON.stringify(fields));
   onStage?.({ stage: 'upload', progress: 0 });
 
-  let res: Response;
-  try {
-    res = await fetch(`${AD_API_URL}/v1/mri/analyze`, { method: 'POST', body: form, headers: headers(false), signal });
-  } catch {
+  let job = await call<MriJob>(
+    '/v1/mri/jobs',
+    { method: 'POST', body: form, headers: headers(false) },
+    { timeoutMs: MRI_UPLOAD_TIMEOUT_MS, signal },
+  ).catch((err: unknown) => {
+    if (err instanceof AdApiError && err.status) throw err;
     throw new AdApiError('Could not upload the scan to the analysis service.');
-  }
-  if (!res.ok || !res.body) {
-    const body = await res.json().catch(() => null);
-    throw new AdApiError(describeError(res.status, body), res.status);
-  }
+  });
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
+  let failures = 0;
   for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
-    let sep: number;
-    while ((sep = buffer.indexOf('\n\n')) >= 0) {
-      const raw = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      let event = 'message';
-      const data: string[] = [];
-      for (const line of raw.split('\n')) {
-        if (line.startsWith('event:')) event = line.slice(6).trim();
-        else if (line.startsWith('data:')) data.push(line.slice(5).trim());
-      }
-      if (!data.length) continue;
-      const payload = JSON.parse(data.join('\n'));
-      if (event === 'stage') onStage?.(payload as MriProgress);
-      else if (event === 'result') return payload as MriResult;
-      else if (event === 'error') throw new AdApiError(payload.message ?? 'MRI analysis failed', undefined, payload.code);
+    if (job.status === 'done' && job.result) return job.result;
+    if (job.status === 'error') throw new AdApiError(job.error?.message ?? 'MRI analysis failed', undefined, job.error?.code);
+    onStage?.({ stage: job.stage, progress: job.progress });
+    await sleep(MRI_POLL_MS, signal);
+    try {
+      job = await call<MriJob>(`/v1/mri/jobs/${encodeURIComponent(job.job_id)}`, { headers: headers(false) }, { signal });
+      failures = 0;
+    } catch (err) {
+      // a 404 means the job is gone (expired or the service restarted); anything else may be a network blip
+      if ((err instanceof AdApiError && err.status) || ++failures >= MRI_MAX_POLL_FAILURES) throw err;
     }
   }
-  throw new AdApiError('The MRI analysis stream ended without a result.');
 }

@@ -5,6 +5,7 @@ Any deviation changes the model's input distribution, so every parameter lives i
 """
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 import sys
@@ -33,6 +34,7 @@ MIN_BRAIN_CM3 = PREPROC_SPEC['skullstrip']['min_brain_cm3']
 MIN_DICE = PREPROC_SPEC['register']['min_dice']
 
 Progress = Callable[[str, float], None]
+log = logging.getLogger('ad-service.mri')
 
 
 class PipelineError(Exception):
@@ -154,15 +156,21 @@ def skullstrip(raw: Path, work: Path, device: str = 'cpu') -> Path:
     import importlib.util
     if importlib.util.find_spec('HD_BET') is None:
         raise PipelineError('INTERNAL', 'HD-BET is not installed on the server')
+    from ..config import cpu_count
+
     out = work / 'brain.nii.gz'
     # Same as the `hd-bet` console script, run through this interpreter so no launcher .exe or PATH entry is needed.
-    launcher = "import sys; from HD_BET.entry_point import main; sys.argv[0] = 'hd-bet'; main()"
+    # HD-BET sets torch.set_num_threads(os.cpu_count()); pin that to the container's CPU quota.
+    launcher = (f"import os, sys; os.cpu_count = lambda: {cpu_count()}; "
+                "from HD_BET.entry_point import main; sys.argv[0] = 'hd-bet'; main()")
     r = subprocess.run([sys.executable, '-c', launcher, '-i', str(raw), '-o', str(out), '-device', device,
                         '--save_bet_mask', '--no_bet_image', '--disable_tta'], capture_output=True, text=True)
     mask = work / 'brain_bet.nii.gz'
     if not mask.exists():
         found = sorted(work.glob('*_bet.nii.gz'))
         if not found:
+            # HD-BET's output holds only library tracebacks and temp paths, never image data or patient fields
+            log.error('HD-BET failed (exit %s):\n%s', r.returncode, '\n'.join((r.stderr or r.stdout).splitlines()[-25:]))
             raise PipelineError('INTERNAL', f'HD-BET produced no mask (exit {r.returncode})')
         mask = found[0]
     return mask

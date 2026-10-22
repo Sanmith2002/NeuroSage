@@ -43,8 +43,21 @@ def get_settings() -> Settings:
     return Settings()
 
 
+def cpu_count() -> int:
+    """CPUs this process may use. In a container os.cpu_count() reports the host's cores, not the CPU quota
+    (Container Apps / Cloud Run give 4 vCPU on a 16+ core host), and oversubscribed torch/ITK threads run slower."""
+    n = os.cpu_count() or 1
+    try:
+        quota, period = Path('/sys/fs/cgroup/cpu.max').read_text().split()[:2]        # cgroup v2
+        if quota != 'max':
+            n = min(n, max(1, round(int(quota) / int(period))))
+    except (OSError, ValueError):
+        pass
+    return n
+
+
 def configure_threads() -> None:
     """Spec §6.6 / §9: let ITK and BLAS use every CPU we were given."""
-    n = str(os.cpu_count() or 1)
+    n = str(cpu_count())
     os.environ.setdefault('OMP_NUM_THREADS', n)
     os.environ.setdefault('ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS', n)
