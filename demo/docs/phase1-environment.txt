@@ -1,0 +1,16 @@
+# Phase 1 verification snapshot, 2026-10-22 Asia/Colombo
+# Windows, CPython 3.11.17; framework baseline 4f31886f12f6df09cd3dc688b48fb9e20329a3ee
+# Editable path is this worktree; this is not the planned backend dependency lock.
+cloudpickle==3.1.2
+colorama==0.4.6
+iniconfig==2.3.1
+joblib==1.6.0
+numpy==2.4.6
+packaging==26.3
+pluggy==1.7.0
+pygments==2.21.0
+pytest==9.1.1
+-e file:///C:/Users/User/Desktop/NeuroSage-Workspace/safira-demo
+scikit-learn==1.7.1
+scipy==1.17.1
+threadpoolctl==3.7.0
